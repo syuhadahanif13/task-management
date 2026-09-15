@@ -41,123 +41,8 @@ if (supabaseUrl && supabaseKey) {
   supabase = createClient(supabaseUrl, supabaseKey);
 }
 
-// In-memory data store (active fallback & local buffer)
-let meetings: Meeting[] = [
-  {
-    id: 'meet-101',
-    title: 'Q3 Product Strategy & Roadmap Alignment',
-    meetingDate: '2026-09-10',
-    participants: ['Sarah Jenkins (Product Lead)', 'Budi Pratama (Tech Lead)', 'Dewi Lestari (UX Designer)', 'Alex Rivera (DevOps)'],
-    meetingNotes: `Agenda Pembahasan:\n1. Peninjauan performa rilis Q2: Latensi backend turun 35%, namun retensi pengguna baru perlu ditingkatkan.\n2. Inisiatif modul kolaborasi real-time untuk rilis Q3.\n3. Rencana migrasi cloud infrastructure ke multi-region high-availability.\n\nKesepakatan Utama:\n- Dewi akan menyelesaikan wireframe alur kerja kolaborasi pada akhir pekan ini.\n- Budi dan Alex menyusun arsitektur WebSocket and pub/sub cluster.\n- Sarah mempersiapkan metrik KPI dan presentasi untuk stakeholder manajemen.`,
-    createdAt: new Date('2026-09-10T10:00:00Z').toISOString(),
-    updatedAt: new Date('2026-09-10T11:30:00Z').toISOString(),
-    tasks: [
-      {
-        id: 'task-101-1',
-        meetingId: 'meet-101',
-        title: 'Selesaikan prototype interaktif UI kolaborasi di Figma',
-        assignee: 'Dewi Lestari (UX Designer)',
-        dueDate: '2026-09-18',
-        status: 'In Progress',
-        createdAt: '2026-09-10T11:30:00Z',
-      },
-      {
-        id: 'task-101-2',
-        meetingId: 'meet-101',
-        title: 'Buat dokumen RFC arsitektur WebSocket & cluster pub/sub',
-        assignee: 'Budi Pratama (Tech Lead)',
-        dueDate: '2026-09-22',
-        status: 'To Do',
-        createdAt: '2026-09-10T11:30:00Z',
-      },
-      {
-        id: 'task-101-3',
-        meetingId: 'meet-101',
-        title: 'Estimasi biaya infrastruktur multi-region failover di Cloud Run',
-        assignee: 'Alex Rivera (DevOps)',
-        dueDate: '2026-09-20',
-        status: 'Done',
-        createdAt: '2026-09-10T11:30:00Z',
-      },
-      {
-        id: 'task-101-4',
-        meetingId: 'meet-101',
-        title: 'Finalisasi slide deck KPI eksekutif untuk Q3 Board Review',
-        assignee: 'Sarah Jenkins (Product Lead)',
-        dueDate: '2026-09-15',
-        status: 'In Progress',
-        createdAt: '2026-09-10T11:30:00Z',
-      }
-    ]
-  },
-  {
-    id: 'meet-102',
-    title: 'Rapat Koordinasi Evaluasi Keamanan & Kepatuhan Data',
-    meetingDate: '2026-09-12',
-    participants: ['Budi Pratama (Tech Lead)', 'Fajar Ramadhan (Security Analyst)', 'Siti Rahma (Compliance Officer)'],
-    meetingNotes: `Fokus Pertemuan:\n- Audit kepatuhan standar keamanan data (ISO 27001 & UU Perlindungan Data Pribadi).\n- Peninjauan enkripsi at-rest dan in-transit pada database transaksi.\n- Simulasi audit eksternal kuartal depan.\n\nCatatan Penting:\nSemua endpoint publik harus divalidasi dengan rate-limiting ketat. Audit log akses pengguna wajib disimpan dengan retention policy minimal 1 tahun.`,
-    createdAt: new Date('2026-09-12T14:00:00Z').toISOString(),
-    updatedAt: new Date('2026-09-12T15:15:00Z').toISOString(),
-    tasks: [
-      {
-        id: 'task-102-1',
-        meetingId: 'meet-102',
-        title: 'Lakukan vulnerability scanning berkala pada repository utama',
-        assignee: 'Fajar Ramadhan (Security Analyst)',
-        dueDate: '2026-09-19',
-        status: 'In Progress',
-        createdAt: '2026-09-12T15:15:00Z',
-      },
-      {
-        id: 'task-102-2',
-        meetingId: 'meet-102',
-        title: 'Perbarui dokumen kebijakan privasi dan consent management',
-        assignee: 'Siti Rahma (Compliance Officer)',
-        dueDate: '2026-09-25',
-        status: 'To Do',
-        createdAt: '2026-09-12T15:15:00Z',
-      },
-      {
-        id: 'task-102-3',
-        meetingId: 'meet-102',
-        title: 'Implementasi automated log rotation dan cold storage backup',
-        assignee: 'Budi Pratama (Tech Lead)',
-        dueDate: '2026-09-21',
-        status: 'Blocked',
-        createdAt: '2026-09-12T15:15:00Z',
-      }
-    ]
-  },
-  {
-    id: 'meet-103',
-    title: 'Sprint Retrospective & Performance Tuning Sync',
-    meetingDate: '2026-09-08',
-    participants: ['Sarah Jenkins (Product Lead)', 'Budi Pratama (Tech Lead)', 'Dewi Lestari (UX Designer)'],
-    meetingNotes: `Ringkasan Diskusi:\n- Apa yang berjalan baik: Delivery fitur onboarding tepat waktu, feedback pengguna awal positif.\n- Yang perlu ditingkatkan: Terdapat bottleneck pada query reporting dashboard ketika filter tanggal luas dipilih.\n- Tindakan pencegahan: Tambahkan indexing komposit dan caching Redis untuk agregat data.`,
-    createdAt: new Date('2026-09-08T09:00:00Z').toISOString(),
-    updatedAt: new Date('2026-09-08T10:00:00Z').toISOString(),
-    tasks: [
-      {
-        id: 'task-103-1',
-        meetingId: 'meet-103',
-        title: 'Optimasi query laporan dengan composite index pada created_at & status',
-        assignee: 'Budi Pratama (Tech Lead)',
-        dueDate: '2026-09-14',
-        status: 'Done',
-        createdAt: '2026-09-08T10:00:00Z',
-      },
-      {
-        id: 'task-103-2',
-        meetingId: 'meet-103',
-        title: 'Review user feedback telemetry untuk perbaikan micro-copy modal',
-        assignee: 'Dewi Lestari (UX Designer)',
-        dueDate: '2026-09-16',
-        status: 'Done',
-        createdAt: '2026-09-08T10:00:00Z',
-      }
-    ]
-  }
-];
+// In-memory data store (clean state)
+let meetings: Meeting[] = [];
 
 function generateId(prefix: string) {
   return `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).substring(2, 6)}`;
@@ -195,7 +80,7 @@ router.get('/meetings', async (req, res) => {
         .select('*, tasks(*)')
         .order('meeting_date', { ascending: false });
 
-      if (!error && dbMeetings && dbMeetings.length > 0) {
+      if (!error && Array.isArray(dbMeetings)) {
         const formatted: Meeting[] = dbMeetings.map((m: any) => ({
           id: m.id,
           title: m.title,
@@ -371,11 +256,45 @@ router.delete('/meetings/:id', async (req, res) => {
   });
 });
 
-router.get('/tasks', (req, res) => {
+router.get('/tasks', async (req, res) => {
   const { meetingId, status, assignee, search } = req.query;
+
+  if (supabase) {
+    try {
+      let query = supabase
+        .from('tasks')
+        .select('*, meetings(title, meeting_date)')
+        .order('due_date', { ascending: true });
+
+      if (meetingId) query = query.eq('meeting_id', String(meetingId));
+      if (status) query = query.eq('status', String(status));
+      if (assignee) query = query.ilike('assignee', `%${assignee}%`);
+      if (search) query = query.ilike('title', `%${search}%`);
+
+      const { data: dbTasks, error } = await query;
+      if (!error && Array.isArray(dbTasks)) {
+        const formatted = dbTasks.map((t: any) => ({
+          id: t.id,
+          meetingId: t.meeting_id,
+          title: t.title,
+          assignee: t.assignee,
+          dueDate: t.due_date,
+          status: t.status,
+          createdAt: t.created_at,
+          updatedAt: t.updated_at,
+          meetingTitle: t.meetings?.title || `Meeting ${t.meetings?.meeting_date || ''}`,
+          meetingDate: t.meetings?.meeting_date || '',
+        }));
+        return res.json(formatted);
+      }
+    } catch (err: any) {
+      console.warn('Supabase get tasks error:', err?.message);
+    }
+  }
+
   let allTasks: Array<Task & { meetingTitle: string; meetingDate: string }> = [];
   for (const meeting of meetings) {
-    for (const task of meeting.tasks) {
+    for (const task of meeting.tasks || []) {
       allTasks.push({
         ...task,
         meetingTitle: meeting.title || `Meeting ${meeting.meetingDate}`,
