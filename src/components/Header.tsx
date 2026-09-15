@@ -45,7 +45,7 @@ export const Header: React.FC<HeaderProps> = ({
                   Meeting Task Management
                 </h1>
                 <span className="hidden sm:inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-zinc-100 text-zinc-700 border border-zinc-200">
-                  1:N Relational Core
+                  Relational Core
                 </span>
               </div>
               <p className="text-xs text-zinc-500 hidden md:block">
@@ -107,19 +107,17 @@ export const Header: React.FC<HeaderProps> = ({
             <button
               id="nav-tab-meetings"
               onClick={() => onTabChange('meetings')}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md font-medium transition-all ${
-                currentTab === 'meetings' || currentTab === 'active-meeting'
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md font-medium transition-all ${currentTab === 'meetings' || currentTab === 'active-meeting'
                   ? 'bg-zinc-900 text-white'
                   : 'text-zinc-600 hover:text-zinc-900 hover:bg-zinc-100'
-              }`}
+                }`}
             >
               <Calendar className="w-3.5 h-3.5" />
               <span>Daftar Rapat & Notula</span>
-              <span className={`px-1.5 py-0.2 rounded-full text-[10px] ${
-                currentTab === 'meetings' || currentTab === 'active-meeting'
+              <span className={`px-1.5 py-0.2 rounded-full text-[10px] ${currentTab === 'meetings' || currentTab === 'active-meeting'
                   ? 'bg-zinc-700 text-zinc-200'
                   : 'bg-zinc-200 text-zinc-700'
-              }`}>
+                }`}>
                 {meetingCount}
               </span>
             </button>
@@ -127,19 +125,17 @@ export const Header: React.FC<HeaderProps> = ({
             <button
               id="nav-tab-tasks"
               onClick={() => onTabChange('all-tasks')}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md font-medium transition-all ${
-                currentTab === 'all-tasks'
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md font-medium transition-all ${currentTab === 'all-tasks'
                   ? 'bg-zinc-900 text-white'
                   : 'text-zinc-600 hover:text-zinc-900 hover:bg-zinc-100'
-              }`}
+                }`}
             >
               <CheckSquare className="w-3.5 h-3.5" />
               <span>Semua Tindak Lanjut (Tasks)</span>
-              <span className={`px-1.5 py-0.2 rounded-full text-[10px] ${
-                currentTab === 'all-tasks'
+              <span className={`px-1.5 py-0.2 rounded-full text-[10px] ${currentTab === 'all-tasks'
                   ? 'bg-zinc-700 text-zinc-200'
                   : 'bg-zinc-200 text-zinc-700'
-              }`}>
+                }`}>
                 {taskCount}
               </span>
             </button>
