@@ -44,9 +44,7 @@ export const Header: React.FC<HeaderProps> = ({
                 <h1 className="text-base font-bold text-zinc-900 tracking-tight">
                   Meeting Task Management
                 </h1>
-                <span className="hidden sm:inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-zinc-100 text-zinc-700 border border-zinc-200">
-                  Relational Core
-                </span>
+                
               </div>
               <p className="text-xs text-zinc-500 hidden md:block">
                 Sistem Pengelolaan Notula Rapat & Tindak Lanjut Terstruktur
