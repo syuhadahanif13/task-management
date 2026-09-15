@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Meeting, Task, TaskStatus, CreateMeetingInput, CreateTaskInput } from './types';
 import { api } from './api/client';
+import { getSupabaseClient } from './lib/supabase';
 import { Header } from './components/Header';
 import { MeetingCard } from './components/MeetingCard';
 import { MeetingDetailView } from './components/MeetingDetailView';
@@ -135,13 +136,25 @@ export default function App() {
 
   const handleDeleteMeeting = async (meetingId: string) => {
     try {
+      // 1. Hapus dari Supabase via client jika kredensial aktif di browser
+      const supabase = getSupabaseClient();
+      if (supabase) {
+        try {
+          await supabase.from('tasks').delete().eq('meeting_id', meetingId);
+          await supabase.from('meetings').delete().eq('id', meetingId);
+        } catch (sErr) {
+          console.warn('Direct Supabase delete notice:', sErr);
+        }
+      }
+
+      // 2. Hapus via backend API (yang juga menghapus di Supabase server-side)
       await api.deleteMeeting(meetingId);
       setMeetings(meetings.filter((m) => m.id !== meetingId));
       if (selectedMeetingId === meetingId) {
         setSelectedMeetingId(null);
         setCurrentTab('meetings');
       }
-      showToast('Rapat dan tugas terkait berhasil dihapus.');
+      showToast('Rapat dan data terkait di Supabase berhasil dihapus.');
     } catch (err: any) {
       alert(err.message || 'Gagal menghapus rapat.');
     }

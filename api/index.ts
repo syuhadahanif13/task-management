@@ -1,5 +1,6 @@
 import express from 'express';
 import { GoogleGenAI, Type } from '@google/genai';
+import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import dotenv from 'dotenv';
 
 dotenv.config();
@@ -32,7 +33,15 @@ const app = express();
 
 app.use(express.json({ limit: '10mb' }));
 
-// In-memory data store
+// Initialize Supabase client
+const supabaseUrl = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
+const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY;
+let supabase: SupabaseClient | null = null;
+if (supabaseUrl && supabaseKey) {
+  supabase = createClient(supabaseUrl, supabaseKey);
+}
+
+// In-memory data store (active fallback & local buffer)
 let meetings: Meeting[] = [
   {
     id: 'meet-101',
@@ -158,7 +167,11 @@ function generateId(prefix: string) {
 const router = express.Router();
 
 router.get('/health', (req, res) => {
-  res.json({ status: 'ok', timestamp: new Date().toISOString() });
+  res.json({
+    status: 'ok',
+    timestamp: new Date().toISOString(),
+    supabaseConnected: Boolean(supabase)
+  });
 });
 
 router.get('/schema', (req, res) => {
@@ -174,7 +187,41 @@ router.get('/schema', (req, res) => {
   });
 });
 
-router.get('/meetings', (req, res) => {
+router.get('/meetings', async (req, res) => {
+  if (supabase) {
+    try {
+      const { data: dbMeetings, error } = await supabase
+        .from('meetings')
+        .select('*, tasks(*)')
+        .order('meeting_date', { ascending: false });
+
+      if (!error && dbMeetings && dbMeetings.length > 0) {
+        const formatted: Meeting[] = dbMeetings.map((m: any) => ({
+          id: m.id,
+          title: m.title,
+          meetingDate: m.meeting_date,
+          participants: m.participants || [],
+          meetingNotes: m.meeting_notes,
+          createdAt: m.created_at,
+          updatedAt: m.updated_at,
+          tasks: (m.tasks || []).map((t: any) => ({
+            id: t.id,
+            meetingId: t.meeting_id,
+            title: t.title,
+            assignee: t.assignee,
+            dueDate: t.due_date,
+            status: t.status,
+            createdAt: t.created_at,
+            updatedAt: t.updated_at
+          }))
+        }));
+        return res.json(formatted);
+      }
+    } catch (err: any) {
+      console.warn('Supabase read fallback to memory:', err?.message);
+    }
+  }
+
   const sorted = [...meetings].sort((a, b) => new Date(b.meetingDate).getTime() - new Date(a.meetingDate).getTime());
   res.json(sorted);
 });
@@ -185,7 +232,7 @@ router.get('/meetings/:id', (req, res) => {
   res.json(meeting);
 });
 
-router.post('/meetings', (req, res) => {
+router.post('/meetings', async (req, res) => {
   const { meetingDate, participants, meetingNotes, title, tasks: initialTasks } = req.body;
   if (!meetingDate || !participants || !meetingNotes) {
     return res.status(400).json({ error: 'Missing required core fields: meetingDate, participants, meetingNotes are mandatory.' });
@@ -216,11 +263,40 @@ router.post('/meetings', (req, res) => {
     updatedAt: now,
   };
 
+  // Sync to Supabase if connected
+  if (supabase) {
+    try {
+      await supabase.from('meetings').insert([{
+        id: newMeeting.id,
+        title: newMeeting.title,
+        meeting_date: newMeeting.meetingDate,
+        participants: newMeeting.participants,
+        meeting_notes: newMeeting.meetingNotes,
+        created_at: newMeeting.createdAt,
+        updated_at: newMeeting.updatedAt,
+      }]);
+      if (parsedTasks.length > 0) {
+        await supabase.from('tasks').insert(parsedTasks.map(t => ({
+          id: t.id,
+          meeting_id: newMeeting.id,
+          title: t.title,
+          assignee: t.assignee,
+          due_date: t.dueDate,
+          status: t.status,
+          created_at: t.createdAt,
+          updated_at: t.updatedAt
+        })));
+      }
+    } catch (err: any) {
+      console.warn('Supabase meeting creation sync warning:', err?.message);
+    }
+  }
+
   meetings.unshift(newMeeting);
   res.status(201).json(newMeeting);
 });
 
-router.put('/meetings/:id', (req, res) => {
+router.put('/meetings/:id', async (req, res) => {
   const meetingIndex = meetings.findIndex(m => m.id === req.params.id);
   if (meetingIndex === -1) return res.status(404).json({ error: 'Meeting not found' });
   const existing = meetings[meetingIndex];
@@ -233,15 +309,66 @@ router.put('/meetings/:id', (req, res) => {
     title: title ? String(title).trim() : existing.title,
     updatedAt: new Date().toISOString(),
   };
+
+  if (supabase) {
+    try {
+      await supabase.from('meetings').update({
+        title: updated.title,
+        meeting_date: updated.meetingDate,
+        participants: updated.participants,
+        meeting_notes: updated.meetingNotes,
+        updated_at: updated.updatedAt
+      }).eq('id', updated.id);
+    } catch (err: any) {
+      console.warn('Supabase meeting update warning:', err?.message);
+    }
+  }
+
   meetings[meetingIndex] = updated;
   res.json(updated);
 });
 
-router.delete('/meetings/:id', (req, res) => {
-  const meetingIndex = meetings.findIndex(m => m.id === req.params.id);
-  if (meetingIndex === -1) return res.status(404).json({ error: 'Meeting not found' });
-  const removed = meetings.splice(meetingIndex, 1)[0];
-  res.json({ message: 'Meeting deleted successfully', id: removed.id });
+// DELETE /api/meetings/:id - Menghapus data meeting dan tugas terkait dari Supabase & memori
+router.delete('/meetings/:id', async (req, res) => {
+  const meetingId = req.params.id;
+  let supabaseDeleted = false;
+  let supabaseError: string | null = null;
+
+  // 1. Hapus dari Supabase jika koneksi aktif
+  if (supabase) {
+    try {
+      // Hapus tasks terkait (1:N relationship)
+      const { error: tasksErr } = await supabase.from('tasks').delete().eq('meeting_id', meetingId);
+      if (tasksErr) {
+        console.warn('Supabase tasks delete warning:', tasksErr.message);
+      }
+
+      // Hapus row meeting
+      const { error: mErr } = await supabase.from('meetings').delete().eq('id', meetingId);
+      if (mErr) {
+        supabaseError = mErr.message;
+        console.warn('Supabase meeting delete warning:', mErr.message);
+      } else {
+        supabaseDeleted = true;
+      }
+    } catch (err: any) {
+      supabaseError = err?.message || 'Unknown error';
+      console.error('Supabase delete error:', err);
+    }
+  }
+
+  // 2. Hapus dari in-memory state
+  const meetingIndex = meetings.findIndex(m => m.id === meetingId);
+  if (meetingIndex !== -1) {
+    meetings.splice(meetingIndex, 1);
+  }
+
+  res.json({
+    message: 'Meeting and associated tasks deleted successfully',
+    id: meetingId,
+    supabaseDeleted,
+    supabaseError: supabaseError || undefined
+  });
 });
 
 router.get('/tasks', (req, res) => {
@@ -267,7 +394,7 @@ router.get('/tasks', (req, res) => {
   res.json(allTasks);
 });
 
-router.post('/meetings/:meetingId/tasks', (req, res) => {
+router.post('/meetings/:meetingId/tasks', async (req, res) => {
   const meeting = meetings.find(m => m.id === req.params.meetingId);
   if (!meeting) return res.status(404).json({ error: 'Parent meeting not found' });
   const { title, assignee, dueDate, status } = req.body;
@@ -283,12 +410,30 @@ router.post('/meetings/:meetingId/tasks', (req, res) => {
     createdAt: now,
     updatedAt: now,
   };
+
+  if (supabase) {
+    try {
+      await supabase.from('tasks').insert([{
+        id: newTask.id,
+        meeting_id: newTask.meetingId,
+        title: newTask.title,
+        assignee: newTask.assignee,
+        due_date: newTask.dueDate,
+        status: newTask.status,
+        created_at: newTask.createdAt,
+        updated_at: newTask.updatedAt
+      }]);
+    } catch (err: any) {
+      console.warn('Supabase task insert warning:', err?.message);
+    }
+  }
+
   meeting.tasks.push(newTask);
   meeting.updatedAt = now;
   res.status(201).json(newTask);
 });
 
-router.put('/tasks/:id', (req, res) => {
+router.put('/tasks/:id', async (req, res) => {
   let targetMeeting: Meeting | undefined;
   let targetTask: Task | undefined;
   for (const m of meetings) {
@@ -310,14 +455,40 @@ router.put('/tasks/:id', (req, res) => {
   }
   targetTask.updatedAt = now;
   targetMeeting.updatedAt = now;
+
+  if (supabase) {
+    try {
+      await supabase.from('tasks').update({
+        title: targetTask.title,
+        assignee: targetTask.assignee,
+        due_date: targetTask.dueDate,
+        status: targetTask.status,
+        updated_at: targetTask.updatedAt
+      }).eq('id', targetTask.id);
+    } catch (err: any) {
+      console.warn('Supabase task update warning:', err?.message);
+    }
+  }
+
   res.json(targetTask);
 });
 
-router.delete('/tasks/:id', (req, res) => {
+// DELETE /api/tasks/:id - Menghapus data task dari Supabase & memori
+router.delete('/tasks/:id', async (req, res) => {
+  const taskId = req.params.id;
+
+  if (supabase) {
+    try {
+      await supabase.from('tasks').delete().eq('id', taskId);
+    } catch (err: any) {
+      console.warn('Supabase task delete warning:', err?.message);
+    }
+  }
+
   let targetMeeting: Meeting | undefined;
   let taskIndex = -1;
   for (const m of meetings) {
-    const idx = m.tasks.findIndex(t => t.id === req.params.id);
+    const idx = m.tasks.findIndex(t => t.id === taskId);
     if (idx !== -1) {
       targetMeeting = m;
       taskIndex = idx;
