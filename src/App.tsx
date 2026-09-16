@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Meeting, Task, TaskStatus, CreateMeetingInput, CreateTaskInput } from './types';
+import { Meeting, Task, TaskStatus, CreateMeetingInput, CreateTaskInput, TaskSubmission } from './types';
 import { api } from './api/client';
 import { getSupabaseClient } from './lib/supabase';
 import { Header } from './components/Header';
@@ -86,6 +86,7 @@ export default function App() {
   const [editingTask, setEditingTask] = useState<Task | null>(null);
   const [submittingTask, setSubmittingTask] = useState<Task | null>(null);
   const [reviewingTask, setReviewingTask] = useState<Task | null>(null);
+  const [reviewSubmission, setReviewSubmission] = useState<TaskSubmission | null>(null);
   const [aiInitialNotes, setAiInitialNotes] = useState('');
   const [aiInitialDate, setAiInitialDate] = useState('');
 
