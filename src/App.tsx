@@ -13,6 +13,7 @@ import { TaskSubmissionModal } from './components/TaskSubmissionModal';
 import { TaskReviewModal } from './components/TaskReviewModal';
 import { DivisionManager } from './components/DivisionManager';
 import { UserManager } from './components/UserManager';
+import { AddTaskModal } from './components/AddTaskModal';
 import { LoginPage } from './components/LoginPage';
 import {
   Calendar,
@@ -102,6 +103,7 @@ export default function App() {
   const [aiInitialDate, setAiInitialDate] = useState('');
   const [isDivisionManagerOpen, setIsDivisionManagerOpen] = useState(false);
   const [isUserManagerOpen, setIsUserManagerOpen] = useState(false);
+  const [isAddTaskOpen, setIsAddTaskOpen] = useState(false);
 
   const showToast = (msg: string) => {
     setToastMessage(msg);
@@ -365,6 +367,7 @@ export default function App() {
               setAiInitialDate('');
               setIsAiExtractOpen(true);
             }}
+            onOpenAddTask={() => setIsAddTaskOpen(true)}
             meetingCount={totalMeetings}
             taskCount={totalTasks}
             isDarkMode={isDarkMode}
@@ -607,6 +610,13 @@ export default function App() {
           <UserManager
             isOpen={isUserManagerOpen}
             onClose={() => setIsUserManagerOpen(false)}
+          />
+
+          {/* 8. Add Task Modal */}
+          <AddTaskModal
+            isOpen={isAddTaskOpen}
+            onClose={() => setIsAddTaskOpen(false)}
+            onAddTask={handleAddTaskToMeeting}
           />
         </div>
       )}

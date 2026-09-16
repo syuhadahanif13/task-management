@@ -6,6 +6,7 @@ interface HeaderProps {
   onTabChange: (tab: 'meetings' | 'all-tasks' | 'settings') => void;
   onOpenNewMeeting: () => void;
   onOpenAiExtract: () => void;
+  onOpenAddTask?: () => void;
   meetingCount: number;
   taskCount: number;
   onLogout?: () => void;
@@ -18,6 +19,7 @@ export const Header: React.FC<HeaderProps> = ({
   onTabChange,
   onOpenNewMeeting,
   onOpenAiExtract,
+  onOpenAddTask,
   meetingCount,
   taskCount,
   onLogout,
@@ -71,6 +73,16 @@ export const Header: React.FC<HeaderProps> = ({
               <Plus className="h-3.5 w-3.5" />
               <span className="hidden sm:inline">New Meeting</span>
             </button>
+
+            {onOpenAddTask && (
+              <button
+                onClick={onOpenAddTask}
+                className="notion-btn notion-btn-primary text-xs"
+              >
+                <CheckSquare className="h-3.5 w-3.5" />
+                <span className="hidden sm:inline">Tambah Task</span>
+              </button>
+            )}
 
             {onLogout && (
               <button
