@@ -33,6 +33,11 @@ export default function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(() => {
     return sessionStorage.getItem('isAuthenticated') === 'true';
   });
+  const [isDarkMode, setIsDarkMode] = useState<boolean>(() => {
+    const saved = localStorage.getItem('theme');
+    if (saved) return saved === 'dark';
+    return window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+  });
   const [meetings, setMeetings] = useState<Meeting[]>([]);
   const [selectedMeetingId, setSelectedMeetingId] = useState<string | null>(null);
   const [currentTab, setCurrentTab] = useState<'meetings' | 'active-meeting' | 'all-tasks'>('meetings');
@@ -40,6 +45,19 @@ export default function App() {
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [errorMsg, setErrorMsg] = useState<string>('');
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+
+  // Sync dark class on <html> element and persist in localStorage
+  useEffect(() => {
+    if (isDarkMode) {
+      document.documentElement.classList.add('dark');
+      localStorage.setItem('theme', 'dark');
+    } else {
+      document.documentElement.classList.remove('dark');
+      localStorage.setItem('theme', 'light');
+    }
+  }, [isDarkMode]);
+
+  const toggleDarkMode = () => setIsDarkMode((prev) => !prev);
 
   const handleLogin = (username: string, password: string) => {
     if (username === 'admin' && password === 'r@jaemasmantab') {
@@ -259,9 +277,13 @@ export default function App() {
   return (
     <>
       {!isAuthenticated ? (
-        <LoginPage onLogin={handleLogin} />
+        <LoginPage
+          onLogin={handleLogin}
+          isDarkMode={isDarkMode}
+          onToggleDarkMode={toggleDarkMode}
+        />
       ) : (
-        <div className="min-h-screen bg-zinc-50/60 text-zinc-900 font-sans antialiased flex flex-col">
+        <div className="min-h-screen bg-zinc-50/60 dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100 font-sans antialiased flex flex-col transition-colors">
           {/* Sticky Header */}
           <Header
             currentTab={currentTab}
@@ -275,10 +297,13 @@ export default function App() {
               setAiInitialDate('');
               setIsAiExtractOpen(true);
             }}
+            onOpenSupabaseModal={() => {}}
             searchQuery={searchQuery}
             onSearchChange={setSearchQuery}
             meetingCount={totalMeetings}
             taskCount={totalTasks}
+            isDarkMode={isDarkMode}
+            onToggleDarkMode={toggleDarkMode}
             onLogout={handleLogout}
           />
 
@@ -286,14 +311,14 @@ export default function App() {
           <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6">
             {/* Error notification if any */}
             {errorMsg && (
-              <div className="mb-6 p-4 bg-rose-50 border border-rose-200 text-rose-800 rounded-xl text-xs flex items-center justify-between">
+              <div className="mb-6 p-4 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900/60 text-rose-800 dark:text-rose-300 rounded-xl text-xs flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                  <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+                  <AlertCircle className="w-4 h-4 text-rose-600 dark:text-rose-400 shrink-0" />
                   <span>{errorMsg}</span>
                 </div>
                 <button
                   onClick={loadMeetings}
-                  className="px-3 py-1 bg-white border border-rose-300 rounded font-medium text-rose-700 hover:bg-rose-100 flex items-center gap-1"
+                  className="px-3 py-1 bg-white dark:bg-zinc-800 border border-rose-300 dark:border-rose-800 rounded font-medium text-rose-700 dark:text-rose-300 hover:bg-rose-100 dark:hover:bg-zinc-700 flex items-center gap-1 transition-colors"
                 >
                   <RefreshCw className="w-3 h-3" /> Coba Lagi
                 </button>
@@ -304,46 +329,46 @@ export default function App() {
             {currentTab === 'meetings' && (
               <div className="space-y-6">
                 {/* Top Metrics Hero / Summary Bar */}
-                <div className="bg-white p-5 rounded-2xl border border-zinc-200 shadow-xs">
+                <div className="bg-white dark:bg-zinc-900 p-5 rounded-2xl border border-zinc-200 dark:border-zinc-800 shadow-xs transition-colors">
                   <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                     <div>
-                      <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-zinc-100 text-zinc-800 mb-1">
-                        <BookOpen className="w-3.5 h-3.5 text-zinc-600" />
+                      <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-zinc-100 dark:bg-zinc-800 text-zinc-800 dark:text-zinc-200 mb-1">
+                        <BookOpen className="w-3.5 h-3.5 text-zinc-600 dark:text-zinc-400" />
                         <span>Sistem Notula Terstruktur</span>
                       </div>
-                      <h2 className="text-xl font-bold tracking-tight text-zinc-900">
+                      <h2 className="text-xl font-bold tracking-tight text-zinc-900 dark:text-zinc-100">
                         Daftar Rapat & Catatan Hasil (Meetings)
                       </h2>
-                      <p className="text-xs text-zinc-500 mt-0.5">
+                      <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">
                         Setiap rapat mengikat Tanggal Rapat, Peserta, Catatan Notula, dan Action Items secara relasional.
                       </p>
                     </div>
 
                     {/* Metric Badges */}
                     <div className="grid grid-cols-3 gap-2 text-center shrink-0">
-                      <div className="px-3.5 py-2 rounded-xl bg-zinc-50 border border-zinc-200">
-                        <span className="text-[10px] uppercase font-semibold text-zinc-500 block">
+                      <div className="px-3.5 py-2 rounded-xl bg-zinc-50 dark:bg-zinc-800/60 border border-zinc-200 dark:border-zinc-700/60">
+                        <span className="text-[10px] uppercase font-semibold text-zinc-500 dark:text-zinc-400 block">
                           Total Rapat
                         </span>
-                        <span className="text-lg font-bold text-zinc-900 font-mono">
+                        <span className="text-lg font-bold text-zinc-900 dark:text-zinc-100 font-mono">
                           {totalMeetings}
                         </span>
                       </div>
 
-                      <div className="px-3.5 py-2 rounded-xl bg-zinc-50 border border-zinc-200">
-                        <span className="text-[10px] uppercase font-semibold text-zinc-500 block">
+                      <div className="px-3.5 py-2 rounded-xl bg-zinc-50 dark:bg-zinc-800/60 border border-zinc-200 dark:border-zinc-700/60">
+                        <span className="text-[10px] uppercase font-semibold text-zinc-500 dark:text-zinc-400 block">
                           Total Tasks
                         </span>
-                        <span className="text-lg font-bold text-zinc-900 font-mono">
+                        <span className="text-lg font-bold text-zinc-900 dark:text-zinc-100 font-mono">
                           {totalTasks}
                         </span>
                       </div>
 
-                      <div className="px-3.5 py-2 rounded-xl bg-emerald-50 border border-emerald-200">
-                        <span className="text-[10px] uppercase font-semibold text-emerald-700 block">
+                      <div className="px-3.5 py-2 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800/60">
+                        <span className="text-[10px] uppercase font-semibold text-emerald-700 dark:text-emerald-300 block">
                           Penyelesaian
                         </span>
-                        <span className="text-lg font-bold text-emerald-800 font-mono">
+                        <span className="text-lg font-bold text-emerald-800 dark:text-emerald-200 font-mono">
                           {overallCompletionRate}%
                         </span>
                       </div>
@@ -351,22 +376,22 @@ export default function App() {
                   </div>
 
                   {/* 4 Core Fields Quick Legend */}
-                  <div className="mt-4 pt-3 border-t border-zinc-100 grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
-                    <div className="flex items-center gap-1.5 text-zinc-700">
-                      <span className="w-2 h-2 rounded-full bg-zinc-900" />
-                      <span className="font-semibold text-zinc-900">1. Tanggal Rapat</span>
+                  <div className="mt-4 pt-3 border-t border-zinc-100 dark:border-zinc-800 grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
+                    <div className="flex items-center gap-1.5 text-zinc-700 dark:text-zinc-300">
+                      <span className="w-2 h-2 rounded-full bg-zinc-900 dark:bg-zinc-100" />
+                      <span className="font-semibold text-zinc-900 dark:text-zinc-100">1. Tanggal Rapat</span>
                     </div>
-                    <div className="flex items-center gap-1.5 text-zinc-700">
-                      <span className="w-2 h-2 rounded-full bg-zinc-900" />
-                      <span className="font-semibold text-zinc-900">2. Peserta</span>
+                    <div className="flex items-center gap-1.5 text-zinc-700 dark:text-zinc-300">
+                      <span className="w-2 h-2 rounded-full bg-zinc-900 dark:bg-zinc-100" />
+                      <span className="font-semibold text-zinc-900 dark:text-zinc-100">2. Peserta</span>
                     </div>
-                    <div className="flex items-center gap-1.5 text-zinc-700">
-                      <span className="w-2 h-2 rounded-full bg-zinc-900" />
-                      <span className="font-semibold text-zinc-900">3. Catatan Notula</span>
+                    <div className="flex items-center gap-1.5 text-zinc-700 dark:text-zinc-300">
+                      <span className="w-2 h-2 rounded-full bg-zinc-900 dark:bg-zinc-100" />
+                      <span className="font-semibold text-zinc-900 dark:text-zinc-100">3. Catatan Notula</span>
                     </div>
-                    <div className="flex items-center gap-1.5 text-zinc-700">
-                      <span className="w-2 h-2 rounded-full bg-zinc-900" />
-                      <span className="font-semibold text-zinc-900">4. Action Items</span>
+                    <div className="flex items-center gap-1.5 text-zinc-700 dark:text-zinc-300">
+                      <span className="w-2 h-2 rounded-full bg-zinc-900 dark:bg-zinc-100" />
+                      <span className="font-semibold text-zinc-900 dark:text-zinc-100">4. Action Items</span>
                     </div>
                   </div>
                 </div>
@@ -374,31 +399,31 @@ export default function App() {
                 {/* Meetings Grid */}
                 {isLoading ? (
                   <div className="p-12 text-center">
-                    <div className="w-8 h-8 border-2 border-zinc-900 border-t-transparent rounded-full animate-spin mx-auto mb-3" />
-                    <p className="text-xs text-zinc-500 font-medium">Memuat data rapat...</p>
+                    <div className="w-8 h-8 border-2 border-zinc-900 dark:border-zinc-100 border-t-transparent rounded-full animate-spin mx-auto mb-3" />
+                    <p className="text-xs text-zinc-500 dark:text-zinc-400 font-medium">Memuat data rapat...</p>
                   </div>
                 ) : filteredMeetings.length === 0 ? (
-                  <div className="p-12 text-center bg-white rounded-2xl border border-dashed border-zinc-300">
-                    <Calendar className="w-10 h-10 text-zinc-300 mx-auto mb-3" />
-                    <h3 className="text-sm font-bold text-zinc-900 mb-1">
+                  <div className="p-12 text-center bg-white dark:bg-zinc-900 rounded-2xl border border-dashed border-zinc-300 dark:border-zinc-700 transition-colors">
+                    <Calendar className="w-10 h-10 text-zinc-300 dark:text-zinc-600 mx-auto mb-3" />
+                    <h3 className="text-sm font-bold text-zinc-900 dark:text-zinc-100 mb-1">
                       {searchQuery ? 'Tidak ada rapat yang sesuai dengan pencarian' : 'Belum ada rapat terdaftar'}
                     </h3>
-                    <p className="text-xs text-zinc-500 max-w-sm mx-auto mb-4">
+                    <p className="text-xs text-zinc-500 dark:text-zinc-400 max-w-sm mx-auto mb-4">
                       Mulai catat rapat baru secara manual atau gunakan AI untuk mengekstrak 4 data inti langsung dari teks notula.
                     </p>
                     <div className="flex items-center justify-center gap-3">
                       <button
                         onClick={() => setIsNewMeetingOpen(true)}
-                        className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-semibold text-white bg-zinc-900 rounded-lg hover:bg-zinc-800"
+                        className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-semibold text-white dark:text-zinc-900 bg-zinc-900 dark:bg-zinc-100 rounded-lg hover:bg-zinc-800 dark:hover:bg-zinc-200 transition-colors"
                       >
                         <Plus className="w-3.5 h-3.5" />
                         <span>Tambah Rapat Manual</span>
                       </button>
                       <button
                         onClick={() => setIsAiExtractOpen(true)}
-                        className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-semibold text-zinc-900 bg-zinc-100 hover:bg-zinc-200 border border-zinc-200 rounded-lg"
+                        className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-semibold text-zinc-900 dark:text-zinc-100 bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-700 border border-zinc-200 dark:border-zinc-700 rounded-lg transition-colors"
                       >
-                        <Sparkles className="w-3.5 h-3.5 text-indigo-600" />
+                        <Sparkles className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" />
                         <span>Ekstraksi Notula AI</span>
                       </button>
                     </div>
@@ -450,7 +475,7 @@ export default function App() {
 
           {/* Floating Toast Notification */}
           {toastMessage && (
-            <div className="fixed bottom-6 right-6 z-50 px-4 py-2.5 bg-zinc-900 text-white text-xs font-medium rounded-xl shadow-lg border border-zinc-800 flex items-center gap-2 transition-all">
+            <div className="fixed bottom-6 right-6 z-50 px-4 py-2.5 bg-zinc-900 dark:bg-zinc-800 text-white text-xs font-medium rounded-xl shadow-lg border border-zinc-800 dark:border-zinc-700 flex items-center gap-2 transition-all">
               <Check className="w-4 h-4 text-emerald-400 shrink-0" />
               <span>{toastMessage}</span>
             </div>

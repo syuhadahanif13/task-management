@@ -119,9 +119,9 @@ export const AiExtractModal: React.FC<AiExtractModalProps> = ({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-xs overflow-y-auto">
-      <div className="bg-white rounded-2xl border border-zinc-200 shadow-2xl w-full max-w-3xl my-8 overflow-hidden">
+      <div className="bg-white dark:bg-zinc-900 rounded-2xl border border-zinc-200 dark:border-zinc-800 shadow-2xl w-full max-w-3xl my-8 overflow-hidden transition-colors">
         {/* Modal Header */}
-        <div className="px-6 py-4 border-b border-zinc-200 flex items-center justify-between bg-zinc-900 text-white">
+        <div className="px-6 py-4 border-b border-zinc-200 dark:border-zinc-800 flex items-center justify-between bg-zinc-900 dark:bg-zinc-950 text-white">
           <div className="flex items-center gap-2.5">
             <div className="w-8 h-8 rounded-lg bg-indigo-600/30 border border-indigo-400/40 flex items-center justify-center text-indigo-300">
               <Sparkles className="w-4 h-4" />
@@ -146,7 +146,7 @@ export const AiExtractModal: React.FC<AiExtractModalProps> = ({
         {/* Modal Content */}
         <div className="p-6 space-y-4">
           {errorMsg && (
-            <div className="p-3 text-xs bg-rose-50 border border-rose-200 text-rose-700 rounded-lg flex items-center gap-2">
+            <div className="p-3 text-xs bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900/60 text-rose-700 dark:text-rose-300 rounded-lg flex items-center gap-2">
               <AlertCircle className="w-4 h-4 shrink-0" />
               <span>{errorMsg}</span>
             </div>
@@ -156,11 +156,11 @@ export const AiExtractModal: React.FC<AiExtractModalProps> = ({
             /* STEP 1: Input text */
             <div className="space-y-4">
               <div className="flex items-center justify-between">
-                <label className="text-xs font-semibold text-zinc-800">
+                <label className="text-xs font-semibold text-zinc-800 dark:text-zinc-200">
                   Tempel Catatan Mentah, Transkrip, atau Notula Rapat:
                 </label>
                 <div className="flex items-center gap-2">
-                  <span className="text-[11px] text-zinc-500">Gunakan Contoh:</span>
+                  <span className="text-[11px] text-zinc-500 dark:text-zinc-400">Gunakan Contoh:</span>
                   {SAMPLE_NOTES.map((s, idx) => (
                     <button
                       key={idx}
@@ -168,7 +168,7 @@ export const AiExtractModal: React.FC<AiExtractModalProps> = ({
                       onClick={() => {
                         setRawText(s.text);
                       }}
-                      className="text-[10px] px-2 py-1 bg-zinc-100 hover:bg-zinc-200 text-zinc-700 font-medium rounded border border-zinc-300"
+                      className="text-[10px] px-2 py-1 bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-700 text-zinc-700 dark:text-zinc-300 font-medium rounded border border-zinc-300 dark:border-zinc-700 transition-colors"
                     >
                       {idx === 0 ? 'Sampel ID' : 'Sampel EN'}
                     </button>
@@ -181,19 +181,19 @@ export const AiExtractModal: React.FC<AiExtractModalProps> = ({
                 placeholder="Contoh: Rapat evaluasi Senin 14 September dihadiri Budi dan Siti. Budi sepakat menyelesaikan API sebelum Jumat..."
                 value={rawText}
                 onChange={(e) => setRawText(e.target.value)}
-                className="w-full p-3 text-xs font-mono bg-zinc-50 border border-zinc-300 rounded-xl text-zinc-900 focus:outline-none focus:ring-1 focus:ring-zinc-900 leading-relaxed"
+                className="w-full p-3 text-xs font-mono bg-zinc-50 dark:bg-zinc-800 border border-zinc-300 dark:border-zinc-700 rounded-xl text-zinc-900 dark:text-zinc-100 focus:outline-none focus:ring-1 focus:ring-zinc-900 dark:focus:ring-zinc-100 leading-relaxed"
               />
 
               <div className="flex items-center justify-between pt-2">
                 <div className="flex items-center gap-2">
-                  <label className="text-xs text-zinc-500 font-medium">
+                  <label className="text-xs text-zinc-500 dark:text-zinc-400 font-medium">
                     Tanggal Default:
                   </label>
                   <input
                     type="date"
                     value={fallbackDate}
                     onChange={(e) => setFallbackDate(e.target.value)}
-                    className="text-xs px-2.5 py-1 bg-zinc-50 border border-zinc-200 rounded-md font-mono"
+                    className="text-xs px-2.5 py-1 bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-md font-mono text-zinc-900 dark:text-zinc-100"
                   />
                 </div>
 
@@ -201,7 +201,7 @@ export const AiExtractModal: React.FC<AiExtractModalProps> = ({
                   <button
                     type="button"
                     onClick={onClose}
-                    className="px-3.5 py-1.5 text-xs font-medium text-zinc-700 bg-white border border-zinc-200 rounded-lg hover:bg-zinc-50"
+                    className="px-3.5 py-1.5 text-xs font-medium text-zinc-700 dark:text-zinc-300 bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg hover:bg-zinc-50 dark:hover:bg-zinc-700 transition-colors"
                   >
                     Batal
                   </button>
@@ -209,7 +209,7 @@ export const AiExtractModal: React.FC<AiExtractModalProps> = ({
                     type="button"
                     onClick={handleExtract}
                     disabled={isLoading || !rawText.trim()}
-                    className="inline-flex items-center gap-2 px-4 py-1.5 text-xs font-semibold text-white bg-zinc-900 hover:bg-zinc-800 rounded-lg disabled:opacity-50 shadow-xs"
+                    className="inline-flex items-center gap-2 px-4 py-1.5 text-xs font-semibold text-white dark:text-zinc-900 bg-zinc-900 dark:bg-zinc-100 hover:bg-zinc-800 dark:hover:bg-zinc-200 rounded-lg disabled:opacity-50 shadow-xs transition-colors"
                   >
                     {isLoading ? (
                       <>
@@ -230,29 +230,29 @@ export const AiExtractModal: React.FC<AiExtractModalProps> = ({
             /* STEP 2: Review parsed fields */
             <div className="space-y-4">
               {aiNotice && (
-                <div className="p-2.5 bg-indigo-50 border border-indigo-200 text-indigo-800 rounded-lg text-xs">
+                <div className="p-2.5 bg-indigo-50 dark:bg-indigo-950/40 border border-indigo-200 dark:border-indigo-800/60 text-indigo-800 dark:text-indigo-300 rounded-lg text-xs">
                   {aiNotice}
                 </div>
               )}
 
-              <div className="p-4 bg-zinc-50 border border-zinc-200 rounded-xl space-y-4 max-h-[460px] overflow-y-auto">
+              <div className="p-4 bg-zinc-50 dark:bg-zinc-800/60 border border-zinc-200 dark:border-zinc-700 rounded-xl space-y-4 max-h-[460px] overflow-y-auto">
                 {/* Title */}
                 <div>
-                  <label className="text-[11px] font-bold text-zinc-600 block mb-1 uppercase">
+                  <label className="text-[11px] font-bold text-zinc-600 dark:text-zinc-400 block mb-1 uppercase">
                     Topik / Judul Rapat
                   </label>
                   <input
                     type="text"
                     value={parsedTitle}
                     onChange={(e) => setParsedTitle(e.target.value)}
-                    className="w-full px-3 py-1.5 text-xs font-semibold bg-white border border-zinc-300 rounded-lg"
+                    className="w-full px-3 py-1.5 text-xs font-semibold bg-white dark:bg-zinc-800 border border-zinc-300 dark:border-zinc-700 rounded-lg text-zinc-900 dark:text-zinc-100"
                   />
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   {/* Field 1: Tanggal Rapat */}
                   <div>
-                    <label className="text-[11px] font-bold text-zinc-600 block mb-1 uppercase flex items-center gap-1">
+                    <label className="text-[11px] font-bold text-zinc-600 dark:text-zinc-400 block mb-1 uppercase flex items-center gap-1">
                       <Calendar className="w-3.5 h-3.5 text-zinc-400" />
                       1. Tanggal Rapat (Meeting Date)
                     </label>
@@ -260,13 +260,13 @@ export const AiExtractModal: React.FC<AiExtractModalProps> = ({
                       type="date"
                       value={parsedDate}
                       onChange={(e) => setParsedDate(e.target.value)}
-                      className="w-full px-3 py-1.5 text-xs bg-white border border-zinc-300 rounded-lg font-mono"
+                      className="w-full px-3 py-1.5 text-xs bg-white dark:bg-zinc-800 border border-zinc-300 dark:border-zinc-700 rounded-lg font-mono text-zinc-900 dark:text-zinc-100"
                     />
                   </div>
 
                   {/* Field 2: Peserta */}
                   <div>
-                    <label className="text-[11px] font-bold text-zinc-600 block mb-1 uppercase flex items-center gap-1">
+                    <label className="text-[11px] font-bold text-zinc-600 dark:text-zinc-400 block mb-1 uppercase flex items-center gap-1">
                       <Users className="w-3.5 h-3.5 text-zinc-400" />
                       2. Peserta (Participants)
                     </label>
@@ -278,14 +278,14 @@ export const AiExtractModal: React.FC<AiExtractModalProps> = ({
                           e.target.value.split(',').map((p) => p.trim()).filter(Boolean)
                         )
                       }
-                      className="w-full px-3 py-1.5 text-xs bg-white border border-zinc-300 rounded-lg"
+                      className="w-full px-3 py-1.5 text-xs bg-white dark:bg-zinc-800 border border-zinc-300 dark:border-zinc-700 rounded-lg text-zinc-900 dark:text-zinc-100"
                     />
                   </div>
                 </div>
 
                 {/* Field 3: Catatan */}
                 <div>
-                  <label className="text-[11px] font-bold text-zinc-600 block mb-1 uppercase flex items-center gap-1">
+                  <label className="text-[11px] font-bold text-zinc-600 dark:text-zinc-400 block mb-1 uppercase flex items-center gap-1">
                     <FileText className="w-3.5 h-3.5 text-zinc-400" />
                     3. Catatan Notula (Meeting Notes/Minutes)
                   </label>
@@ -293,14 +293,14 @@ export const AiExtractModal: React.FC<AiExtractModalProps> = ({
                     rows={4}
                     value={parsedNotes}
                     onChange={(e) => setParsedNotes(e.target.value)}
-                    className="w-full p-2.5 text-xs bg-white border border-zinc-300 rounded-lg leading-relaxed"
+                    className="w-full p-2.5 text-xs bg-white dark:bg-zinc-800 border border-zinc-300 dark:border-zinc-700 rounded-lg leading-relaxed text-zinc-900 dark:text-zinc-100"
                   />
                 </div>
 
                 {/* Field 4: Tasks (Action items) */}
                 <div>
                   <div className="flex items-center justify-between mb-1.5">
-                    <label className="text-[11px] font-bold text-zinc-600 uppercase flex items-center gap-1">
+                    <label className="text-[11px] font-bold text-zinc-600 dark:text-zinc-400 uppercase flex items-center gap-1">
                       <CheckSquare className="w-3.5 h-3.5 text-zinc-400" />
                       4. Tasks / Action Items Terdeteksi ({parsedTasks.length})
                     </label>
@@ -310,7 +310,7 @@ export const AiExtractModal: React.FC<AiExtractModalProps> = ({
                     {parsedTasks.map((t, idx) => (
                       <div
                         key={idx}
-                        className="p-2.5 bg-white border border-zinc-300 rounded-lg flex flex-col sm:flex-row items-center gap-2 text-xs"
+                        className="p-2.5 bg-white dark:bg-zinc-800 border border-zinc-300 dark:border-zinc-700 rounded-lg flex flex-col sm:flex-row items-center gap-2 text-xs"
                       >
                         <input
                           type="text"
@@ -320,7 +320,7 @@ export const AiExtractModal: React.FC<AiExtractModalProps> = ({
                             updated[idx].title = e.target.value;
                             setParsedTasks(updated);
                           }}
-                          className="flex-1 w-full px-2 py-1 border border-zinc-200 rounded font-medium"
+                          className="flex-1 w-full px-2 py-1 bg-zinc-50 dark:bg-zinc-750 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded font-medium text-zinc-900 dark:text-zinc-100"
                         />
                         <input
                           type="text"
@@ -330,7 +330,7 @@ export const AiExtractModal: React.FC<AiExtractModalProps> = ({
                             updated[idx].assignee = e.target.value;
                             setParsedTasks(updated);
                           }}
-                          className="w-full sm:w-36 px-2 py-1 border border-zinc-200 rounded"
+                          className="w-full sm:w-36 px-2 py-1 bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded text-zinc-900 dark:text-zinc-100"
                         />
                         <input
                           type="date"
@@ -340,7 +340,7 @@ export const AiExtractModal: React.FC<AiExtractModalProps> = ({
                             updated[idx].dueDate = e.target.value;
                             setParsedTasks(updated);
                           }}
-                          className="w-full sm:w-32 px-2 py-1 border border-zinc-200 rounded font-mono"
+                          className="w-full sm:w-32 px-2 py-1 bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded font-mono text-zinc-900 dark:text-zinc-100"
                         />
                         <select
                           value={t.status}
@@ -349,7 +349,7 @@ export const AiExtractModal: React.FC<AiExtractModalProps> = ({
                             updated[idx].status = e.target.value as TaskStatus;
                             setParsedTasks(updated);
                           }}
-                          className="w-full sm:w-28 px-2 py-1 border border-zinc-200 rounded"
+                          className="w-full sm:w-28 px-2 py-1 bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded text-zinc-900 dark:text-zinc-100"
                         >
                           <option value="To Do">To Do</option>
                           <option value="In Progress">In Progress</option>
@@ -363,11 +363,11 @@ export const AiExtractModal: React.FC<AiExtractModalProps> = ({
               </div>
 
               {/* Review Actions */}
-              <div className="flex items-center justify-between pt-3 border-t border-zinc-200">
+              <div className="flex items-center justify-between pt-3 border-t border-zinc-200 dark:border-zinc-800">
                 <button
                   type="button"
                   onClick={() => setStep('input')}
-                  className="px-3 py-1.5 text-xs text-zinc-600 hover:text-zinc-900"
+                  className="px-3 py-1.5 text-xs text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100"
                 >
                   ← Edit Teks Asli
                 </button>
@@ -376,7 +376,7 @@ export const AiExtractModal: React.FC<AiExtractModalProps> = ({
                   <button
                     type="button"
                     onClick={onClose}
-                    className="px-3.5 py-1.5 text-xs font-medium text-zinc-700 bg-white border border-zinc-200 rounded-lg hover:bg-zinc-50"
+                    className="px-3.5 py-1.5 text-xs font-medium text-zinc-700 dark:text-zinc-300 bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg hover:bg-zinc-50 dark:hover:bg-zinc-700 transition-colors"
                   >
                     Batal
                   </button>
@@ -384,7 +384,7 @@ export const AiExtractModal: React.FC<AiExtractModalProps> = ({
                     type="button"
                     onClick={handleConfirmAndSave}
                     disabled={isLoading}
-                    className="inline-flex items-center gap-1.5 px-4 py-1.5 text-xs font-semibold text-white bg-zinc-900 rounded-lg hover:bg-zinc-800 disabled:opacity-50"
+                    className="inline-flex items-center gap-1.5 px-4 py-1.5 text-xs font-semibold text-white dark:text-zinc-900 bg-zinc-900 dark:bg-zinc-100 rounded-lg hover:bg-zinc-800 dark:hover:bg-zinc-200 disabled:opacity-50 transition-colors"
                   >
                     <Check className="w-3.5 h-3.5" />
                     <span>Konfirmasi & Simpan Rapat</span>
