@@ -1,4 +1,4 @@
-import { Meeting, Task, CreateMeetingInput, CreateTaskInput, AIParseResult, TaskSubmission, SubmitTaskInput } from '../types';
+import { Meeting, Task, CreateMeetingInput, CreateTaskInput, AIParseResult, TaskSubmission, SubmitTaskInput, Division, User, CreateDivisionInput, CreateUserInput } from '../types';
 
 export const api = {
   async getMeetings(): Promise<Meeting[]> {
@@ -144,6 +144,89 @@ export const api = {
   async getSchemaInfo() {
     const res = await fetch('/api/schema');
     if (!res.ok) throw new Error('Failed to fetch schema');
+    return res.json();
+  },
+
+  async getDivisions(): Promise<Division[]> {
+    const res = await fetch('/api/divisions');
+    if (!res.ok) throw new Error('Failed to fetch divisions');
+    return res.json();
+  },
+
+  async createDivision(input: CreateDivisionInput): Promise<Division> {
+    const res = await fetch('/api/divisions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(input),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || 'Failed to create division');
+    }
+    return res.json();
+  },
+
+  async updateDivision(id: string, input: Partial<CreateDivisionInput>): Promise<Division> {
+    const res = await fetch(`/api/divisions/${id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(input),
+    });
+    if (!res.ok) throw new Error('Failed to update division');
+    return res.json();
+  },
+
+  async deleteDivision(id: string): Promise<{ message: string; id: string }> {
+    const res = await fetch(`/api/divisions/${id}`, { method: 'DELETE' });
+    if (!res.ok) throw new Error('Failed to delete division');
+    return res.json();
+  },
+
+  async getUsers(): Promise<Omit<User, 'password'>[]> {
+    const res = await fetch('/api/users');
+    if (!res.ok) throw new Error('Failed to fetch users');
+    return res.json();
+  },
+
+  async createUser(input: CreateUserInput): Promise<Omit<User, 'password'>> {
+    const res = await fetch('/api/users', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(input),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || 'Failed to create user');
+    }
+    return res.json();
+  },
+
+  async updateUser(id: string, input: Partial<CreateUserInput>): Promise<Omit<User, 'password'>> {
+    const res = await fetch(`/api/users/${id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(input),
+    });
+    if (!res.ok) throw new Error('Failed to update user');
+    return res.json();
+  },
+
+  async deleteUser(id: string): Promise<{ message: string; id: string }> {
+    const res = await fetch(`/api/users/${id}`, { method: 'DELETE' });
+    if (!res.ok) throw new Error('Failed to delete user');
+    return res.json();
+  },
+
+  async login(username: string, password: string): Promise<{ user: Omit<User, 'password'>; token: string }> {
+    const res = await fetch('/api/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username, password }),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || 'Login failed');
+    }
     return res.json();
   }
 };

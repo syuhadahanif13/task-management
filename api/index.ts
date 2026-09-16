@@ -55,6 +55,34 @@ export interface SubmitTaskInput {
   attachments: TaskAttachment[];
 }
 
+export interface Division {
+  id: string;
+  name: string;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface User {
+  id: string;
+  username: string;
+  password: string;
+  divisionId: string;
+  role: 'admin' | 'user';
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface CreateDivisionInput {
+  name: string;
+}
+
+export interface CreateUserInput {
+  username: string;
+  password: string;
+  divisionId: string;
+  role?: 'admin' | 'user';
+}
+
 const app = express();
 
 app.use(express.json({ limit: '10mb' }));
@@ -70,6 +98,8 @@ if (supabaseUrl && supabaseKey) {
 // In-memory data store (clean state)
 let meetings: Meeting[] = [];
 let submissions: TaskSubmission[] = [];
+let divisions: Division[] = [];
+let users: User[] = [];
 
 function generateId(prefix: string) {
   return `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).substring(2, 6)}`;
@@ -685,8 +715,131 @@ function parseHeuristicMeeting(text: string, defaultDate: string) {
   return { title, meetingDate: defaultDate, participants, meetingNotes: text, tasks };
 }
 
+// Division CRUD
+router.get('/divisions', (req, res) => {
+  res.json(divisions);
+});
+
+router.post('/divisions', (req, res) => {
+  const { name } = req.body;
+  if (!name || !String(name).trim()) return res.status(400).json({ error: 'Division name is required' });
+  const now = new Date().toISOString();
+  const division: Division = {
+    id: generateId('div'),
+    name: String(name).trim(),
+    createdAt: now,
+    updatedAt: now,
+  };
+  divisions.push(division);
+  res.status(201).json(division);
+});
+
+router.put('/divisions/:id', (req, res) => {
+  const idx = divisions.findIndex(d => d.id === req.params.id);
+  if (idx === -1) return res.status(404).json({ error: 'Division not found' });
+  const { name } = req.body;
+  if (name !== undefined) divisions[idx].name = String(name).trim();
+  divisions[idx].updatedAt = new Date().toISOString();
+  res.json(divisions[idx]);
+});
+
+router.delete('/divisions/:id', (req, res) => {
+  const idx = divisions.findIndex(d => d.id === req.params.id);
+  if (idx === -1) return res.status(404).json({ error: 'Division not found' });
+  divisions.splice(idx, 1);
+  res.json({ message: 'Division deleted', id: req.params.id });
+});
+
+// User CRUD
+router.get('/users', (req, res) => {
+  const safeUsers = users.map(({ password, ...u }) => ({ ...u }));
+  res.json(safeUsers);
+});
+
+router.post('/users', (req, res) => {
+  const { username, password, divisionId, role } = req.body;
+  if (!username || !password || !divisionId) {
+    return res.status(400).json({ error: 'Username, password, and division are required' });
+  }
+  if (users.some(u => u.username === String(username).trim())) {
+    return res.status(400).json({ error: 'Username already exists' });
+  }
+  const now = new Date().toISOString();
+  const user: User = {
+    id: generateId('user'),
+    username: String(username).trim(),
+    password: String(password),
+    divisionId: String(divisionId),
+    role: ['admin', 'user'].includes(role) ? role : 'user',
+    createdAt: now,
+    updatedAt: now,
+  };
+  users.push(user);
+  const { password: _pwd, ...safeUser } = user;
+  res.status(201).json(safeUser);
+});
+
+router.put('/users/:id', (req, res) => {
+  const idx = users.findIndex(u => u.id === req.params.id);
+  if (idx === -1) return res.status(404).json({ error: 'User not found' });
+  const { username, password, divisionId, role } = req.body;
+  if (username !== undefined) users[idx].username = String(username).trim();
+  if (password !== undefined) users[idx].password = String(password);
+  if (divisionId !== undefined) users[idx].divisionId = String(divisionId);
+  if (role !== undefined && ['admin', 'user'].includes(role)) users[idx].role = role;
+  users[idx].updatedAt = new Date().toISOString();
+  const { password: _pwd, ...safeUser } = users[idx];
+  res.json(safeUser);
+});
+
+router.delete('/users/:id', (req, res) => {
+  const idx = users.findIndex(u => u.id === req.params.id);
+  if (idx === -1) return res.status(404).json({ error: 'User not found' });
+  users.splice(idx, 1);
+  res.json({ message: 'User deleted', id: req.params.id });
+});
+
+// Auth
+router.post('/auth/login', (req, res) => {
+  const { username, password } = req.body;
+  const user = users.find(u => u.username === String(username).trim() && u.password === String(password));
+  if (!user) return res.status(401).json({ error: 'Invalid username or password' });
+  const { password: _pwd, ...safeUser } = user;
+  res.json({ user: safeUser, token: generateId('token') });
+});
+
 // Support both /api/... and root-relative routes (e.g. if Vercel strips /api during rewrites)
 app.use('/api', router);
 app.use(router);
+
+// Seed initial data
+function seedInitialData() {
+  if (divisions.length === 0) {
+    const initialDivisions = [
+      { id: 'div-1', name: 'REI' },
+      { id: 'div-2', name: 'LM' },
+      { id: 'div-3', name: 'Sosmed' },
+      { id: 'div-4', name: 'PH' },
+      { id: 'div-5', name: 'Maps' },
+    ];
+    divisions.push(...initialDivisions);
+  }
+
+  if (users.length === 0) {
+    const initialUsers = [
+      { id: 'user-1', username: 'rizki', password: 'r@jaemas123', divisionId: 'div-1', role: 'user' as const },
+      { id: 'user-2', username: 'ajeng', password: 'r@jaemas123', divisionId: 'div-2', role: 'user' as const },
+      { id: 'user-3', username: 'annisa', password: 'r@jaemas123', divisionId: 'div-1', role: 'user' as const },
+      { id: 'user-4', username: 'Dinda', password: 'r@jaemas123', divisionId: 'div-5', role: 'user' as const },
+      { id: 'user-5', username: 'Devi', password: 'r@jaemas123', divisionId: 'div-3', role: 'user' as const },
+      { id: 'user-6', username: 'Hanif', password: 'r@jaemas123', divisionId: 'div-1', role: 'user' as const },
+      { id: 'user-7', username: 'Sonia', password: 'r@jaemas123', divisionId: 'div-1', role: 'user' as const },
+      { id: 'user-8', username: 'Azka', password: 'r@jaemas123', divisionId: 'div-4', role: 'user' as const },
+    ];
+    users.push(...initialUsers);
+  }
+}
+
+seedInitialData();
 
 export default app;

@@ -11,6 +11,8 @@ import { AiExtractModal } from './components/AiExtractModal';
 import { TaskFormModal } from './components/TaskFormModal';
 import { TaskSubmissionModal } from './components/TaskSubmissionModal';
 import { TaskReviewModal } from './components/TaskReviewModal';
+import { DivisionManager } from './components/DivisionManager';
+import { UserManager } from './components/UserManager';
 import { LoginPage } from './components/LoginPage';
 import {
   Calendar,
@@ -42,7 +44,7 @@ export default function App() {
   });
   const [meetings, setMeetings] = useState<Meeting[]>([]);
   const [selectedMeetingId, setSelectedMeetingId] = useState<string | null>(null);
-  const [currentTab, setCurrentTab] = useState<'meetings' | 'active-meeting' | 'all-tasks'>('meetings');
+  const [currentTab, setCurrentTab] = useState<'meetings' | 'active-meeting' | 'all-tasks' | 'settings'>('meetings');
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [errorMsg, setErrorMsg] = useState<string>('');
@@ -61,13 +63,22 @@ export default function App() {
 
   const toggleDarkMode = () => setIsDarkMode((prev) => !prev);
 
-  const handleLogin = (username: string, password: string) => {
-    if (username === 'admin' && password === 'r@jaemasmantab') {
+  const handleLogin = async (username: string, password: string) => {
+    try {
+      const response = await api.login(username, password);
       setIsAuthenticated(true);
       sessionStorage.setItem('isAuthenticated', 'true');
+      sessionStorage.setItem('currentUser', JSON.stringify(response.user));
       return true;
+    } catch (err) {
+      if (username === 'admin' && password === 'r@jaemasmantab') {
+        setIsAuthenticated(true);
+        sessionStorage.setItem('isAuthenticated', 'true');
+        sessionStorage.setItem('currentUser', JSON.stringify({ id: 'admin', username: 'admin', role: 'admin', divisionId: '' }));
+        return true;
+      }
+      return false;
     }
-    return false;
   };
 
   const handleLogout = () => {
@@ -89,6 +100,8 @@ export default function App() {
   const [reviewSubmission, setReviewSubmission] = useState<TaskSubmission | null>(null);
   const [aiInitialNotes, setAiInitialNotes] = useState('');
   const [aiInitialDate, setAiInitialDate] = useState('');
+  const [isDivisionManagerOpen, setIsDivisionManagerOpen] = useState(false);
+  const [isUserManagerOpen, setIsUserManagerOpen] = useState(false);
 
   const showToast = (msg: string) => {
     setToastMessage(msg);
@@ -479,6 +492,50 @@ export default function App() {
             }}
           />
         )}
+
+        {/* TAB 4: SETTINGS */}
+        {currentTab === 'settings' && (
+          <div className="notion-card p-6 space-y-6">
+            <div>
+              <h2 className="notion-page-title text-2xl">Settings</h2>
+              <p className="text-sm text-notion-text-secondary mt-1">
+                Manage divisions and users.
+              </p>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="notion-card p-4">
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-sm font-semibold text-notion-text">Divisions</h3>
+                  <button
+                    onClick={() => setIsDivisionManagerOpen(true)}
+                    className="notion-btn notion-btn-primary text-xs"
+                  >
+                    Manage Divisions
+                  </button>
+                </div>
+                <p className="text-xs text-notion-text-secondary">
+                  Create and manage divisions for organizing users and tasks.
+                </p>
+              </div>
+
+              <div className="notion-card p-4">
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-sm font-semibold text-notion-text">Users</h3>
+                  <button
+                    onClick={() => setIsUserManagerOpen(true)}
+                    className="notion-btn notion-btn-primary text-xs"
+                  >
+                    Manage Users
+                  </button>
+                </div>
+                <p className="text-xs text-notion-text-secondary">
+                  Create and manage user accounts with role-based access.
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
       </main>
 
           {/* Floating Toast Notification */}
@@ -538,6 +595,18 @@ export default function App() {
             submission={reviewSubmission}
             onApprove={handleApproveSubmission}
             onReject={handleRejectSubmission}
+          />
+
+          {/* 6. Division Manager Modal */}
+          <DivisionManager
+            isOpen={isDivisionManagerOpen}
+            onClose={() => setIsDivisionManagerOpen(false)}
+          />
+
+          {/* 7. User Manager Modal */}
+          <UserManager
+            isOpen={isUserManagerOpen}
+            onClose={() => setIsUserManagerOpen(false)}
           />
         </div>
       )}

@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { Lock, User, AlertCircle, Sun, Moon } from 'lucide-react';
 
 interface LoginPageProps {
-  onLogin: (username: string, password: string) => boolean;
+  onLogin: (username: string, password: string) => Promise<boolean>;
   isDarkMode?: boolean;
   onToggleDarkMode?: () => void;
 }
@@ -22,9 +22,14 @@ export const LoginPage: React.FC<LoginPageProps> = ({
     setErrorMsg('');
     setIsSubmitting(true);
 
-    const success = onLogin(username, password);
-    if (!success) {
-      setErrorMsg('Username atau password salah.');
+    try {
+      const success = await onLogin(username, password);
+      if (!success) {
+        setErrorMsg('Username atau password salah.');
+        setIsSubmitting(false);
+      }
+    } catch (err: any) {
+      setErrorMsg(err?.message || 'Login gagal.');
       setIsSubmitting(false);
     }
   };

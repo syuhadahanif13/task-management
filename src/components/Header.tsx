@@ -1,9 +1,9 @@
 import React from 'react';
-import { Plus, Sparkles, BookOpen, LogOut, CheckSquare, Sun, Moon } from 'lucide-react';
+import { Plus, Sparkles, BookOpen, LogOut, CheckSquare, Sun, Moon, Users } from 'lucide-react';
 
 interface HeaderProps {
-  currentTab: 'meetings' | 'active-meeting' | 'all-tasks';
-  onTabChange: (tab: 'meetings' | 'all-tasks') => void;
+  currentTab: 'meetings' | 'active-meeting' | 'all-tasks' | 'settings';
+  onTabChange: (tab: 'meetings' | 'all-tasks' | 'settings') => void;
   onOpenNewMeeting: () => void;
   onOpenAiExtract: () => void;
   meetingCount: number;
@@ -115,6 +115,18 @@ export const Header: React.FC<HeaderProps> = ({
               <span className="ml-1 rounded-md bg-notion-hover px-1.5 py-0.5 text-[10px] font-medium">
                 {taskCount}
               </span>
+            </button>
+
+            <button
+              onClick={() => onTabChange('settings')}
+              className={`notion-btn text-xs ${
+                currentTab === 'settings'
+                  ? 'bg-notion-hover text-notion-text'
+                  : 'text-notion-text-secondary hover:bg-notion-hover'
+              }`}
+            >
+              <Users className="h-3.5 w-3.5" />
+              <span>Settings</span>
             </button>
           </nav>
         </div>

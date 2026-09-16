@@ -90,3 +90,31 @@ export interface SubmitTaskInput {
   notes: string;
   attachments: TaskAttachment[];
 }
+
+export interface Division {
+  id: string;
+  name: string;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface User {
+  id: string;
+  username: string;
+  password: string;
+  divisionId: string;
+  role: 'admin' | 'user';
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface CreateDivisionInput {
+  name: string;
+}
+
+export interface CreateUserInput {
+  username: string;
+  password: string;
+  divisionId: string;
+  role?: 'admin' | 'user';
+}
