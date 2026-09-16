@@ -352,8 +352,6 @@ export default function App() {
               setAiInitialDate('');
               setIsAiExtractOpen(true);
             }}
-            searchQuery={searchQuery}
-            onSearchChange={setSearchQuery}
             meetingCount={totalMeetings}
             taskCount={totalTasks}
             isDarkMode={isDarkMode}

@@ -1,13 +1,11 @@
 import React from 'react';
-import { Plus, Sparkles, Search, BookOpen, LogOut, CheckSquare, Sun, Moon } from 'lucide-react';
+import { Plus, Sparkles, BookOpen, LogOut, CheckSquare, Sun, Moon } from 'lucide-react';
 
 interface HeaderProps {
   currentTab: 'meetings' | 'active-meeting' | 'all-tasks';
   onTabChange: (tab: 'meetings' | 'all-tasks') => void;
   onOpenNewMeeting: () => void;
   onOpenAiExtract: () => void;
-  searchQuery: string;
-  onSearchChange: (q: string) => void;
   meetingCount: number;
   taskCount: number;
   onLogout?: () => void;
@@ -20,8 +18,6 @@ export const Header: React.FC<HeaderProps> = ({
   onTabChange,
   onOpenNewMeeting,
   onOpenAiExtract,
-  searchQuery,
-  onSearchChange,
   meetingCount,
   taskCount,
   onLogout,
@@ -42,17 +38,6 @@ export const Header: React.FC<HeaderProps> = ({
               />
             </div>
             <span className="text-sm font-semibold text-notion-text">Meeting Task Management</span>
-          </div>
-
-          {/* Search */}
-          <div className="hidden md:flex items-center flex-1 max-w-sm">
-            <Search className="absolute left-2 top-2.5 h-3.5 w-3.5 text-notion-text-secondary pointer-events-none" />
-            <input
-              value={searchQuery}
-              onChange={(e) => onSearchChange(e.target.value)}
-              placeholder="Search meetings, tasks..."
-              className="w-full rounded-md border border-notion-border bg-notion-sidebar py-1.5 pl-8 pr-3 text-xs placeholder:text-notion-text-secondary focus:border-notion-accent focus:outline-none focus:ring-1 focus:ring-notion-accent"
-            />
           </div>
 
           {/* Actions */}
