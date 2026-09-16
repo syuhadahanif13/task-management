@@ -362,7 +362,7 @@ export default function App() {
           />
 
       {/* Main Content Area */}
-      <main className="mx-auto max-w-5xl px-4 sm:px-6 lg:px-8 py-8">
+      <main className={`mx-auto px-4 sm:px-6 lg:px-8 py-8 w-full ${currentTab === 'all-tasks' ? 'max-w-[1000px]' : 'max-w-6xl'}`}>
         {/* Error notification if any */}
         {errorMsg && (
           <div className="mb-6 p-4 bg-rose-50 border border-rose-200 text-rose-800 rounded-xl text-xs flex items-center justify-between">
