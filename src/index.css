@@ -14,10 +14,11 @@
   --color-notion-success: #0f7b6c;
   --color-notion-warning: #d9730d;
   --color-notion-danger: #e03e3e;
+  --color-notion-kanban-bg: #fafafa;
 }
 
 :root {
-  color-scheme: light dark;
+  color-scheme: light;
   font-family: ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
@@ -30,19 +31,11 @@ html.dark {
 }
 
 body {
-  @apply bg-white text-notion-text antialiased;
-}
-
-html.dark body {
-  @apply bg-notion-bg text-notion-text;
+  @apply bg-notion-bg text-notion-text antialiased;
 }
 
 .notion-card {
-  @apply bg-white border border-notion-border rounded-xl;
-}
-
-html.dark .notion-card {
-  @apply bg-notion-bg border-notion-border;
+  @apply bg-notion-bg border border-notion-border rounded-xl;
 }
 
 .notion-card-hover {
@@ -50,10 +43,6 @@ html.dark .notion-card {
 }
 
 .notion-card-hover:hover {
-  @apply bg-notion-hover;
-}
-
-html.dark .notion-card-hover:hover {
   @apply bg-notion-hover;
 }
 
@@ -73,28 +62,16 @@ html.dark .notion-card-hover:hover {
   @apply text-notion-text-secondary hover:bg-notion-hover;
 }
 
-html.dark .notion-btn-ghost {
-  @apply text-notion-text-secondary hover:bg-notion-hover;
-}
-
 .notion-badge {
   @apply inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium;
 }
 
 .notion-input {
-  @apply w-full rounded-lg border border-notion-border bg-white px-3 py-2 text-sm placeholder:text-notion-text-secondary focus:border-notion-accent focus:outline-none focus:ring-1 focus:ring-notion-accent;
-}
-
-html.dark .notion-input {
-  @apply bg-notion-bg border-notion-border text-notion-text;
+  @apply w-full rounded-lg border border-notion-border bg-notion-bg px-3 py-2 text-sm placeholder:text-notion-text-secondary focus:border-notion-accent focus:outline-none focus:ring-1 focus:ring-notion-accent;
 }
 
 .notion-page-title {
   @apply text-3xl font-semibold text-notion-text tracking-tight;
-}
-
-html.dark .notion-page-title {
-  @apply text-notion-text;
 }
 
 .notion-section-title {
@@ -103,4 +80,20 @@ html.dark .notion-page-title {
 
 .notion-divider {
   @apply border-t border-notion-border;
+}
+
+.notion-kanban-board {
+  @apply bg-notion-kanban-bg border border-notion-border rounded-xl;
+}
+
+.notion-kanban-column {
+  @apply bg-notion-bg border border-notion-border rounded-lg;
+}
+
+.notion-task-card {
+  @apply bg-notion-bg border border-notion-border rounded-lg;
+}
+
+.notion-task-card:hover {
+  @apply shadow-sm;
 }

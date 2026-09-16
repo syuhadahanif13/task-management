@@ -1,5 +1,5 @@
 import React from 'react';
-import { Task, TaskStatus, TaskSubmission } from '../types';
+import { Task, TaskStatus } from '../types';
 import { CheckCircle2, Circle, Trash2, Edit2, User, Calendar, Send, FileText } from 'lucide-react';
 
 interface TaskItemProps {
@@ -37,14 +37,14 @@ export const TaskItem: React.FC<TaskItemProps> = ({
 
   const statusColors: Record<TaskStatus, { bg: string; text: string }> = {
     'To Do': { bg: 'bg-notion-sidebar', text: 'text-notion-text-secondary' },
-    'In Progress': { bg: 'bg-blue-50', text: 'text-blue-700' },
+    'In Progress': { bg: 'bg-sky-50', text: 'text-sky-700' },
     'Done': { bg: 'bg-emerald-50', text: 'text-emerald-700' },
     'Blocked': { bg: 'bg-rose-50', text: 'text-rose-700' },
     'Pending Approval': { bg: 'bg-amber-50', text: 'text-amber-700' }
   };
 
   return (
-    <div className="notion-card notion-card-hover p-4">
+    <div className="notion-task-card p-4">
       <div className="flex items-start gap-3">
         {/* Checkbox */}
         <button

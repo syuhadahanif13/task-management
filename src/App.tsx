@@ -38,7 +38,7 @@ export default function App() {
   const [isDarkMode, setIsDarkMode] = useState<boolean>(() => {
     const saved = localStorage.getItem('theme');
     if (saved) return saved === 'dark';
-    return window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+    return false;
   });
   const [meetings, setMeetings] = useState<Meeting[]>([]);
   const [selectedMeetingId, setSelectedMeetingId] = useState<string | null>(null);
@@ -338,7 +338,7 @@ export default function App() {
           onToggleDarkMode={toggleDarkMode}
         />
       ) : (
-        <div className="min-h-screen bg-white dark:bg-notion-bg text-notion-text font-sans antialiased flex flex-col transition-colors">
+        <div className="min-h-screen bg-notion-bg text-notion-text font-sans antialiased flex flex-col transition-colors">
           {/* Sticky Header */}
           <Header
             currentTab={currentTab}
@@ -356,6 +356,8 @@ export default function App() {
             onSearchChange={setSearchQuery}
             meetingCount={totalMeetings}
             taskCount={totalTasks}
+            isDarkMode={isDarkMode}
+            onToggleDarkMode={toggleDarkMode}
             onLogout={handleLogout}
           />
 

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Lock, User, AlertCircle } from 'lucide-react';
+import { Lock, User, AlertCircle, Sun, Moon } from 'lucide-react';
 
 interface LoginPageProps {
   onLogin: (username: string, password: string) => boolean;
@@ -30,7 +30,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({
   };
 
   return (
-    <div className="min-h-screen bg-white dark:bg-notion-bg flex items-center justify-center p-4 relative transition-colors">
+    <div className="min-h-screen bg-notion-bg flex items-center justify-center p-4 relative transition-colors">
       {onToggleDarkMode && (
         <button
           onClick={onToggleDarkMode}
@@ -38,7 +38,11 @@ export const LoginPage: React.FC<LoginPageProps> = ({
           title={isDarkMode ? 'Beralih ke Mode Terang' : 'Beralih ke Mode Gelap'}
           aria-label="Toggle theme"
         >
-          {isDarkMode ? 'Light' : 'Dark'}
+          {isDarkMode ? (
+            <Sun className="w-4 h-4 text-amber-500" />
+          ) : (
+            <Moon className="w-4 h-4 text-notion-text-secondary" />
+          )}
         </button>
       )}
 

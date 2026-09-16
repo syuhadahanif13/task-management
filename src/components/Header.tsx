@@ -1,5 +1,5 @@
 import React from 'react';
-import { Plus, Sparkles, Search, BookOpen, LogOut, CheckSquare } from 'lucide-react';
+import { Plus, Sparkles, Search, BookOpen, LogOut, CheckSquare, Sun, Moon } from 'lucide-react';
 
 interface HeaderProps {
   currentTab: 'meetings' | 'active-meeting' | 'all-tasks';
@@ -11,6 +11,8 @@ interface HeaderProps {
   meetingCount: number;
   taskCount: number;
   onLogout?: () => void;
+  isDarkMode?: boolean;
+  onToggleDarkMode?: () => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -23,9 +25,11 @@ export const Header: React.FC<HeaderProps> = ({
   meetingCount,
   taskCount,
   onLogout,
+  isDarkMode = false,
+  onToggleDarkMode,
 }) => {
   return (
-    <header className="sticky top-0 z-30 border-b border-notion-border bg-white/80 backdrop-blur-sm">
+    <header className="sticky top-0 z-30 border-b border-notion-border bg-notion-bg/90 backdrop-blur-sm">
       <div className="mx-auto max-w-5xl px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-14 gap-4">
           {/* Brand */}
@@ -53,6 +57,20 @@ export const Header: React.FC<HeaderProps> = ({
 
           {/* Actions */}
           <div className="flex items-center gap-1.5">
+            {onToggleDarkMode && (
+              <button
+                onClick={onToggleDarkMode}
+                className="notion-btn notion-btn-ghost text-xs"
+                title={isDarkMode ? 'Beralih ke Mode Terang' : 'Beralih ke Mode Gelap'}
+              >
+                {isDarkMode ? (
+                  <Sun className="h-3.5 w-3.5" />
+                ) : (
+                  <Moon className="h-3.5 w-3.5" />
+                )}
+              </button>
+            )}
+
             <button
               onClick={onOpenAiExtract}
               className="notion-btn notion-btn-ghost text-xs"
