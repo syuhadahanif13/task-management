@@ -352,13 +352,10 @@ export default function App() {
               setAiInitialDate('');
               setIsAiExtractOpen(true);
             }}
-            onOpenSupabaseModal={() => {}}
             searchQuery={searchQuery}
             onSearchChange={setSearchQuery}
             meetingCount={totalMeetings}
             taskCount={totalTasks}
-            isDarkMode={isDarkMode}
-            onToggleDarkMode={toggleDarkMode}
             onLogout={handleLogout}
           />
 
