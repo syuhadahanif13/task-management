@@ -5,7 +5,7 @@ import dotenv from 'dotenv';
 
 dotenv.config();
 
-export type TaskStatus = 'To Do' | 'In Progress' | 'Done' | 'Blocked';
+export type TaskStatus = 'To Do' | 'In Progress' | 'Done' | 'Blocked' | 'Pending Approval';
 
 export interface Task {
   id: string;
@@ -24,9 +24,35 @@ export interface Meeting {
   participants: string[];
   meetingNotes: string;
   tasks: Task[];
+  submissions?: TaskSubmission[];
   title?: string;
   createdAt?: string;
   updatedAt?: string;
+}
+
+export interface TaskAttachment {
+  name: string;
+  type: string;
+  size: number;
+  data: string;
+}
+
+export interface TaskSubmission {
+  id: string;
+  taskId: string;
+  assignee: string;
+  notes: string;
+  attachments: TaskAttachment[];
+  status: 'pending' | 'approved' | 'rejected';
+  submittedAt: string;
+  reviewedBy?: string;
+  reviewedAt?: string;
+  reviewNote?: string;
+}
+
+export interface SubmitTaskInput {
+  notes: string;
+  attachments: TaskAttachment[];
 }
 
 const app = express();
@@ -43,6 +69,7 @@ if (supabaseUrl && supabaseKey) {
 
 // In-memory data store (clean state)
 let meetings: Meeting[] = [];
+let submissions: TaskSubmission[] = [];
 
 function generateId(prefix: string) {
   return `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).substring(2, 6)}`;
@@ -325,7 +352,7 @@ router.post('/meetings/:meetingId/tasks', async (req, res) => {
     title: String(title).trim(),
     assignee: String(assignee || (meeting.participants[0] || 'Unassigned')).trim(),
     dueDate: String(dueDate).trim(),
-    status: (['To Do', 'In Progress', 'Done', 'Blocked'].includes(status) ? status : 'To Do') as TaskStatus,
+    status: (['To Do', 'In Progress', 'Done', 'Blocked', 'Pending Approval'].includes(status) ? status : 'To Do') as TaskStatus,
     createdAt: now,
     updatedAt: now,
   };
@@ -352,6 +379,163 @@ router.post('/meetings/:meetingId/tasks', async (req, res) => {
   res.status(201).json(newTask);
 });
 
+router.post('/tasks/:taskId/submit', async (req, res) => {
+  const { taskId } = req.params;
+  const { notes, attachments } = req.body as SubmitTaskInput;
+
+  let targetMeeting: Meeting | undefined;
+  let targetTask: Task | undefined;
+  for (const m of meetings) {
+    const found = m.tasks.find(t => t.id === taskId);
+    if (found) {
+      targetMeeting = m;
+      targetTask = found;
+      break;
+    }
+  }
+
+  if (!targetMeeting || !targetTask) return res.status(404).json({ error: 'Task not found' });
+  if (!notes || !attachments || !Array.isArray(attachments) || attachments.length === 0) {
+    return res.status(400).json({ error: 'Submission must include notes and at least one attachment.' });
+  }
+
+  const now = new Date().toISOString();
+  const submission: TaskSubmission = {
+    id: generateId('submission'),
+    taskId: targetTask.id,
+    assignee: targetTask.assignee,
+    notes: String(notes).trim(),
+    attachments,
+    status: 'pending',
+    submittedAt: now,
+  };
+
+  submissions.push(submission);
+  targetTask.status = 'Pending Approval';
+  targetTask.updatedAt = now;
+  targetMeeting.updatedAt = now;
+
+  if (supabase) {
+    try {
+      await supabase.from('tasks').update({ status: 'Pending Approval', updated_at: now }).eq('id', taskId);
+      await supabase.from('task_submissions').insert({
+        id: submission.id,
+        task_id: submission.taskId,
+        assignee: submission.assignee,
+        notes: submission.notes,
+        attachments: submission.attachments,
+        status: submission.status,
+        submitted_at: submission.submittedAt,
+      });
+    } catch (err: any) {
+      console.warn('Supabase submit warning:', err?.message);
+    }
+  }
+
+  res.status(201).json(submission);
+});
+
+router.get('/tasks/:taskId/submissions', async (req, res) => {
+  const taskSubmissions = submissions.filter(s => s.taskId === req.params.taskId);
+  res.json(taskSubmissions.sort((a, b) => new Date(b.submittedAt).getTime() - new Date(a.submittedAt).getTime()));
+});
+
+router.post('/tasks/:taskId/approve', async (req, res) => {
+  const { taskId } = req.params;
+  const { submissionId, reviewNote } = req.body;
+
+  let targetMeeting: Meeting | undefined;
+  let targetTask: Task | undefined;
+  for (const m of meetings) {
+    const found = m.tasks.find(t => t.id === taskId);
+    if (found) {
+      targetMeeting = m;
+      targetTask = found;
+      break;
+    }
+  }
+  if (!targetMeeting || !targetTask) return res.status(404).json({ error: 'Task not found' });
+
+  const submission = submissions.find(s => s.id === submissionId && s.taskId === taskId);
+  if (!submission) return res.status(404).json({ error: 'Submission not found' });
+
+  const now = new Date().toISOString();
+  submission.status = 'approved';
+  submission.reviewedBy = 'admin';
+  submission.reviewedAt = now;
+  submission.reviewNote = reviewNote;
+
+  targetTask.status = 'Done';
+  targetTask.updatedAt = now;
+  targetMeeting.updatedAt = now;
+
+  if (supabase) {
+    try {
+      await supabase.from('tasks').update({ status: 'Done', updated_at: now }).eq('id', taskId);
+      await supabase.from('task_submissions').update({
+        status: 'approved',
+        reviewed_by: 'admin',
+        reviewed_at: now,
+        review_note: reviewNote,
+      }).eq('id', submissionId);
+    } catch (err: any) {
+      console.warn('Supabase approve warning:', err?.message);
+    }
+  }
+
+  res.json(targetTask);
+});
+
+router.post('/tasks/:taskId/reject', async (req, res) => {
+  const { taskId } = req.params;
+  const { submissionId, reviewNote } = req.body;
+
+  if (!reviewNote) {
+    return res.status(400).json({ error: 'Review note is required for rejection.' });
+  }
+
+  let targetMeeting: Meeting | undefined;
+  let targetTask: Task | undefined;
+  for (const m of meetings) {
+    const found = m.tasks.find(t => t.id === taskId);
+    if (found) {
+      targetMeeting = m;
+      targetTask = found;
+      break;
+    }
+  }
+  if (!targetMeeting || !targetTask) return res.status(404).json({ error: 'Task not found' });
+
+  const submission = submissions.find(s => s.id === submissionId && s.taskId === taskId);
+  if (!submission) return res.status(404).json({ error: 'Submission not found' });
+
+  const now = new Date().toISOString();
+  submission.status = 'rejected';
+  submission.reviewedBy = 'admin';
+  submission.reviewedAt = now;
+  submission.reviewNote = reviewNote;
+
+  targetTask.status = 'In Progress';
+  targetTask.updatedAt = now;
+  targetMeeting.updatedAt = now;
+
+  if (supabase) {
+    try {
+      await supabase.from('tasks').update({ status: 'In Progress', updated_at: now }).eq('id', taskId);
+      await supabase.from('task_submissions').update({
+        status: 'rejected',
+        reviewed_by: 'admin',
+        reviewed_at: now,
+        review_note: reviewNote,
+      }).eq('id', submissionId);
+    } catch (err: any) {
+      console.warn('Supabase reject warning:', err?.message);
+    }
+  }
+
+  res.json(targetTask);
+});
+
 router.put('/tasks/:id', async (req, res) => {
   let targetMeeting: Meeting | undefined;
   let targetTask: Task | undefined;
@@ -369,7 +553,7 @@ router.put('/tasks/:id', async (req, res) => {
   if (title !== undefined) targetTask.title = String(title).trim();
   if (assignee !== undefined) targetTask.assignee = String(assignee).trim();
   if (dueDate !== undefined) targetTask.dueDate = String(dueDate).trim();
-  if (status !== undefined && ['To Do', 'In Progress', 'Done', 'Blocked'].includes(status)) {
+  if (status !== undefined && ['To Do', 'In Progress', 'Done', 'Blocked', 'Pending Approval'].includes(status)) {
     targetTask.status = status as TaskStatus;
   }
   targetTask.updatedAt = now;

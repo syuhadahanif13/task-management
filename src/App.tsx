@@ -9,6 +9,8 @@ import { AllTasksKanban } from './components/AllTasksKanban';
 import { NewMeetingModal } from './components/NewMeetingModal';
 import { AiExtractModal } from './components/AiExtractModal';
 import { TaskFormModal } from './components/TaskFormModal';
+import { TaskSubmissionModal } from './components/TaskSubmissionModal';
+import { TaskReviewModal } from './components/TaskReviewModal';
 import { LoginPage } from './components/LoginPage';
 import {
   Calendar,
@@ -82,6 +84,8 @@ export default function App() {
   const [isNewMeetingOpen, setIsNewMeetingOpen] = useState(false);
   const [isAiExtractOpen, setIsAiExtractOpen] = useState(false);
   const [editingTask, setEditingTask] = useState<Task | null>(null);
+  const [submittingTask, setSubmittingTask] = useState<Task | null>(null);
+  const [reviewingTask, setReviewingTask] = useState<Task | null>(null);
   const [aiInitialNotes, setAiInitialNotes] = useState('');
   const [aiInitialDate, setAiInitialDate] = useState('');
 
@@ -246,6 +250,56 @@ export default function App() {
       showToast('Tugas berhasil dihapus.');
     } catch (err: any) {
       alert(err.message || 'Gagal menghapus tugas.');
+    }
+  };
+
+  const handleSubmitTask = async (taskId: string, input: { notes: string; attachments: TaskSubmission['attachments'] }) => {
+    try {
+      await api.submitTask(taskId, input);
+      setMeetings((prevMeetings) =>
+        prevMeetings.map((m) => ({
+          ...m,
+          tasks: (m.tasks || []).map((t) => (t.id === taskId ? { ...t, status: 'Pending Approval' } : t)),
+        }))
+      );
+      showToast('Pekerjaan berhasil dikirim untuk approval.');
+      setSubmittingTask(null);
+    } catch (err: any) {
+      alert(err.message || 'Gagal mengirimkan submission.');
+    }
+  };
+
+  const handleApproveSubmission = async (taskId: string, submissionId: string, reviewNote?: string) => {
+    try {
+      await api.approveTaskSubmission(taskId, submissionId, reviewNote);
+      setMeetings((prevMeetings) =>
+        prevMeetings.map((m) => ({
+          ...m,
+          tasks: (m.tasks || []).map((t) => (t.id === taskId ? { ...t, status: 'Done' } : t)),
+        }))
+      );
+      showToast('Submission berhasil disetujui.');
+      setReviewingTask(null);
+      setReviewSubmission(null);
+    } catch (err: any) {
+      alert(err.message || 'Gagal menyetujui submission.');
+    }
+  };
+
+  const handleRejectSubmission = async (taskId: string, submissionId: string, reviewNote: string) => {
+    try {
+      await api.rejectTaskSubmission(taskId, submissionId, reviewNote);
+      setMeetings((prevMeetings) =>
+        prevMeetings.map((m) => ({
+          ...m,
+          tasks: (m.tasks || []).map((t) => (t.id === taskId ? { ...t, status: 'In Progress' } : t)),
+        }))
+      );
+      showToast('Submission ditolak. Tugas dikembalikan ke In Progress.');
+      setReviewingTask(null);
+      setReviewSubmission(null);
+    } catch (err: any) {
+      alert(err.message || 'Gagal menolak submission.');
     }
   };
 
@@ -455,6 +509,10 @@ export default function App() {
                 onEditTask={(task) => setEditingTask(task)}
                 onDeleteTask={handleDeleteTask}
                 onAiExtractNotes={handleAiExtractNotes}
+                onSubmitTask={handleSubmitTask}
+                onApproveSubmission={handleApproveSubmission}
+                onRejectSubmission={handleRejectSubmission}
+                currentUserRole="admin"
               />
             )}
 
@@ -509,6 +567,27 @@ export default function App() {
                 ? meetings.find((m) => m.id === editingTask.meetingId)?.participants || []
                 : []
             }
+          />
+
+          {/* 4. Task Submission Modal */}
+          <TaskSubmissionModal
+            isOpen={!!submittingTask}
+            onClose={() => setSubmittingTask(null)}
+            task={submittingTask}
+            onSubmit={handleSubmitTask}
+          />
+
+          {/* 5. Task Review Modal */}
+          <TaskReviewModal
+            isOpen={!!reviewingTask}
+            onClose={() => {
+              setReviewingTask(null);
+              setReviewSubmission(null);
+            }}
+            task={reviewingTask}
+            submission={reviewSubmission}
+            onApprove={handleApproveSubmission}
+            onReject={handleRejectSubmission}
           />
         </div>
       )}

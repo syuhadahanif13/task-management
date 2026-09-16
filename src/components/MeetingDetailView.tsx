@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
-import { Meeting, Task, TaskStatus, CreateTaskInput } from '../types';
+import { Meeting, Task, TaskStatus, CreateTaskInput, TaskSubmission } from '../types';
 import { TaskItem } from './TaskItem';
+import { TaskSubmissionModal } from './TaskSubmissionModal';
+import { TaskReviewModal } from './TaskReviewModal';
 import {
   Calendar,
   Users,
@@ -15,7 +17,9 @@ import {
   X,
   AlertCircle,
   Filter,
-  UserPlus
+  UserPlus,
+  Send,
+  FileText as FileTextIcon
 } from 'lucide-react';
 
 interface MeetingDetailViewProps {
@@ -28,6 +32,10 @@ interface MeetingDetailViewProps {
   onEditTask: (task: Task) => void;
   onDeleteTask: (taskId: string) => Promise<void>;
   onAiExtractNotes: (meetingNotes: string, meetingDate: string) => void;
+  onSubmitTask: (taskId: string, input: { notes: string; attachments: TaskSubmission['attachments'] }) => Promise<TaskSubmission>;
+  onApproveSubmission: (taskId: string, submissionId: string, reviewNote?: string) => Promise<Task>;
+  onRejectSubmission: (taskId: string, submissionId: string, reviewNote: string) => Promise<Task>;
+  currentUserRole?: 'admin' | 'user';
 }
 
 export const MeetingDetailView: React.FC<MeetingDetailViewProps> = ({
@@ -40,6 +48,10 @@ export const MeetingDetailView: React.FC<MeetingDetailViewProps> = ({
   onEditTask,
   onDeleteTask,
   onAiExtractNotes,
+  onSubmitTask,
+  onApproveSubmission,
+  onRejectSubmission,
+  currentUserRole = 'admin',
 }) => {
   const [filterStatus, setFilterStatus] = useState<string>('all');
   const [isEditingMeeting, setIsEditingMeeting] = useState<boolean>(false);
@@ -60,6 +72,11 @@ export const MeetingDetailView: React.FC<MeetingDetailViewProps> = ({
   const [taskStatus, setTaskStatus] = useState<TaskStatus>('To Do');
   const [isSubmittingTask, setIsSubmittingTask] = useState(false);
 
+  // Submission and review modals
+  const [submittingTask, setSubmittingTask] = useState<Task | null>(null);
+  const [reviewingTask, setReviewingTask] = useState<Task | null>(null);
+  const [reviewSubmission, setReviewSubmission] = useState<TaskSubmission | null>(null);
+
   // Filter tasks
   const tasks = meeting.tasks || [];
   const filteredTasks = tasks.filter((t) => {
@@ -71,7 +88,25 @@ export const MeetingDetailView: React.FC<MeetingDetailViewProps> = ({
   const inProgressCount = tasks.filter((t) => t.status === 'In Progress').length;
   const blockedCount = tasks.filter((t) => t.status === 'Blocked').length;
   const todoCount = tasks.filter((t) => t.status === 'To Do').length;
+  const pendingApprovalCount = tasks.filter((t) => t.status === 'Pending Approval').length;
   const completionRate = tasks.length > 0 ? Math.round((doneCount / tasks.length) * 100) : 0;
+
+  const handleOpenSubmit = (task: Task) => {
+    setSubmittingTask(task);
+  };
+
+  const handleOpenReview = async (task: Task) => {
+    try {
+      const submissions = await api.getTaskSubmissions(task.id);
+      const latest = submissions[0];
+      if (latest) {
+        setReviewSubmission(latest);
+        setReviewingTask(task);
+      }
+    } catch (err) {
+      console.error('Failed to load submissions:', err);
+    }
+  };
 
   const handleSaveMeetingEdits = async () => {
     const updatedParticipants = editParticipants
@@ -408,13 +443,15 @@ export const MeetingDetailView: React.FC<MeetingDetailViewProps> = ({
                     ({doneCount} selesai dari {tasks.length})
                   </span>
                 </div>
-                <div className="flex items-center gap-2 text-[11px]">
-                  <span className="text-zinc-600 dark:text-zinc-400">To Do: {todoCount}</span>
-                  <span>•</span>
-                  <span className="text-sky-600 dark:text-sky-400">In Progress: {inProgressCount}</span>
-                  <span>•</span>
-                  <span className="text-rose-600 dark:text-rose-400">Blocked: {blockedCount}</span>
-                </div>
+              <div className="flex items-center gap-2 text-[11px]">
+                <span className="text-zinc-600 dark:text-zinc-400">To Do: {todoCount}</span>
+                <span>•</span>
+                <span className="text-sky-600 dark:text-sky-400">In Progress: {inProgressCount}</span>
+                <span>•</span>
+                <span className="text-amber-600 dark:text-amber-400">Pending: {pendingApprovalCount}</span>
+                <span>•</span>
+                <span className="text-rose-600 dark:text-rose-400">Blocked: {blockedCount}</span>
+              </div>
               </div>
 
               <div className="h-2 bg-zinc-100 dark:bg-zinc-800 rounded-full overflow-hidden flex">
@@ -425,6 +462,10 @@ export const MeetingDetailView: React.FC<MeetingDetailViewProps> = ({
                 <div
                   className="bg-sky-400 transition-all duration-300"
                   style={{ width: `${(inProgressCount / (tasks.length || 1)) * 100}%` }}
+                />
+                <div
+                  className="bg-amber-400 transition-all duration-300"
+                  style={{ width: `${(pendingApprovalCount / (tasks.length || 1)) * 100}%` }}
                 />
                 <div
                   className="bg-rose-400 transition-all duration-300"
@@ -443,6 +484,7 @@ export const MeetingDetailView: React.FC<MeetingDetailViewProps> = ({
                 { id: 'all', label: `Semua (${tasks.length})` },
                 { id: 'To Do', label: `To Do (${todoCount})` },
                 { id: 'In Progress', label: `In Progress (${inProgressCount})` },
+                { id: 'Pending Approval', label: `Pending Approval (${pendingApprovalCount})` },
                 { id: 'Done', label: `Done (${doneCount})` },
                 { id: 'Blocked', label: `Blocked (${blockedCount})` },
               ].map((tab) => (
@@ -592,13 +634,35 @@ export const MeetingDetailView: React.FC<MeetingDetailViewProps> = ({
                   onStatusChange={onUpdateTaskStatus}
                   onEdit={onEditTask}
                   onDelete={onDeleteTask}
+                  onOpenSubmit={currentUserRole === 'user' ? handleOpenSubmit : undefined}
+                  onOpenReview={currentUserRole === 'admin' ? handleOpenReview : undefined}
                 />
               ))
             )}
           </div>
         </div>
-
       </div>
+
+      {/* Submission Modal */}
+      <TaskSubmissionModal
+        isOpen={!!submittingTask}
+        onClose={() => setSubmittingTask(null)}
+        task={submittingTask}
+        onSubmit={onSubmitTask}
+      />
+
+      {/* Review Modal */}
+      <TaskReviewModal
+        isOpen={!!reviewingTask && !!reviewSubmission}
+        onClose={() => {
+          setReviewingTask(null);
+          setReviewSubmission(null);
+        }}
+        task={reviewingTask}
+        submission={reviewSubmission}
+        onApprove={onApproveSubmission}
+        onReject={onRejectSubmission}
+      />
     </div>
   );
 };

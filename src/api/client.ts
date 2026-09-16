@@ -1,4 +1,4 @@
-import { Meeting, Task, CreateMeetingInput, CreateTaskInput, AIParseResult } from '../types';
+import { Meeting, Task, CreateMeetingInput, CreateTaskInput, AIParseResult, TaskSubmission, SubmitTaskInput } from '../types';
 
 export const api = {
   async getMeetings(): Promise<Meeting[]> {
@@ -80,6 +80,51 @@ export const api = {
 
     const res = await fetch(`/api/tasks?${searchParams.toString()}`);
     if (!res.ok) throw new Error('Failed to fetch tasks');
+    return res.json();
+  },
+
+  async submitTask(taskId: string, input: SubmitTaskInput): Promise<TaskSubmission> {
+    const res = await fetch(`/api/tasks/${taskId}/submit`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(input),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || 'Failed to submit task');
+    }
+    return res.json();
+  },
+
+  async getTaskSubmissions(taskId: string): Promise<TaskSubmission[]> {
+    const res = await fetch(`/api/tasks/${taskId}/submissions`);
+    if (!res.ok) throw new Error('Failed to fetch submissions');
+    return res.json();
+  },
+
+  async approveTaskSubmission(taskId: string, submissionId: string, reviewNote?: string): Promise<Task> {
+    const res = await fetch(`/api/tasks/${taskId}/approve`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ submissionId, reviewNote }),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || 'Failed to approve task');
+    }
+    return res.json();
+  },
+
+  async rejectTaskSubmission(taskId: string, submissionId: string, reviewNote: string): Promise<Task> {
+    const res = await fetch(`/api/tasks/${taskId}/reject`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ submissionId, reviewNote }),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || 'Failed to reject task');
+    }
     return res.json();
   },
 

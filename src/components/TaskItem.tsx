@@ -1,12 +1,14 @@
 import React from 'react';
-import { Task, TaskStatus } from '../types';
-import { CheckCircle2, Clock, AlertCircle, Trash2, Edit2, User, Calendar } from 'lucide-react';
+import { Task, TaskStatus, TaskSubmission } from '../types';
+import { CheckCircle2, Clock, AlertCircle, Trash2, Edit2, User, Calendar, Send, FileText } from 'lucide-react';
 
 interface TaskItemProps {
   task: Task;
   onStatusChange: (taskId: string, newStatus: TaskStatus) => void;
   onEdit?: (task: Task) => void;
   onDelete?: (taskId: string) => void;
+  onOpenSubmit?: (task: Task) => void;
+  onOpenReview?: (task: Task) => void;
   showMeetingOrigin?: boolean;
   meetingTitle?: string;
   meetingDate?: string;
@@ -18,6 +20,8 @@ export const TaskItem: React.FC<TaskItemProps> = ({
   onStatusChange,
   onEdit,
   onDelete,
+  onOpenSubmit,
+  onOpenReview,
   showMeetingOrigin = false,
   meetingTitle,
   meetingDate,
@@ -26,10 +30,11 @@ export const TaskItem: React.FC<TaskItemProps> = ({
   const isDone = task.status === 'Done';
   const isBlocked = task.status === 'Blocked';
   const isInProgress = task.status === 'In Progress';
+  const isPendingApproval = task.status === 'Pending Approval';
 
   // Check overdue
   const today = new Date().toISOString().split('T')[0];
-  const isOverdue = !isDone && task.dueDate < today;
+  const isOverdue = !isDone && !isPendingApproval && task.dueDate < today;
 
   const statusColors: Record<TaskStatus, { badge: string; text: string; bg: string }> = {
     'To Do': {
@@ -51,6 +56,11 @@ export const TaskItem: React.FC<TaskItemProps> = ({
       badge: 'bg-rose-50 dark:bg-rose-950/50 text-rose-700 dark:text-rose-300 border-rose-200 dark:border-rose-800',
       text: 'Tertunda / Kendala',
       bg: 'border-l-rose-500'
+    },
+    'Pending Approval': {
+      badge: 'bg-amber-50 dark:bg-amber-950/50 text-amber-700 dark:text-amber-300 border-amber-200 dark:border-amber-800',
+      text: 'Menunggu Approve',
+      bg: 'border-l-amber-500'
     }
   };
 
@@ -67,11 +77,11 @@ export const TaskItem: React.FC<TaskItemProps> = ({
         {/* Checkbox / Quick Toggle */}
         <button
           id={`toggle-status-${task.id}`}
-          onClick={() => onStatusChange(task.id, isDone ? 'In Progress' : 'Done')}
+          onClick={() => onStatusChange(task.id, isDone || isPendingApproval ? 'In Progress' : 'Done')}
           className="mt-0.5 text-zinc-400 hover:text-emerald-600 dark:hover:text-emerald-400 transition-colors focus:outline-none shrink-0"
-          title={isDone ? "Tandai belum selesai" : "Tandai selesai"}
+          title={isDone || isPendingApproval ? "Tandai belum selesai" : "Tandai selesai"}
         >
-          {isDone ? (
+          {(isDone || isPendingApproval) ? (
             <CheckCircle2 className="w-5 h-5 text-emerald-600 dark:text-emerald-400 fill-emerald-50 dark:fill-emerald-950/40" />
           ) : (
             <div className="w-5 h-5 rounded-md border-2 border-zinc-300 dark:border-zinc-600 hover:border-zinc-500 dark:hover:border-zinc-400 flex items-center justify-center transition-colors" />
@@ -98,7 +108,7 @@ export const TaskItem: React.FC<TaskItemProps> = ({
           {/* Action Item Title (Judul Tindakan) */}
           <h4
             className={`text-sm font-medium leading-snug break-words ${
-              isDone ? 'line-through text-zinc-400 dark:text-zinc-500' : 'text-zinc-900 dark:text-zinc-100'
+              isDone || isPendingApproval ? 'line-through text-zinc-400 dark:text-zinc-500' : 'text-zinc-900 dark:text-zinc-100'
             }`}
           >
             {task.title}
@@ -146,8 +156,26 @@ export const TaskItem: React.FC<TaskItemProps> = ({
             <option value="Blocked">Blocked</option>
           </select>
 
-          {/* Quick Actions (Edit / Delete) */}
+          {/* Quick Actions (Edit / Delete / Submit / Review) */}
           <div className="opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1 pt-0.5">
+            {onOpenSubmit && isInProgress && (
+              <button
+                onClick={() => onOpenSubmit(task)}
+                className="p-1 text-zinc-400 hover:text-amber-600 dark:hover:text-amber-400 rounded hover:bg-amber-50 dark:hover:bg-amber-950/40 transition-colors"
+                title="Submit for Approval"
+              >
+                <Send className="w-3.5 h-3.5" />
+              </button>
+            )}
+            {onOpenReview && isPendingApproval && (
+              <button
+                onClick={() => onOpenReview(task)}
+                className="p-1 text-zinc-400 hover:text-amber-600 dark:hover:text-amber-400 rounded hover:bg-amber-50 dark:hover:bg-amber-950/40 transition-colors"
+                title="Review Submission"
+              >
+                <FileText className="w-3.5 h-3.5" />
+              </button>
+            )}
             {onEdit && (
               <button
                 onClick={() => onEdit(task)}

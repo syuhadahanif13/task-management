@@ -8,36 +8,47 @@
  * Relationship: Meetings (1) -> Tasks (Many)
  */
 
-export type TaskStatus = 'To Do' | 'In Progress' | 'Done' | 'Blocked';
+export type TaskStatus = 'To Do' | 'In Progress' | 'Done' | 'Blocked' | 'Pending Approval';
 
 export interface Task {
   id: string;
-  meetingId: string; // Foreign key establishing the One-to-Many relationship
-  title: string;      // Action item title (Judul Tindakan)
-  assignee: string;   // Assignee name (Penanggung Jawab, typically one of the participants)
-  dueDate: string;    // Due date in YYYY-MM-DD format (Tenggat Waktu)
-  status: TaskStatus; // Status (Status pengerjaan)
+  meetingId: string;
+  title: string;
+  assignee: string;
+  dueDate: string;
+  status: TaskStatus;
   createdAt?: string;
   updatedAt?: string;
 }
 
+export interface TaskAttachment {
+  name: string;
+  type: string;
+  size: number;
+  data: string;
+}
+
+export interface TaskSubmission {
+  id: string;
+  taskId: string;
+  assignee: string;
+  notes: string;
+  attachments: TaskAttachment[];
+  status: 'pending' | 'approved' | 'rejected';
+  submittedAt: string;
+  reviewedBy?: string;
+  reviewedAt?: string;
+  reviewNote?: string;
+}
+
 export interface Meeting {
   id: string;
-  // Field 1: Meeting Date (Tanggal Rapat)
-  meetingDate: string; // YYYY-MM-DD or ISO string
-  
-  // Field 2: Participants (Peserta)
-  participants: string[]; // List of attendees / peserta
-  
-  // Field 3: Meeting Notes/Minutes (Catatan)
-  meetingNotes: string; // Detailed minutes, summary, discussion points
-  
-  // Field 4: Tasks (Action items: title, assignee, due date, status)
-  // Related Action Items (One-to-Many relationship)
+  meetingDate: string;
+  participants: string[];
+  meetingNotes: string;
   tasks: Task[];
-  
-  // Optional helpful metadata for organizational clarity
-  title?: string; // Meeting topic or title (e.g. "Sprint Planning Q3")
+  submissions?: TaskSubmission[];
+  title?: string;
   createdAt?: string;
   updatedAt?: string;
 }
@@ -73,4 +84,9 @@ export interface AIParseResult {
     dueDate: string;
     status: TaskStatus;
   }>;
+}
+
+export interface SubmitTaskInput {
+  notes: string;
+  attachments: TaskAttachment[];
 }

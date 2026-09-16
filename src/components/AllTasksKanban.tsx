@@ -9,6 +9,9 @@ interface AllTasksKanbanProps {
   onEditTask: (task: Task) => void;
   onDeleteTask: (taskId: string) => Promise<void>;
   onSelectMeeting: (meetingId: string) => void;
+  onOpenSubmit?: (task: Task) => void;
+  onOpenReview?: (task: Task) => void;
+  currentUserRole?: 'admin' | 'user';
 }
 
 export const AllTasksKanban: React.FC<AllTasksKanbanProps> = ({
@@ -17,6 +20,9 @@ export const AllTasksKanban: React.FC<AllTasksKanbanProps> = ({
   onEditTask,
   onDeleteTask,
   onSelectMeeting,
+  onOpenSubmit,
+  onOpenReview,
+  currentUserRole = 'admin',
 }) => {
   const [viewMode, setViewMode] = useState<'kanban' | 'list'>('kanban');
   const [filterAssignee, setFilterAssignee] = useState<string>('all');
@@ -43,6 +49,7 @@ export const AllTasksKanban: React.FC<AllTasksKanbanProps> = ({
   const columns: Array<{ id: TaskStatus; label: string; sub: string; border: string; bg: string }> = [
     { id: 'To Do', label: 'To Do', sub: 'Belum Mulai', border: 'border-zinc-300 dark:border-zinc-700', bg: 'bg-zinc-50 dark:bg-zinc-900/60' },
     { id: 'In Progress', label: 'In Progress', sub: 'Sedang Dikerjakan', border: 'border-sky-300 dark:border-sky-800/80', bg: 'bg-sky-50/50 dark:bg-sky-950/20' },
+    { id: 'Pending Approval', label: 'Pending Approval', sub: 'Menunggu Approve', border: 'border-amber-300 dark:border-amber-800/80', bg: 'bg-amber-50/50 dark:bg-amber-950/20' },
     { id: 'Blocked', label: 'Blocked', sub: 'Kendala / Tertunda', border: 'border-rose-300 dark:border-rose-800/80', bg: 'bg-rose-50/50 dark:bg-rose-950/20' },
     { id: 'Done', label: 'Done', sub: 'Selesai', border: 'border-emerald-300 dark:border-emerald-800/80', bg: 'bg-emerald-50/50 dark:bg-emerald-950/20' },
   ];
@@ -192,6 +199,8 @@ export const AllTasksKanban: React.FC<AllTasksKanbanProps> = ({
                         onStatusChange={onUpdateStatus}
                         onEdit={onEditTask}
                         onDelete={onDeleteTask}
+                        onOpenSubmit={currentUserRole === 'user' ? onOpenSubmit : undefined}
+                        onOpenReview={currentUserRole === 'admin' ? onOpenReview : undefined}
                         showMeetingOrigin={true}
                         meetingTitle={task.meetingTitle}
                         meetingDate={task.meetingDate}
@@ -220,6 +229,8 @@ export const AllTasksKanban: React.FC<AllTasksKanbanProps> = ({
                 onStatusChange={onUpdateStatus}
                 onEdit={onEditTask}
                 onDelete={onDeleteTask}
+                onOpenSubmit={currentUserRole === 'user' ? onOpenSubmit : undefined}
+                onOpenReview={currentUserRole === 'admin' ? onOpenReview : undefined}
                 showMeetingOrigin={true}
                 meetingTitle={task.meetingTitle}
                 meetingDate={task.meetingDate}
