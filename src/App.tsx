@@ -283,7 +283,7 @@ export default function App() {
     } catch (err: any) {
       console.error(err);
       loadMeetings();
-      alert('Gagal memperbarui status tugas di server.');
+      alert(err?.message || 'Gagal memperbarui status tugas di server.');
     }
   };
 
@@ -448,7 +448,7 @@ export default function App() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-[#faf6f2] via-[#f7f2fa] to-[#f4f7fd] dark:from-[#121316] dark:via-[#16171d] dark:to-[#111215] text-notion-text font-sans antialiased flex">
+    <div className="min-h-screen w-full max-w-full overflow-x-hidden bg-gradient-to-br from-[#faf6f2] via-[#f7f2fa] to-[#f4f7fd] dark:from-[#121316] dark:via-[#16171d] dark:to-[#111215] text-notion-text font-sans antialiased flex">
       {/* macOS Sidebar — desktop only */}
       <Sidebar
         currentTab={currentTab}

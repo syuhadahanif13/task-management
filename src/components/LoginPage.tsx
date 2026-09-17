@@ -42,7 +42,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({
   };
 
   return (
-    <div className="min-h-screen bg-notion-bg flex items-center justify-center p-4 relative transition-colors">
+    <div className="min-h-screen w-full max-w-full overflow-x-hidden bg-notion-bg flex items-center justify-center p-4 relative transition-colors">
       <div className="absolute top-4 right-4 flex items-center gap-2">
         {onToggleLanguage && (
           <button
@@ -75,7 +75,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({
           <div className="flex flex-col items-center text-center space-y-2">
             <div className="h-9 w-9">
               <img
-                src="https://images.glints.com/unsafe/glints-dashboard.oss-ap-southeast-1.aliyuncs.com/company-logo/1871f1632174b485181d942f9d5e61b6.png"
+                src="/logo.png"
                 alt="Logo"
                 className="h-9 w-9 object-contain"
               />

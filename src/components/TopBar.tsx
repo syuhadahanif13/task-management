@@ -247,8 +247,8 @@ export const TopBar: React.FC<TopBarProps> = ({
               {/* Drawer Header */}
               <div className="flex items-center justify-between pb-3.5 border-b border-white/40 dark:border-white/10">
                 <div className="flex items-center gap-2">
-                  <div className="w-7 h-7 rounded-lg bg-gray-950 dark:bg-white/10 border border-white/20 flex items-center justify-center text-[#a3e635] font-black text-xs shadow-[0_0_12px_rgba(163,230,53,0.4)]">
-                    T
+                  <div className="w-8 h-8 rounded-xl bg-gray-950 dark:bg-white/10 border border-lime-400/30 flex items-center justify-center p-1 shadow-[0_0_12px_rgba(163,230,53,0.3)] overflow-hidden">
+                    <img src="/logo.png" alt="Logo" className="w-full h-full object-contain rounded-lg" />
                   </div>
                   <span className="font-bold text-sm text-gray-900 dark:text-white">Meeting Hub</span>
                 </div>

@@ -34,7 +34,7 @@ export const Header: React.FC<HeaderProps> = ({
           <div className="flex items-center gap-2.5">
             <div className="h-8 w-8">
               <img
-                src="https://images.glints.com/unsafe/glints-dashboard.oss-ap-southeast-1.aliyuncs.com/company-logo/1871f1632174b485181d942f9d5e61b6.png"
+                src="/logo.png"
                 alt="Logo"
                 className="h-8 w-8 object-contain"
               />

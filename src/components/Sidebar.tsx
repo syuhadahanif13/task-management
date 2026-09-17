@@ -79,7 +79,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
         <div className="flex items-center gap-3 p-2 rounded-2xl bg-white/40 dark:bg-white/5 border border-white/60 dark:border-white/10 backdrop-blur-md shadow-xs">
           <div className="h-9 w-9 shrink-0 rounded-xl bg-gradient-to-tr from-gray-900 to-zinc-800 dark:from-zinc-800 dark:to-zinc-950 p-1 flex items-center justify-center shadow-[0_0_16px_rgba(163,230,53,0.3)] border border-lime-400/30">
             <img
-              src="https://images.glints.com/unsafe/glints-dashboard.oss-ap-southeast-1.aliyuncs.com/company-logo/1871f1632174b485181d942f9d5e61b6.png"
+              src="/logo.png"
               alt="Logo"
               className="h-full w-full object-contain rounded-lg"
             />

@@ -134,39 +134,51 @@ router.get('/schema', (req, res) => {
   });
 });
 
+async function syncMeetingsFromSupabase(): Promise<Meeting[]> {
+  if (!supabase) return meetings;
+  try {
+    const { data: dbMeetings, error } = await supabase
+      .from('meetings')
+      .select('*, tasks(*)')
+      .order('meeting_date', { ascending: false });
+
+    if (!error && Array.isArray(dbMeetings)) {
+      const formatted: Meeting[] = dbMeetings.map((m: any) => ({
+        id: m.id,
+        title: m.title,
+        meetingDate: m.meeting_date,
+        participants: m.participants || [],
+        meetingNotes: m.meeting_notes,
+        createdAt: m.created_at,
+        updatedAt: m.updated_at,
+        tasks: (m.tasks || []).map((t: any) => ({
+          id: t.id,
+          meetingId: t.meeting_id,
+          title: t.title,
+          assignee: t.assignee,
+          dueDate: t.due_date,
+          dueTime: t.due_time,
+          status: t.status,
+          priority: t.priority,
+          description: t.description,
+          tags: t.tags || [],
+          createdAt: t.created_at,
+          updatedAt: t.updated_at
+        }))
+      }));
+      meetings = formatted;
+      return formatted;
+    }
+  } catch (err: any) {
+    console.warn('Supabase read fallback to memory:', err?.message);
+  }
+  return meetings;
+}
+
 router.get('/meetings', async (req, res) => {
   if (supabase) {
-    try {
-      const { data: dbMeetings, error } = await supabase
-        .from('meetings')
-        .select('*, tasks(*)')
-        .order('meeting_date', { ascending: false });
-
-      if (!error && Array.isArray(dbMeetings)) {
-        const formatted: Meeting[] = dbMeetings.map((m: any) => ({
-          id: m.id,
-          title: m.title,
-          meetingDate: m.meeting_date,
-          participants: m.participants || [],
-          meetingNotes: m.meeting_notes,
-          createdAt: m.created_at,
-          updatedAt: m.updated_at,
-          tasks: (m.tasks || []).map((t: any) => ({
-            id: t.id,
-            meetingId: t.meeting_id,
-            title: t.title,
-            assignee: t.assignee,
-            dueDate: t.due_date,
-            status: t.status,
-            createdAt: t.created_at,
-            updatedAt: t.updated_at
-          }))
-        }));
-        return res.json(formatted);
-      }
-    } catch (err: any) {
-      console.warn('Supabase read fallback to memory:', err?.message);
-    }
+    const synced = await syncMeetingsFromSupabase();
+    return res.json(synced);
   }
 
   const sorted = [...meetings].sort((a, b) => new Date(b.meetingDate).getTime() - new Date(a.meetingDate).getTime());
@@ -244,7 +256,11 @@ router.post('/meetings', async (req, res) => {
 });
 
 router.put('/meetings/:id', async (req, res) => {
-  const meetingIndex = meetings.findIndex(m => m.id === req.params.id);
+  let meetingIndex = meetings.findIndex(m => m.id === req.params.id);
+  if (meetingIndex === -1 && supabase) {
+    await syncMeetingsFromSupabase();
+    meetingIndex = meetings.findIndex(m => m.id === req.params.id);
+  }
   if (meetingIndex === -1) return res.status(404).json({ error: 'Meeting not found' });
   const existing = meetings[meetingIndex];
   const { meetingDate, participants, meetingNotes, title } = req.body;
@@ -675,43 +691,120 @@ router.post('/tasks/:taskId/reject', async (req, res) => {
 });
 
 router.put('/tasks/:id', async (req, res) => {
+  const taskId = req.params.id;
+  const { title, assignee, dueDate, dueTime, status, priority, description, tags } = req.body;
+  const now = new Date().toISOString();
+
   let targetMeeting: Meeting | undefined;
   let targetTask: Task | undefined;
+
+  // 1. Cari di memori
   for (const m of meetings) {
-    const found = m.tasks.find(t => t.id === req.params.id);
+    const found = (m.tasks || []).find(t => t.id === taskId);
     if (found) {
       targetMeeting = m;
       targetTask = found;
       break;
     }
   }
-  if (!targetMeeting || !targetTask) return res.status(404).json({ error: 'Task not found' });
-  const { title, assignee, dueDate, status } = req.body;
-  const now = new Date().toISOString();
+
+  // 2. Jika tidak ada di memori dan Supabase terhubung, sinkronkan dari database
+  if (!targetTask && supabase) {
+    await syncMeetingsFromSupabase();
+    for (const m of meetings) {
+      const found = (m.tasks || []).find(t => t.id === taskId);
+      if (found) {
+        targetMeeting = m;
+        targetTask = found;
+        break;
+      }
+    }
+  }
+
+  // 3. Jika masih belum ditemukan di memori tapi Supabase aktif, cari langsung di tabel tasks
+  if (!targetTask && supabase) {
+    try {
+      const { data: dbTask, error } = await supabase
+        .from('tasks')
+        .select('*')
+        .eq('id', taskId)
+        .maybeSingle();
+
+      if (dbTask && !error) {
+        targetTask = {
+          id: dbTask.id,
+          meetingId: dbTask.meeting_id,
+          title: dbTask.title,
+          assignee: dbTask.assignee,
+          dueDate: dbTask.due_date,
+          dueTime: dbTask.due_time,
+          status: dbTask.status,
+          priority: dbTask.priority,
+          description: dbTask.description,
+          tags: dbTask.tags || [],
+          createdAt: dbTask.created_at,
+          updatedAt: dbTask.updated_at
+        };
+        targetMeeting = meetings.find(m => m.id === dbTask.meeting_id);
+        if (targetMeeting) {
+          if (!targetMeeting.tasks) targetMeeting.tasks = [];
+          targetMeeting.tasks.push(targetTask);
+        }
+      }
+    } catch (err: any) {
+      console.warn('Supabase single task query warning:', err?.message);
+    }
+  }
+
+  // Jika tetap tidak ditemukan sama sekali
+  if (!targetTask) {
+    return res.status(404).json({ error: `Task dengan id '${taskId}' tidak ditemukan di server.` });
+  }
+
+  // 4. Update data task
   if (title !== undefined) targetTask.title = String(title).trim();
   if (assignee !== undefined) targetTask.assignee = String(assignee).trim();
   if (dueDate !== undefined) targetTask.dueDate = String(dueDate).trim();
-  if (status !== undefined && ['To Do', 'In Progress', 'Done', 'Pending Approval'].includes(status)) {
-    targetTask.status = status as TaskStatus;
+  if (dueTime !== undefined) targetTask.dueTime = String(dueTime).trim();
+  if (status !== undefined) {
+    if (['To Do', 'In Progress', 'Done', 'Pending Approval'].includes(status)) {
+      targetTask.status = status as TaskStatus;
+    } else {
+      console.warn('Invalid status provided to updateTask:', status);
+    }
   }
+  if (priority !== undefined) targetTask.priority = priority;
+  if (description !== undefined) targetTask.description = description;
+  if (Array.isArray(tags)) targetTask.tags = tags;
   targetTask.updatedAt = now;
-  targetMeeting.updatedAt = now;
+  if (targetMeeting) targetMeeting.updatedAt = now;
 
+  // 5. Update ke Supabase jika aktif
   if (supabase) {
     try {
-      await supabase.from('tasks').update({
+      const updateData: any = {
         title: targetTask.title,
         assignee: targetTask.assignee,
         due_date: targetTask.dueDate,
         status: targetTask.status,
         updated_at: targetTask.updatedAt
-      }).eq('id', targetTask.id);
+      };
+      const { error: sbErr } = await supabase
+        .from('tasks')
+        .update(updateData)
+        .eq('id', targetTask.id);
+
+      if (sbErr) {
+        console.error('Supabase task update error:', sbErr);
+        return res.status(500).json({ error: sbErr.message || 'Gagal menyimpan perubahan ke database Supabase.' });
+      }
     } catch (err: any) {
-      console.warn('Supabase task update warning:', err?.message);
+      console.error('Supabase task update exception:', err);
+      return res.status(500).json({ error: err?.message || 'Terjadi kesalahan saat menghubungi database.' });
     }
   }
 
-  res.json(targetTask);
+  return res.json(targetTask);
 });
 
 // DELETE /api/tasks/:id - Menghapus data task dari Supabase & memori
@@ -729,18 +822,22 @@ router.delete('/tasks/:id', async (req, res) => {
   let targetMeeting: Meeting | undefined;
   let taskIndex = -1;
   for (const m of meetings) {
-    const idx = m.tasks.findIndex(t => t.id === taskId);
+    const idx = (m.tasks || []).findIndex(t => t.id === taskId);
     if (idx !== -1) {
       targetMeeting = m;
       taskIndex = idx;
       break;
     }
   }
-  if (!targetMeeting || taskIndex === -1) return res.status(404).json({ error: 'Task not found' });
-  const removed = targetMeeting.tasks.splice(taskIndex, 1)[0];
-  targetMeeting.updatedAt = new Date().toISOString();
-  res.json({ message: 'Task deleted successfully', id: removed.id });
+
+  if (targetMeeting && taskIndex !== -1) {
+    targetMeeting.tasks.splice(taskIndex, 1);
+    targetMeeting.updatedAt = new Date().toISOString();
+  }
+
+  return res.json({ message: 'Task deleted successfully', id: taskId });
 });
+
 
 router.post('/ai/extract', async (req, res) => {
   const { rawText, fallbackDate } = req.body;

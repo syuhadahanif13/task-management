@@ -81,8 +81,33 @@ html.dark {
   --color-mac-toolbar: rgba(28, 28, 30, 0.85);
 }
 
+html {
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+  touch-action: manipulation;
+  overflow-x: hidden;
+}
+
 body {
   @apply bg-notion-bg text-notion-text antialiased;
+  width: 100%;
+  max-width: 100%;
+  overflow-x: hidden;
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
+/* =========================================================
+   IOS SAFARI ZOOM FIX:
+   Mencegah Safari iOS otomatis melakukan zoom-in saat
+   fokus pada form input, select, atau textarea.
+   ========================================================= */
+@media screen and (max-width: 768px) {
+  input,
+  select,
+  textarea {
+    font-size: 16px !important;
+  }
 }
 
 /* ===========================
