@@ -121,7 +121,7 @@ export const AllTasksKanban: React.FC<AllTasksKanbanProps> = ({
             </span>
           </div>
           <h1 className="text-3xl sm:text-4xl font-black tracking-tight text-gray-950 dark:text-white leading-tight">
-            Semua Tugas &<br />Action Items
+            Semua Tugas
           </h1>
         </div>
 
@@ -202,22 +202,20 @@ export const AllTasksKanban: React.FC<AllTasksKanbanProps> = ({
           <div className="flex items-center gap-1 bg-gray-100 dark:bg-zinc-700/70 p-1 rounded-full">
             <button
               onClick={() => setViewMode('kanban')}
-              className={`p-2 rounded-full transition-all ${
-                viewMode === 'kanban'
-                  ? 'bg-white dark:bg-zinc-900 text-black dark:text-white shadow-sm'
-                  : 'text-gray-400 hover:text-gray-700'
-              }`}
+              className={`p-2 rounded-full transition-all ${viewMode === 'kanban'
+                ? 'bg-white dark:bg-zinc-900 text-black dark:text-white shadow-sm'
+                : 'text-gray-400 hover:text-gray-700'
+                }`}
               title="Kanban Board"
             >
               <LayoutGrid className="w-4 h-4" />
             </button>
             <button
               onClick={() => setViewMode('list')}
-              className={`p-2 rounded-full transition-all ${
-                viewMode === 'list'
-                  ? 'bg-white dark:bg-zinc-900 text-black dark:text-white shadow-sm'
-                  : 'text-gray-400 hover:text-gray-700'
-              }`}
+              className={`p-2 rounded-full transition-all ${viewMode === 'list'
+                ? 'bg-white dark:bg-zinc-900 text-black dark:text-white shadow-sm'
+                : 'text-gray-400 hover:text-gray-700'
+                }`}
               title="List View"
             >
               <List className="w-4 h-4" />
