@@ -306,56 +306,75 @@ export const AiExtractModal: React.FC<AiExtractModalProps> = ({
                     </label>
                   </div>
 
-                  <div className="space-y-2">
+                  <div className="space-y-2.5">
                     {parsedTasks.map((t, idx) => (
                       <div
                         key={idx}
-                        className="p-2.5 bg-white dark:bg-zinc-800 border border-zinc-300 dark:border-zinc-700 rounded-lg flex flex-col sm:flex-row items-center gap-2 text-xs"
+                        className="p-3 bg-white dark:bg-zinc-800 border border-zinc-300 dark:border-zinc-700 rounded-xl space-y-2 shadow-2xs"
                       >
-                        <input
-                          type="text"
-                          value={t.title}
-                          onChange={(e) => {
-                            const updated = [...parsedTasks];
-                            updated[idx].title = e.target.value;
-                            setParsedTasks(updated);
-                          }}
-                          className="flex-1 w-full px-2 py-1 bg-zinc-50 dark:bg-zinc-750 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded font-medium text-zinc-900 dark:text-zinc-100"
-                        />
-                        <input
-                          type="text"
-                          value={t.assignee}
-                          onChange={(e) => {
-                            const updated = [...parsedTasks];
-                            updated[idx].assignee = e.target.value;
-                            setParsedTasks(updated);
-                          }}
-                          className="w-full sm:w-36 px-2 py-1 bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded text-zinc-900 dark:text-zinc-100"
-                        />
-                        <input
-                          type="date"
-                          value={t.dueDate}
-                          onChange={(e) => {
-                            const updated = [...parsedTasks];
-                            updated[idx].dueDate = e.target.value;
-                            setParsedTasks(updated);
-                          }}
-                          className="w-full sm:w-32 px-2 py-1 bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded font-mono text-zinc-900 dark:text-zinc-100"
-                        />
-                        <select
-                          value={t.status}
-                          onChange={(e) => {
-                            const updated = [...parsedTasks];
-                            updated[idx].status = e.target.value as TaskStatus;
-                            setParsedTasks(updated);
-                          }}
-                          className="w-full sm:w-28 px-2 py-1 bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded text-zinc-900 dark:text-zinc-100"
-                        >
-                          <option value="To Do">To Do</option>
-                          <option value="In Progress">In Progress</option>
-                          <option value="Done">Done</option>
-                          <option value="Blocked">Blocked</option>
-                        </select>
+                        {/* Row 1: Full-width Task Title */}
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs font-bold text-zinc-400 shrink-0 w-6 text-center">
+                            #{idx + 1}
+                          </span>
+                          <input
+                            type="text"
+                            value={t.title}
+                            placeholder="Judul tugas / action item..."
+                            onChange={(e) => {
+                              const updated = [...parsedTasks];
+                              updated[idx].title = e.target.value;
+                              setParsedTasks(updated);
+                            }}
+                            className="w-full px-3 py-1.5 text-xs font-semibold bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-lg text-zinc-900 dark:text-zinc-100 focus:outline-none focus:ring-1 focus:ring-zinc-900 dark:focus:ring-zinc-100"
+                          />
+                        </div>
+
+                        {/* Row 2: Metadata (Assignee, Due Date, Status) */}
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 pl-8 text-xs">
+                          <div>
+                            <input
+                              type="text"
+                              value={t.assignee}
+                              placeholder="PIC / Assignee"
+                              onChange={(e) => {
+                                const updated = [...parsedTasks];
+                                updated[idx].assignee = e.target.value;
+                                setParsedTasks(updated);
+                              }}
+                              className="w-full px-2.5 py-1.5 bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-lg text-zinc-900 dark:text-zinc-100"
+                            />
+                          </div>
+                          <div>
+                            <input
+                              type="date"
+                              value={t.dueDate}
+                              onChange={(e) => {
+                                const updated = [...parsedTasks];
+                                updated[idx].dueDate = e.target.value;
+                                setParsedTasks(updated);
+                              }}
+                              className="w-full px-2.5 py-1.5 bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-lg font-mono text-zinc-900 dark:text-zinc-100"
+                            />
+                          </div>
+                          <div>
+                            <select
+                              value={t.status}
+                              onChange={(e) => {
+                                const updated = [...parsedTasks];
+                                updated[idx].status = e.target.value as TaskStatus;
+                                setParsedTasks(updated);
+                              }}
+                              className="w-full px-2.5 py-1.5 bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-lg text-zinc-900 dark:text-zinc-100"
+                            >
+                              <option value="To Do">To Do</option>
+                              <option value="In Progress">In Progress</option>
+                              <option value="Done">Done</option>
+                              <option value="Blocked">Blocked</option>
+                              <option value="Pending Approval">Pending Approval</option>
+                            </select>
+                          </div>
+                        </div>
                       </div>
                     ))}
                   </div>

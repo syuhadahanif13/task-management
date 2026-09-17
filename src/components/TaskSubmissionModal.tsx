@@ -26,7 +26,7 @@ export const TaskSubmissionModal: React.FC<TaskSubmissionModalProps> = ({
     if (!files) return;
 
     const newAttachments: TaskAttachment[] = [];
-    for (const file of Array.from(files)) {
+    for (const file of Array.from(files) as File[]) {
       const reader = new FileReader();
       const dataUrl = await new Promise<string>((resolve, reject) => {
         reader.onload = () => resolve(reader.result as string);

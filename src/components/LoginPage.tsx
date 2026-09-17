@@ -1,17 +1,24 @@
 import React, { useState } from 'react';
-import { Lock, User, AlertCircle, Sun, Moon } from 'lucide-react';
+import { Lock, User, AlertCircle, Sun, Moon, Globe } from 'lucide-react';
+import { Language, getT } from '../i18n';
 
 interface LoginPageProps {
   onLogin: (username: string, password: string) => Promise<boolean>;
   isDarkMode?: boolean;
   onToggleDarkMode?: () => void;
+  language?: Language;
+  onToggleLanguage?: () => void;
 }
 
 export const LoginPage: React.FC<LoginPageProps> = ({
   onLogin,
   isDarkMode = false,
   onToggleDarkMode,
+  language = 'id',
+  onToggleLanguage,
 }) => {
+  const currentLang: Language = language === 'en' ? 'en' : 'id';
+  const t = getT(currentLang);
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [errorMsg, setErrorMsg] = useState('');
@@ -25,31 +32,43 @@ export const LoginPage: React.FC<LoginPageProps> = ({
     try {
       const success = await onLogin(username, password);
       if (!success) {
-        setErrorMsg('Username atau password salah.');
+        setErrorMsg(t.auth.loginError);
         setIsSubmitting(false);
       }
     } catch (err: any) {
-      setErrorMsg(err?.message || 'Login gagal.');
+      setErrorMsg(err?.message || t.auth.loginError);
       setIsSubmitting(false);
     }
   };
 
   return (
     <div className="min-h-screen bg-notion-bg flex items-center justify-center p-4 relative transition-colors">
-      {onToggleDarkMode && (
-        <button
-          onClick={onToggleDarkMode}
-          className="absolute top-4 right-4 rounded-lg p-2 text-notion-text-secondary hover:bg-notion-hover transition-colors"
-          title={isDarkMode ? 'Beralih ke Mode Terang' : 'Beralih ke Mode Gelap'}
-          aria-label="Toggle theme"
-        >
-          {isDarkMode ? (
-            <Sun className="w-4 h-4 text-amber-500" />
-          ) : (
-            <Moon className="w-4 h-4 text-notion-text-secondary" />
-          )}
-        </button>
-      )}
+      <div className="absolute top-4 right-4 flex items-center gap-2">
+        {onToggleLanguage && (
+          <button
+            onClick={onToggleLanguage}
+            className="rounded-lg px-2 py-1 text-xs font-semibold text-notion-text-secondary hover:bg-notion-hover flex items-center gap-1.5 transition-colors border border-notion-border"
+            title="Ganti Bahasa / Change Language"
+          >
+            <Globe className="w-3.5 h-3.5" />
+            <span>{language.toUpperCase()}</span>
+          </button>
+        )}
+        {onToggleDarkMode && (
+          <button
+            onClick={onToggleDarkMode}
+            className="rounded-lg p-2 text-notion-text-secondary hover:bg-notion-hover transition-colors"
+            title={isDarkMode ? 'Beralih ke Mode Terang' : 'Beralih ke Mode Gelap'}
+            aria-label="Toggle theme"
+          >
+            {isDarkMode ? (
+              <Sun className="w-4 h-4 text-amber-500" />
+            ) : (
+              <Moon className="w-4 h-4 text-notion-text-secondary" />
+            )}
+          </button>
+        )}
+      </div>
 
       <div className="w-full max-w-sm">
         <div className="notion-card p-6 space-y-5">
@@ -63,10 +82,10 @@ export const LoginPage: React.FC<LoginPageProps> = ({
             </div>
             <div>
               <h1 className="text-base font-bold text-notion-text tracking-tight">
-                Meeting Task Management
+                {t.auth.loginTitle}
               </h1>
               <p className="text-xs text-notion-text-secondary">
-                Masuk untuk mengelola notula rapat & tindak lanjut
+                {t.auth.loginSubtitle}
               </p>
             </div>
           </div>
@@ -82,7 +101,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({
             <div className="space-y-1.5">
               <label className="text-xs font-semibold text-notion-text flex items-center gap-1.5">
                 <User className="w-3.5 h-3.5 text-notion-text-secondary" />
-                <span>Username</span>
+                <span>{t.auth.username}</span>
               </label>
               <input
                 type="text"
@@ -97,13 +116,13 @@ export const LoginPage: React.FC<LoginPageProps> = ({
             <div className="space-y-1.5">
               <label className="text-xs font-semibold text-notion-text flex items-center gap-1.5">
                 <Lock className="w-3.5 h-3.5 text-notion-text-secondary" />
-                <span>Password</span>
+                <span>{t.auth.password}</span>
               </label>
               <input
                 type="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                placeholder="Masukkan password"
+                placeholder={t.auth.passwordPlaceholder}
                 autoComplete="current-password"
                 className="notion-input"
               />
@@ -114,7 +133,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({
               disabled={isSubmitting}
               className="notion-btn notion-btn-primary w-full justify-center"
             >
-              {isSubmitting ? 'Memverifikasi...' : 'Masuk'}
+              {isSubmitting ? t.auth.loggingIn : t.auth.loginButton}
             </button>
           </form>
         </div>

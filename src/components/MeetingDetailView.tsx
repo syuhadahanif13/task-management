@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { Meeting, Task, TaskStatus, CreateTaskInput, TaskSubmission } from '../types';
+import React, { useState, useEffect } from 'react';
+import { Meeting, Task, TaskStatus, CreateTaskInput, TaskSubmission, Division, User } from '../types';
 import { api } from '../api/client';
 import { TaskItem } from './TaskItem';
 import { TaskSubmissionModal } from './TaskSubmissionModal';
@@ -59,6 +59,24 @@ export const MeetingDetailView: React.FC<MeetingDetailViewProps> = ({
   const [editParticipants, setEditParticipants] = useState(meeting.participants.join(', '));
   const [newParticipantInput, setNewParticipantInput] = useState('');
   const [isAddingParticipant, setIsAddingParticipant] = useState(false);
+
+  const [users, setUsers] = useState<Omit<User, 'password'>[]>([]);
+  const [divisions, setDivisions] = useState<Division[]>([]);
+
+  useEffect(() => {
+    Promise.all([api.getUsers(), api.getDivisions()])
+      .then(([usersData, divisionsData]) => {
+        setUsers(usersData);
+        setDivisions(divisionsData);
+      })
+      .catch((err) => {
+        console.warn('Gagal memuat pengguna / divisi:', err);
+      });
+  }, []);
+
+  const getDivisionName = (divisionId: string) => {
+    return divisions.find((d) => d.id === divisionId)?.name || 'Tanpa Divisi';
+  };
 
   const [isAddingTask, setIsAddingTask] = useState(false);
   const [taskTitle, setTaskTitle] = useState('');
@@ -277,34 +295,88 @@ export const MeetingDetailView: React.FC<MeetingDetailViewProps> = ({
                 />
               </div>
             ) : (
-              <div className="flex flex-wrap gap-1.5">
-                {meeting.participants.map((participant, idx) => (
-                  <span
-                    key={idx}
-                    className="notion-badge bg-notion-sidebar text-notion-text-secondary"
-                  >
-                    {participant}
-                  </span>
-                ))}
+              <div className="space-y-2">
+                <div className="flex flex-wrap gap-1.5">
+                  {meeting.participants.map((participant, idx) => {
+                    const matchedUser = users.find((u) => u.username === participant);
+                    const divName = matchedUser ? getDivisionName(matchedUser.divisionId) : null;
+                    return (
+                      <span
+                        key={idx}
+                        className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-notion-sidebar text-xs font-medium text-notion-text"
+                      >
+                        <span>{participant}</span>
+                        {divName && (
+                          <span className="text-[9px] text-notion-text-secondary bg-notion-bg px-1.5 py-0.5 rounded border border-notion-border">
+                            {divName}
+                          </span>
+                        )}
+                      </span>
+                    );
+                  })}
+                </div>
+
                 {isAddingParticipant && (
-                  <div className="flex items-center gap-2 pt-2">
-                    <input
-                      type="text"
-                      placeholder="Nama peserta baru..."
-                      value={newParticipantInput}
-                      onChange={(e) => setNewParticipantInput(e.target.value)}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter') handleAddQuickParticipant();
-                      }}
-                      autoFocus
-                      className="notion-input"
-                    />
-                    <button
-                      onClick={handleAddQuickParticipant}
-                      className="notion-btn notion-btn-primary text-xs"
-                    >
-                      Simpan
-                    </button>
+                  <div className="p-3 bg-notion-sidebar/60 border border-notion-border rounded-xl space-y-2 pt-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-semibold text-notion-text">Tambah Peserta ke Rapat:</span>
+                      <button
+                        onClick={() => setIsAddingParticipant(false)}
+                        className="text-notion-text-secondary hover:text-notion-text text-xs"
+                      >
+                        ✕
+                      </button>
+                    </div>
+
+                    {/* Quick add from registered users */}
+                    {users.filter((u) => !meeting.participants.includes(u.username)).length > 0 && (
+                      <div>
+                        <span className="text-[10px] text-notion-text-secondary block mb-1">
+                          Pilih pengguna terdaftar:
+                        </span>
+                        <div className="flex flex-wrap gap-1 max-h-24 overflow-y-auto">
+                          {users
+                            .filter((u) => !meeting.participants.includes(u.username))
+                            .map((u) => (
+                              <button
+                                key={u.id}
+                                type="button"
+                                onClick={async () => {
+                                  const updated = [...meeting.participants, u.username];
+                                  await onUpdateMeeting(meeting.id, { participants: updated });
+                                }}
+                                className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] bg-notion-bg border border-notion-border hover:border-ios-blue hover:text-ios-blue transition-all"
+                              >
+                                <span>+ {u.username}</span>
+                                <span className="text-[9px] text-notion-text-secondary">
+                                  ({getDivisionName(u.divisionId)})
+                                </span>
+                              </button>
+                            ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Manual input */}
+                    <div className="flex items-center gap-2 pt-1">
+                      <input
+                        type="text"
+                        placeholder="Atau ketik nama peserta manual / tamu..."
+                        value={newParticipantInput}
+                        onChange={(e) => setNewParticipantInput(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') handleAddQuickParticipant();
+                        }}
+                        autoFocus
+                        className="notion-input text-xs py-1.5"
+                      />
+                      <button
+                        onClick={handleAddQuickParticipant}
+                        className="notion-btn notion-btn-primary text-xs shrink-0 py-1.5"
+                      >
+                        Simpan
+                      </button>
+                    </div>
                   </div>
                 )}
               </div>
@@ -448,9 +520,26 @@ export const MeetingDetailView: React.FC<MeetingDetailViewProps> = ({
                       onChange={(e) => setTaskAssignee(e.target.value)}
                       className="notion-input"
                     >
-                      {meeting.participants.map((p, idx) => (
-                        <option key={idx} value={p}>{p}</option>
-                      ))}
+                      <optgroup label="Peserta Rapat">
+                        {meeting.participants.map((p, idx) => {
+                          const matchedUser = users.find((u) => u.username === p);
+                          const label = matchedUser
+                            ? `${p} (${getDivisionName(matchedUser.divisionId)})`
+                            : p;
+                          return <option key={idx} value={p}>{label}</option>;
+                        })}
+                      </optgroup>
+                      {users.filter((u) => !meeting.participants.includes(u.username)).length > 0 && (
+                        <optgroup label="Pengguna Lainnya">
+                          {users
+                            .filter((u) => !meeting.participants.includes(u.username))
+                            .map((u) => (
+                              <option key={u.id} value={u.username}>
+                                {u.username} ({getDivisionName(u.divisionId)})
+                              </option>
+                            ))}
+                        </optgroup>
+                      )}
                       <option value="Tim Gabungan">Tim Gabungan</option>
                     </select>
                   </div>

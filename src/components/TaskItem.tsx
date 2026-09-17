@@ -44,7 +44,7 @@ export const TaskItem: React.FC<TaskItemProps> = ({
   };
 
   return (
-    <div className="notion-task-card p-4">
+    <div className="notion-task-card p-4 group">
       <div className="flex items-start gap-3">
         {/* Checkbox */}
         <button
@@ -109,7 +109,7 @@ export const TaskItem: React.FC<TaskItemProps> = ({
             <option value="Pending Approval">Pending Approval</option>
           </select>
 
-          <div className="flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
+          <div className="flex items-center gap-1 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
             {onOpenSubmit && isInProgress && (
               <button
                 onClick={() => onOpenSubmit(task)}

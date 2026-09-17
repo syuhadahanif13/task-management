@@ -118,3 +118,31 @@ export interface CreateUserInput {
   divisionId: string;
   role?: 'admin' | 'user';
 }
+
+// Calendar types
+export interface CalendarEvent {
+  id: string;
+  date: string; // YYYY-MM-DD
+  title: string;
+  type: 'meeting' | 'task-due' | 'task-overdue';
+  meetingId?: string;
+  taskId?: string;
+  color?: string;
+}
+
+// Team / Employee monitoring types
+export interface EmployeeStats {
+  name: string;
+  divisionId?: string;
+  divisionName?: string;
+  totalTasks: number;
+  doneTasks: number;
+  inProgressTasks: number;
+  overdueTasks: number;
+  pendingApprovalTasks: number;
+  blockedTasks: number;
+  completionRate: number;
+  tasks: Array<Task & { meetingTitle: string; meetingDate: string }>;
+}
+
+export type AppTab = 'dashboard' | 'calendar' | 'meetings' | 'active-meeting' | 'all-tasks' | 'team' | 'settings';

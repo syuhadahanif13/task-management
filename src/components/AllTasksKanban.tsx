@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Task, TaskStatus } from '../types';
 import { TaskItem } from './TaskItem';
-import { CheckSquare, Filter, LayoutGrid, List, Search, User, AlertTriangle } from 'lucide-react';
+import { CheckSquare, Filter, LayoutGrid, List, Search, User, AlertTriangle, Plus } from 'lucide-react';
 
 interface AllTasksKanbanProps {
   tasks: Array<Task & { meetingTitle: string; meetingDate: string }>;
@@ -11,6 +11,7 @@ interface AllTasksKanbanProps {
   onSelectMeeting: (meetingId: string) => void;
   onOpenSubmit?: (task: Task) => void;
   onOpenReview?: (task: Task) => void;
+  onOpenAddTask?: () => void;
   currentUserRole?: 'admin' | 'user';
 }
 
@@ -22,6 +23,7 @@ export const AllTasksKanban: React.FC<AllTasksKanbanProps> = ({
   onSelectMeeting,
   onOpenSubmit,
   onOpenReview,
+  onOpenAddTask,
   currentUserRole = 'admin',
 }) => {
   const [viewMode, setViewMode] = useState<'kanban' | 'list'>('kanban');
@@ -63,23 +65,34 @@ export const AllTasksKanban: React.FC<AllTasksKanbanProps> = ({
       <div className="notion-card p-5">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div>
-            <h2 className="notion-page-title text-2xl">All Tasks</h2>
+            <h2 className="notion-page-title text-2xl">Semua Tugas</h2>
             <p className="text-sm text-notion-text-secondary mt-1">
-              Cross-meeting view of all action items.
+              Tampilan lintas rapat dari semua action item.
             </p>
           </div>
 
-          <div className="flex items-center gap-3 text-xs">
-            <div className="notion-badge bg-notion-sidebar text-notion-text-secondary">
-              {totalCount} total
+          <div className="flex flex-wrap items-center gap-2.5 text-xs">
+            <div className="flex items-center gap-1.5 bg-notion-sidebar/80 p-1 rounded-xl border border-notion-border">
+              <span className="notion-badge bg-notion-bg text-notion-text-secondary text-[11px]">
+                {totalCount} total
+              </span>
+              <span className="notion-badge bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300 text-[11px]">
+                {completionRate}% selesai
+              </span>
+              {overdueCount > 0 && (
+                <span className="notion-badge bg-rose-50 text-rose-700 dark:bg-rose-950/40 dark:text-rose-300 text-[11px]">
+                  {overdueCount} terlambat
+                </span>
+              )}
             </div>
-            <div className="notion-badge bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300">
-              {completionRate}% complete
-            </div>
-            {overdueCount > 0 && (
-              <div className="notion-badge bg-rose-50 text-rose-700 dark:bg-rose-950/40 dark:text-rose-300">
-                {overdueCount} overdue
-              </div>
+            {onOpenAddTask && (
+              <button
+                onClick={onOpenAddTask}
+                className="notion-btn notion-btn-primary text-xs py-1.5 px-3.5 shadow-sm"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                <span>Tambah Tugas</span>
+              </button>
             )}
           </div>
         </div>

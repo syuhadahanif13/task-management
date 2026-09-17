@@ -1,4 +1,5 @@
 import express from 'express';
+import path from 'path';
 import { GoogleGenAI, Type } from '@google/genai';
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import dotenv from 'dotenv';
@@ -841,5 +842,14 @@ function seedInitialData() {
 }
 
 seedInitialData();
+
+// Serve static frontend in production (Vercel)
+if (process.env.NODE_ENV === 'production' || process.env.VERCEL) {
+  const distPath = path.join(process.cwd(), 'dist');
+  app.use(express.static(distPath));
+  app.get('*', (req, res) => {
+    res.sendFile(path.join(distPath, 'index.html'));
+  });
+}
 
 export default app;

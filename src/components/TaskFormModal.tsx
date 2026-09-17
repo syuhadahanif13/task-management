@@ -89,7 +89,7 @@ export const TaskFormModal: React.FC<TaskFormModalProps> = ({
               value={title}
               onChange={(e) => setTitle(e.target.value)}
               required
-              className="w-full px-3 py-2 text-xs bg-zinc-50 dark:bg-zinc-800 border border-zinc-300 dark:border-zinc-700 text-zinc-900 dark:text-zinc-100 rounded-lg focus:outline-none focus:ring-1 focus:ring-zinc-900 dark:focus:ring-zinc-100"
+              className="notion-input text-sm py-2 px-3"
             />
           </div>
 
@@ -105,7 +105,7 @@ export const TaskFormModal: React.FC<TaskFormModalProps> = ({
                 value={assignee}
                 onChange={(e) => setAssignee(e.target.value)}
                 placeholder="Nama PIC"
-                className="w-full px-3 py-1.5 text-xs bg-zinc-50 dark:bg-zinc-800 border border-zinc-300 dark:border-zinc-700 text-zinc-900 dark:text-zinc-100 rounded-lg focus:outline-none focus:ring-1 focus:ring-zinc-900 dark:focus:ring-zinc-100"
+                className="notion-input text-xs py-2 px-3"
               />
               {participants.length > 0 && (
                 <div className="flex flex-wrap gap-1">
@@ -115,7 +115,7 @@ export const TaskFormModal: React.FC<TaskFormModalProps> = ({
                       key={idx}
                       type="button"
                       onClick={() => setAssignee(p)}
-                      className="text-[10px] px-1.5 py-0.5 bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-700 text-zinc-700 dark:text-zinc-300 rounded border border-zinc-200 dark:border-zinc-700 transition-colors"
+                      className="text-[10px] px-2 py-0.5 bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-700 text-zinc-700 dark:text-zinc-300 rounded border border-zinc-200 dark:border-zinc-700 transition-colors"
                     >
                       {p}
                     </button>
@@ -137,7 +137,7 @@ export const TaskFormModal: React.FC<TaskFormModalProps> = ({
                 value={dueDate}
                 onChange={(e) => setDueDate(e.target.value)}
                 required
-                className="w-full px-2.5 py-1.5 text-xs bg-zinc-50 dark:bg-zinc-800 border border-zinc-300 dark:border-zinc-700 text-zinc-900 dark:text-zinc-100 rounded-lg focus:outline-none focus:ring-1 focus:ring-zinc-900 dark:focus:ring-zinc-100 font-mono"
+                className="notion-input font-mono text-xs py-2 px-2.5"
               />
             </div>
 
@@ -149,12 +149,13 @@ export const TaskFormModal: React.FC<TaskFormModalProps> = ({
               <select
                 value={status}
                 onChange={(e) => setStatus(e.target.value as TaskStatus)}
-                className="w-full px-2.5 py-1.5 text-xs bg-zinc-50 dark:bg-zinc-800 border border-zinc-300 dark:border-zinc-700 text-zinc-900 dark:text-zinc-100 rounded-lg focus:outline-none focus:ring-1 focus:ring-zinc-900 dark:focus:ring-zinc-100"
+                className="notion-input text-xs py-2 px-2.5"
               >
                 <option value="To Do">To Do</option>
                 <option value="In Progress">In Progress</option>
                 <option value="Done">Done</option>
                 <option value="Blocked">Blocked</option>
+                <option value="Pending Approval">Pending Approval</option>
               </select>
             </div>
           </div>
@@ -164,14 +165,14 @@ export const TaskFormModal: React.FC<TaskFormModalProps> = ({
             <button
               type="button"
               onClick={onClose}
-              className="px-3.5 py-1.5 text-xs text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100"
+              className="notion-btn notion-btn-ghost text-xs"
             >
               Batal
             </button>
             <button
               type="submit"
               disabled={isSubmitting}
-              className="px-4 py-1.5 text-xs font-semibold text-white dark:text-zinc-900 bg-zinc-900 dark:bg-zinc-100 rounded-lg hover:bg-zinc-800 dark:hover:bg-zinc-200 disabled:opacity-50 shadow-xs transition-colors"
+              className="notion-btn notion-btn-primary text-xs"
             >
               {isSubmitting ? 'Menyimpan...' : 'Perbarui Tugas'}
             </button>

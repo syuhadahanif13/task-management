@@ -6,7 +6,7 @@ import { X, Plus, CheckSquare, Calendar, User as UserIcon, BookOpen } from 'luci
 interface AddTaskModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onAddTask: (meetingId: string, taskInput: { title: string; assignee: string; dueDate: string; status: TaskStatus }) => Promise<Task>;
+  onAddTask: (meetingId: string, taskInput: { title: string; assignee: string; dueDate: string; status: TaskStatus }) => Promise<any>;
 }
 
 export const AddTaskModal: React.FC<AddTaskModalProps> = ({ isOpen, onClose, onAddTask }) => {
@@ -85,9 +85,9 @@ export const AddTaskModal: React.FC<AddTaskModalProps> = ({ isOpen, onClose, onA
       <div className="notion-card w-full max-w-lg">
         <div className="flex items-center justify-between p-5 border-b border-notion-border">
           <div>
-            <h2 className="notion-page-title text-xl">Tambah Task</h2>
+            <h2 className="notion-page-title text-xl">Tambah Tugas</h2>
             <p className="text-xs text-notion-text-secondary mt-0.5">
-              Tambah action item baru ke rapat yang dipilih.
+              Tambah tugas baru ke rapat yang dipilih.
             </p>
           </div>
           <button onClick={handleClose} className="notion-btn notion-btn-ghost text-xs">
@@ -124,7 +124,7 @@ export const AddTaskModal: React.FC<AddTaskModalProps> = ({ isOpen, onClose, onA
           <div>
             <label className="text-xs font-semibold text-notion-text flex items-center gap-1.5 mb-1">
               <CheckSquare className="w-3.5 h-3.5 text-notion-text-secondary" />
-              <span>Judul Task *</span>
+              <span>Judul Tugas *</span>
             </label>
             <input
               type="text"
@@ -151,12 +151,23 @@ export const AddTaskModal: React.FC<AddTaskModalProps> = ({ isOpen, onClose, onA
                 className="notion-input"
               />
               <datalist id="assignee-list">
-                {meetingParticipants.map((p, idx) => (
-                  <option key={idx} value={p} />
-                ))}
-                {users.map((u) => (
-                  <option key={u.id} value={u.username} />
-                ))}
+                {meetingParticipants.map((p, idx) => {
+                  const matched = users.find((u) => u.username === p);
+                  const div = matched ? divisions.find((d) => d.id === matched.divisionId)?.name : null;
+                  return (
+                    <option key={`p-${idx}`} value={p}>
+                      {div ? `${p} (${div})` : p}
+                    </option>
+                  );
+                })}
+                {users.map((u) => {
+                  const div = divisions.find((d) => d.id === u.divisionId)?.name;
+                  return (
+                    <option key={`u-${u.id}`} value={u.username}>
+                      {div ? `${u.username} (${div})` : u.username}
+                    </option>
+                  );
+                })}
               </datalist>
             </div>
 
@@ -204,7 +215,7 @@ export const AddTaskModal: React.FC<AddTaskModalProps> = ({ isOpen, onClose, onA
               disabled={isSubmitting}
               className="notion-btn notion-btn-primary text-xs"
             >
-              {isSubmitting ? 'Menyimpan...' : 'Tambah Task'}
+              {isSubmitting ? 'Menyimpan...' : 'Tambah Tugas'}
             </button>
           </div>
         </form>

@@ -2,60 +2,116 @@
 
 @custom-variant dark (&:where(.dark, .dark *));
 
+/* ===========================
+   DESIGN TOKENS — iOS/macOS
+   =========================== */
 @theme {
+  /* Base Notion-compatible */
   --color-notion-bg: #ffffff;
   --color-notion-sidebar: #f7f7f5;
   --color-notion-hover: #efefef;
-  --color-notion-text: #37352f;
-  --color-notion-text-secondary: #787774;
-  --color-notion-border: #e9e9e7;
-  --color-notion-accent: #2383e2;
-  --color-notion-accent-hover: #1a6bc4;
-  --color-notion-success: #0f7b6c;
-  --color-notion-warning: #d9730d;
-  --color-notion-danger: #e03e3e;
-  --color-notion-kanban-bg: #fafafa;
+  --color-notion-text: #1c1c1e;
+  --color-notion-text-secondary: #6e6e73;
+  --color-notion-border: #e5e5ea;
+  --color-notion-accent: #007aff;
+  --color-notion-accent-hover: #0056cc;
+  --color-notion-success: #34c759;
+  --color-notion-warning: #ff9500;
+  --color-notion-danger: #ff3b30;
+  --color-notion-kanban-bg: #f2f2f7;
+
+  /* iOS System Colors */
+  --color-ios-blue: #007aff;
+  --color-ios-green: #34c759;
+  --color-ios-indigo: #5856d6;
+  --color-ios-orange: #ff9500;
+  --color-ios-pink: #ff2d55;
+  --color-ios-purple: #af52de;
+  --color-ios-red: #ff3b30;
+  --color-ios-teal: #5ac8fa;
+  --color-ios-yellow: #ffcc00;
+  --color-ios-gray: #8e8e93;
+  --color-ios-gray2: #aeaeb2;
+  --color-ios-gray3: #c7c7cc;
+  --color-ios-gray4: #d1d1d6;
+  --color-ios-gray5: #e5e5ea;
+  --color-ios-gray6: #f2f2f7;
+
+  /* macOS sidebar */
+  --color-mac-sidebar: #f0f0f5;
+  --color-mac-sidebar-item: #e8e8ed;
+  --color-mac-sidebar-active: rgba(0, 122, 255, 0.12);
+  --color-mac-toolbar: rgba(255, 255, 255, 0.85);
 }
 
+/* ===========================
+   ROOT / GLOBAL
+   =========================== */
 :root {
   color-scheme: light;
-  font-family: ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text",
+    "Helvetica Neue", Arial, sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   line-height: 1.5;
-  letter-spacing: -0.005em;
+  letter-spacing: -0.01em;
 }
 
 html.dark {
   color-scheme: dark;
+  --color-notion-bg: #1c1c1e;
+  --color-notion-sidebar: #2c2c2e;
+  --color-notion-hover: #3a3a3c;
+  --color-notion-text: #f5f5f7;
+  --color-notion-text-secondary: #aeaeb2;
+  --color-notion-border: #38383a;
+  --color-notion-accent: #0a84ff;
+  --color-notion-accent-hover: #409cff;
+  --color-notion-success: #30d158;
+  --color-notion-warning: #ff9f0a;
+  --color-notion-danger: #ff453a;
+  --color-notion-kanban-bg: #2c2c2e;
+  --color-ios-gray6: #1c1c1e;
+  --color-ios-gray5: #2c2c2e;
+  --color-ios-gray4: #3a3a3c;
+  --color-ios-gray3: #48484a;
+  --color-mac-sidebar: #1e1e20;
+  --color-mac-sidebar-item: #2c2c2e;
+  --color-mac-sidebar-active: rgba(10, 132, 255, 0.2);
+  --color-mac-toolbar: rgba(28, 28, 30, 0.85);
 }
 
 body {
   @apply bg-notion-bg text-notion-text antialiased;
 }
 
+/* ===========================
+   NOTION LEGACY (KEPT)
+   =========================== */
 .notion-card {
-  @apply bg-notion-bg border border-notion-border rounded-xl;
+  @apply bg-notion-bg border border-notion-border rounded-2xl;
 }
 
 .notion-card-hover {
-  transition: background-color 0.15s ease;
+  transition: background-color 0.15s ease, box-shadow 0.15s ease;
 }
 
 .notion-card-hover:hover {
   @apply bg-notion-hover;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.06);
 }
 
 .notion-btn {
-  @apply inline-flex items-center gap-2 rounded-lg px-3 py-1.5 text-sm font-medium transition-colors;
+  @apply inline-flex items-center gap-2 rounded-xl px-3.5 py-2 text-sm font-medium transition-all;
 }
 
 .notion-btn-primary {
-  @apply bg-notion-accent text-white;
+  @apply bg-ios-blue text-white shadow-sm;
 }
 
 .notion-btn-primary:hover {
   @apply bg-notion-accent-hover;
+  transform: translateY(-0.5px);
 }
 
 .notion-btn-ghost {
@@ -63,19 +119,22 @@ body {
 }
 
 .notion-badge {
-  @apply inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium;
+  @apply inline-flex items-center rounded-lg px-2 py-0.5 text-xs font-medium;
 }
 
 .notion-input {
-  @apply w-full rounded-lg border border-notion-border bg-notion-bg px-3 py-2 text-sm placeholder:text-notion-text-secondary focus:border-notion-accent focus:outline-none focus:ring-1 focus:ring-notion-accent;
+  @apply w-full rounded-xl border border-notion-border bg-notion-bg px-3.5 py-2.5 text-sm
+    placeholder:text-notion-text-secondary
+    focus:border-ios-blue focus:outline-none focus:ring-2 focus:ring-ios-blue/20
+    transition-all;
 }
 
 .notion-page-title {
-  @apply text-3xl font-semibold text-notion-text tracking-tight;
+  @apply text-2xl font-bold text-notion-text tracking-tight;
 }
 
 .notion-section-title {
-  @apply text-sm font-semibold text-notion-text-secondary uppercase tracking-wide;
+  @apply text-[11px] font-semibold text-notion-text-secondary uppercase tracking-widest;
 }
 
 .notion-divider {
@@ -83,17 +142,229 @@ body {
 }
 
 .notion-kanban-board {
-  @apply bg-notion-kanban-bg border border-notion-border rounded-xl;
+  @apply bg-notion-kanban-bg rounded-2xl;
 }
 
 .notion-kanban-column {
-  @apply bg-notion-bg border border-notion-border rounded-lg;
+  @apply bg-notion-bg border border-notion-border rounded-xl;
 }
 
 .notion-task-card {
-  @apply bg-notion-bg border border-notion-border rounded-lg;
+  @apply bg-notion-bg border border-notion-border rounded-xl;
 }
 
 .notion-task-card:hover {
-  @apply shadow-sm;
+  box-shadow: 0 1px 6px rgba(0, 0, 0, 0.08);
+}
+
+/* ===========================
+   iOS / macOS DESIGN SYSTEM
+   =========================== */
+
+/* iOS Cards */
+.ios-card {
+  @apply bg-notion-bg border border-notion-border rounded-2xl;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06), 0 1px 2px rgba(0, 0, 0, 0.04);
+  transition: box-shadow 0.2s ease, transform 0.15s ease;
+}
+
+.ios-card:hover {
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08), 0 2px 6px rgba(0, 0, 0, 0.04);
+}
+
+.ios-card-interactive {
+  @apply bg-notion-bg border border-notion-border rounded-2xl cursor-pointer;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06), 0 1px 2px rgba(0, 0, 0, 0.04);
+  transition: box-shadow 0.2s ease, transform 0.15s ease;
+}
+
+.ios-card-interactive:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.1), 0 3px 8px rgba(0, 0, 0, 0.06);
+}
+
+.ios-card-interactive:active {
+  transform: translateY(0);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+}
+
+/* macOS Sidebar */
+.mac-sidebar {
+  background-color: var(--color-mac-sidebar);
+  @apply border-r border-notion-border;
+}
+
+.mac-sidebar-item {
+  @apply flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium
+    text-notion-text-secondary cursor-pointer transition-all;
+}
+
+.mac-sidebar-item:hover {
+  background-color: var(--color-mac-sidebar-item);
+  @apply text-notion-text;
+}
+
+.mac-sidebar-item.active {
+  background-color: var(--color-mac-sidebar-active);
+  @apply text-ios-blue font-semibold;
+}
+
+.mac-sidebar-item .sidebar-icon {
+  @apply w-4 h-4 shrink-0;
+}
+
+.mac-section-header {
+  @apply px-3 py-1 text-[10px] font-bold uppercase tracking-widest text-notion-text-secondary;
+}
+
+/* Frosted Glass Effect */
+.ios-frosted {
+  @apply backdrop-blur-xl;
+  background-color: rgba(255, 255, 255, 0.85);
+}
+
+html.dark .ios-frosted {
+  background-color: rgba(28, 28, 30, 0.85);
+}
+
+/* iOS Tab Bar (Mobile Only) */
+.ios-tab-bar {
+  @apply fixed bottom-0 left-0 right-0 z-40 border-t border-notion-border flex items-center justify-around;
+  background-color: var(--color-mac-toolbar);
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+@media (min-width: 1024px) {
+  .ios-tab-bar {
+    display: none !important;
+  }
+}
+
+.ios-tab-item {
+  @apply flex flex-col items-center gap-0.5 px-4 py-2 cursor-pointer transition-all;
+  min-width: 56px;
+}
+
+.ios-tab-item .tab-icon {
+  @apply w-6 h-6 transition-all;
+  color: var(--color-ios-gray2);
+}
+
+.ios-tab-item .tab-label {
+  @apply text-[10px] font-medium transition-all;
+  color: var(--color-ios-gray2);
+}
+
+.ios-tab-item.active .tab-icon {
+  color: var(--color-ios-blue);
+  transform: scale(1.1);
+}
+
+.ios-tab-item.active .tab-label {
+  color: var(--color-ios-blue);
+  @apply font-semibold;
+}
+
+/* FAB Button */
+.ios-fab {
+  @apply fixed bottom-24 right-5 z-50 rounded-full shadow-2xl flex items-center justify-center;
+  background: var(--color-ios-blue);
+  width: 52px;
+  height: 52px;
+  box-shadow: 0 8px 32px rgba(0, 122, 255, 0.35), 0 2px 8px rgba(0, 0, 0, 0.12);
+  transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.2s ease;
+}
+
+.ios-fab:hover {
+  transform: scale(1.08);
+  box-shadow: 0 12px 40px rgba(0, 122, 255, 0.45), 0 4px 12px rgba(0, 0, 0, 0.16);
+}
+
+.ios-fab:active {
+  transform: scale(0.96);
+}
+
+/* iOS/macOS large title style */
+.ios-large-title {
+  @apply text-3xl font-bold tracking-tight text-notion-text;
+  letter-spacing: -0.03em;
+}
+
+/* Progress rings */
+.progress-ring-track {
+  stroke: var(--color-ios-gray5);
+  fill: none;
+  stroke-width: 4;
+}
+
+.progress-ring-fill {
+  fill: none;
+  stroke-width: 4;
+  stroke-linecap: round;
+  transform: rotate(-90deg);
+  transform-origin: 50% 50%;
+  transition: stroke-dashoffset 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Calendar styles */
+.calendar-cell {
+  @apply relative flex flex-col items-center p-1 cursor-pointer rounded-xl transition-all;
+  min-height: 80px;
+}
+
+.calendar-cell:hover {
+  @apply bg-notion-hover;
+}
+
+.calendar-cell.today {
+  @apply font-bold;
+}
+
+.calendar-cell.today .day-number {
+  @apply bg-ios-blue text-white rounded-full w-7 h-7 flex items-center justify-center text-sm;
+}
+
+.calendar-cell.selected {
+  background-color: var(--color-mac-sidebar-active);
+}
+
+.calendar-cell.other-month .day-number {
+  @apply text-notion-text-secondary opacity-40;
+}
+
+.calendar-event-dot {
+  @apply w-1.5 h-1.5 rounded-full;
+}
+
+.calendar-event-chip {
+  @apply text-[10px] font-medium px-1.5 py-0.5 rounded-md w-full truncate leading-tight;
+}
+
+/* Status badge colors */
+.status-todo { @apply bg-ios-gray5 text-notion-text-secondary; }
+.status-inprogress { @apply bg-blue-50 text-blue-700; }
+.status-pending { @apply bg-amber-50 text-amber-700; }
+.status-blocked { @apply bg-red-50 text-red-700; }
+.status-done { @apply bg-green-50 text-green-700; }
+
+html.dark .status-inprogress { @apply bg-blue-950/40 text-blue-300; }
+html.dark .status-pending { @apply bg-amber-950/40 text-amber-300; }
+html.dark .status-blocked { @apply bg-red-950/40 text-red-300; }
+html.dark .status-done { @apply bg-green-950/40 text-green-300; }
+
+/* Scroll tweaks */
+::-webkit-scrollbar { width: 5px; height: 5px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { @apply bg-notion-border rounded-full; }
+::-webkit-scrollbar-thumb:hover { @apply bg-notion-text-secondary; }
+
+/* Mobile safe area */
+.pb-safe { padding-bottom: max(env(safe-area-inset-bottom, 0px), 80px); }
+.mb-tab-bar { margin-bottom: 80px; }
+
+@media (min-width: 1024px) {
+  .pb-safe { padding-bottom: 0px !important; }
+  .mb-tab-bar { margin-bottom: 0px !important; }
 }
