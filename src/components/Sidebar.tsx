@@ -86,7 +86,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
           </div>
           <div className="min-w-0 flex-1">
             <p className="text-sm font-bold text-gray-900 dark:text-white leading-tight truncate tracking-tight">
-              TaskManager
+              Meeting Hub
             </p>
 
           </div>
@@ -146,8 +146,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
               key={tab}
               onClick={() => onTabChange(tab)}
               className={`group w-full flex items-center gap-3 px-3.5 py-2.5 rounded-2xl text-xs font-semibold text-left transition-all duration-200 relative overflow-hidden ${active
-                  ? 'bg-white/95 dark:bg-white/10 text-gray-950 dark:text-white border border-white dark:border-white/20 shadow-[0_0_22px_rgba(163,230,53,0.35)] dark:shadow-[0_0_24px_rgba(163,230,53,0.22)]'
-                  : 'text-gray-600 dark:text-zinc-400 hover:text-gray-950 dark:hover:text-white hover:bg-white/50 dark:hover:bg-white/5 border border-transparent hover:border-white/40 dark:hover:border-white/10'
+                ? 'bg-white/95 dark:bg-white/10 text-gray-950 dark:text-white border border-white dark:border-white/20 shadow-[0_0_22px_rgba(163,230,53,0.35)] dark:shadow-[0_0_24px_rgba(163,230,53,0.22)]'
+                : 'text-gray-600 dark:text-zinc-400 hover:text-gray-950 dark:hover:text-white hover:bg-white/50 dark:hover:bg-white/5 border border-transparent hover:border-white/40 dark:hover:border-white/10'
                 }`}
             >
               {/* Neon active bar indicator */}
@@ -157,8 +157,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
               <Icon
                 className={`w-4 h-4 shrink-0 transition-transform group-hover:scale-110 ${active
-                    ? 'text-lime-600 dark:text-[#a3e635] drop-shadow-[0_0_8px_rgba(163,230,53,0.7)]'
-                    : 'text-gray-400 dark:text-zinc-500 group-hover:text-gray-700 dark:group-hover:text-zinc-300'
+                  ? 'text-lime-600 dark:text-[#a3e635] drop-shadow-[0_0_8px_rgba(163,230,53,0.7)]'
+                  : 'text-gray-400 dark:text-zinc-500 group-hover:text-gray-700 dark:group-hover:text-zinc-300'
                   }`}
               />
 
@@ -167,8 +167,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
               {badge !== undefined && badge > 0 && (
                 <span
                   className={`text-[10px] font-bold px-2 py-0.5 rounded-full min-w-[20px] text-center transition-all ${active
-                      ? 'bg-[#a3e635] text-zinc-950 shadow-[0_0_10px_rgba(163,230,53,0.6)]'
-                      : 'bg-black/5 dark:bg-white/10 text-gray-600 dark:text-zinc-400 group-hover:bg-white/30 dark:group-hover:bg-white/15'
+                    ? 'bg-[#a3e635] text-zinc-950 shadow-[0_0_10px_rgba(163,230,53,0.6)]'
+                    : 'bg-black/5 dark:bg-white/10 text-gray-600 dark:text-zinc-400 group-hover:bg-white/30 dark:group-hover:bg-white/15'
                     }`}
                 >
                   {badge}
@@ -186,8 +186,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
           <button
             onClick={() => onTabChange('settings')}
             className={`group w-full flex items-center gap-3 px-3.5 py-2.5 rounded-2xl text-xs font-semibold text-left transition-all duration-200 relative overflow-hidden ${isActive('settings')
-                ? 'bg-white/95 dark:bg-white/10 text-gray-950 dark:text-white border border-white dark:border-white/20 shadow-[0_0_22px_rgba(163,230,53,0.35)] dark:shadow-[0_0_24px_rgba(163,230,53,0.22)]'
-                : 'text-gray-600 dark:text-zinc-400 hover:text-gray-950 dark:hover:text-white hover:bg-white/50 dark:hover:bg-white/5 border border-transparent hover:border-white/40 dark:hover:border-white/10'
+              ? 'bg-white/95 dark:bg-white/10 text-gray-950 dark:text-white border border-white dark:border-white/20 shadow-[0_0_22px_rgba(163,230,53,0.35)] dark:shadow-[0_0_24px_rgba(163,230,53,0.22)]'
+              : 'text-gray-600 dark:text-zinc-400 hover:text-gray-950 dark:hover:text-white hover:bg-white/50 dark:hover:bg-white/5 border border-transparent hover:border-white/40 dark:hover:border-white/10'
               }`}
           >
             {isActive('settings') && (
@@ -195,8 +195,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
             )}
             <Settings
               className={`w-4 h-4 shrink-0 transition-transform group-hover:rotate-45 ${isActive('settings')
-                  ? 'text-lime-600 dark:text-[#a3e635] drop-shadow-[0_0_8px_rgba(163,230,53,0.7)]'
-                  : 'text-gray-400 dark:text-zinc-500 group-hover:text-gray-700 dark:group-hover:text-zinc-300'
+                ? 'text-lime-600 dark:text-[#a3e635] drop-shadow-[0_0_8px_rgba(163,230,53,0.7)]'
+                : 'text-gray-400 dark:text-zinc-500 group-hover:text-gray-700 dark:group-hover:text-zinc-300'
                 }`}
             />
             <span className="flex-1 truncate">{t.nav.settings}</span>
