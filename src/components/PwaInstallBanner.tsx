@@ -38,7 +38,7 @@ export const PwaInstallBanner: React.FC = () => {
               <span className="text-xs font-semibold text-[#a3e635] uppercase tracking-wider">Aplikasi PWA</span>
               <Sparkles className="w-3 h-3 text-[#a3e635]" />
             </div>
-            <h4 className="text-sm font-semibold text-white leading-tight truncate">Install TaskManager</h4>
+            <h4 className="text-sm font-semibold text-white leading-tight truncate">Install MeetingHub</h4>
             <p className="text-xs text-zinc-400 truncate">Akses cepat & layar penuh tanpa browser bar</p>
           </div>
 
