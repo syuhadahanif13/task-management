@@ -1,19 +1,27 @@
 {
   "$schema": "https://json.schemastore.org/web-manifest-combined.json",
   "name": "Meeting & Task Management System",
-  "short_name": "TaskManager",
+  "short_name": "MeetingHub",
   "description": "Sistem manajemen rapat, notulen agenda, dan tindak lanjut tugas tim interaktif",
   "start_url": "/",
   "id": "/",
   "scope": "/",
   "display": "standalone",
-  "display_override": ["window-controls-overlay", "standalone", "minimal-ui"],
+  "display_override": [
+    "window-controls-overlay",
+    "standalone",
+    "minimal-ui"
+  ],
   "orientation": "any",
   "background_color": "#0c0d12",
   "theme_color": "#18191d",
   "lang": "id",
   "dir": "ltr",
-  "categories": ["productivity", "business", "utilities"],
+  "categories": [
+    "productivity",
+    "business",
+    "utilities"
+  ],
   "icons": [
     {
       "src": "/icons/icon-192.png",
@@ -46,21 +54,36 @@
       "short_name": "Tambah Tugas",
       "description": "Buka modal buat tugas baru",
       "url": "/?tab=all-tasks&action=new-task",
-      "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192" }]
+      "icons": [
+        {
+          "src": "/icons/icon-192.png",
+          "sizes": "192x192"
+        }
+      ]
     },
     {
       "name": "Jadwal Kalender",
       "short_name": "Kalender",
       "description": "Lihat kalender rapat dan tugas",
       "url": "/?tab=calendar",
-      "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192" }]
+      "icons": [
+        {
+          "src": "/icons/icon-192.png",
+          "sizes": "192x192"
+        }
+      ]
     },
     {
       "name": "Daftar Rapat & Notulen",
       "short_name": "Rapat",
       "description": "Buka arsip rapat dan notulen agenda",
       "url": "/?tab=meetings",
-      "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192" }]
+      "icons": [
+        {
+          "src": "/icons/icon-192.png",
+          "sizes": "192x192"
+        }
+      ]
     }
   ],
   "screenshots": [],
