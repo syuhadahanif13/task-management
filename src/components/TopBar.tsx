@@ -93,7 +93,12 @@ export const TopBar: React.FC<TopBarProps> = ({
           MINIMALIST MOBILE HEADER (Matches Reference Image)
           Hidden on Desktop (lg:hidden)
          ──────────────────────────────────────────────────────────── */}
-      <header className="lg:hidden sticky top-0 z-30 bg-white/95 dark:bg-[#0f1015]/95 backdrop-blur-md border-b border-gray-100/80 dark:border-zinc-800/60 px-4 py-3 transition-colors">
+      <header
+        className="lg:hidden sticky top-0 z-30 bg-white/95 dark:bg-[#0f1015]/95 backdrop-blur-md border-b border-gray-100/80 dark:border-zinc-800/60 px-4 pb-3 transition-colors"
+        style={{
+          paddingTop: 'max(env(safe-area-inset-top, 0px), 12px)',
+        }}
+      >
         {isHome ? (
           /* ─── State 1: Home / Dashboard Header ─── */
           <div className="flex items-center justify-between">
@@ -237,7 +242,13 @@ export const TopBar: React.FC<TopBarProps> = ({
           />
 
           {/* Glassmorphism Drawer Panel */}
-          <aside className="relative w-[84vw] max-w-xs bg-white/80 dark:bg-[#0e0f14]/85 backdrop-blur-3xl border-l border-white/60 dark:border-white/10 text-gray-900 dark:text-zinc-100 h-full shadow-[0_8px_32px_0_rgba(0,0,0,0.25)] dark:shadow-[0_8px_32px_0_rgba(0,0,0,0.6)] z-10 flex flex-col justify-between p-5 overflow-hidden animate-in slide-in-from-right duration-300">
+          <aside
+            className="relative w-[84vw] max-w-xs bg-white/80 dark:bg-[#0e0f14]/85 backdrop-blur-3xl border-l border-white/60 dark:border-white/10 text-gray-900 dark:text-zinc-100 h-full shadow-[0_8px_32px_0_rgba(0,0,0,0.25)] dark:shadow-[0_8px_32px_0_rgba(0,0,0,0.6)] z-10 flex flex-col justify-between px-5 overflow-hidden animate-in slide-in-from-right duration-300"
+            style={{
+              paddingTop: 'max(env(safe-area-inset-top, 0px), 20px)',
+              paddingBottom: 'max(env(safe-area-inset-bottom, 0px), 20px)',
+            }}
+          >
             {/* Neon Blur Ambient Orbs */}
             <div className="absolute -top-10 -right-10 w-44 h-44 rounded-full bg-[#a3e635]/20 dark:bg-[#a3e635]/15 blur-[60px] pointer-events-none" />
             <div className="absolute top-1/2 -left-12 w-48 h-48 rounded-full bg-[#38bdf8]/20 dark:bg-[#38bdf8]/15 blur-[70px] pointer-events-none" />

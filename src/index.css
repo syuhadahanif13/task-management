@@ -392,10 +392,14 @@ html.dark .status-done { @apply bg-green-950/40 text-green-300; }
 ::-webkit-scrollbar-thumb:hover { @apply bg-notion-text-secondary; }
 
 /* Mobile safe area */
+.pt-safe {
+  padding-top: max(env(safe-area-inset-top, 0px), 0px);
+}
 .pb-safe { padding-bottom: max(env(safe-area-inset-bottom, 0px), 80px); }
 .mb-tab-bar { margin-bottom: 80px; }
 
 @media (min-width: 1024px) {
+  .pt-safe { padding-top: 0px !important; }
   .pb-safe { padding-bottom: 0px !important; }
   .mb-tab-bar { margin-bottom: 0px !important; }
 }
