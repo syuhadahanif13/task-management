@@ -43,6 +43,14 @@ export default function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(() =>
     sessionStorage.getItem('isAuthenticated') === 'true'
   );
+  const [currentUser, setCurrentUser] = useState<any>(() => {
+    try {
+      const saved = sessionStorage.getItem('currentUser');
+      return saved ? JSON.parse(saved) : null;
+    } catch {
+      return null;
+    }
+  });
 
   // ─── Theme ───
   const [isDarkMode, setIsDarkMode] = useState<boolean>(() => {
@@ -102,17 +110,17 @@ export default function App() {
     try {
       const response = await api.login(username, password);
       setIsAuthenticated(true);
+      setCurrentUser(response.user);
       sessionStorage.setItem('isAuthenticated', 'true');
       sessionStorage.setItem('currentUser', JSON.stringify(response.user));
       return true;
     } catch (err) {
       if (username === 'admin' && password === 'r@jaemasmantab') {
+        const adminUser = { id: 'admin', username: 'admin', role: 'admin', divisionId: '' };
         setIsAuthenticated(true);
+        setCurrentUser(adminUser);
         sessionStorage.setItem('isAuthenticated', 'true');
-        sessionStorage.setItem(
-          'currentUser',
-          JSON.stringify({ id: 'admin', username: 'admin', role: 'admin', divisionId: '' })
-        );
+        sessionStorage.setItem('currentUser', JSON.stringify(adminUser));
         return true;
       }
       return false;
@@ -121,7 +129,9 @@ export default function App() {
 
   const handleLogout = () => {
     setIsAuthenticated(false);
+    setCurrentUser(null);
     sessionStorage.removeItem('isAuthenticated');
+    sessionStorage.removeItem('currentUser');
     setMeetings([]);
     setSelectedMeetingId(null);
     setCurrentTab('dashboard');
@@ -205,15 +215,34 @@ export default function App() {
   };
 
   // ─── Handlers: Tasks ───
-  const handleAddTaskToMeeting = async (meetingId: string, taskInput: CreateTaskInput) => {
+  const handleAddTaskToMeeting = async (meetingId: string | undefined, taskInput: CreateTaskInput) => {
     try {
+      const targetMeetingId = meetingId || 'general-tasks';
       const newTask = await api.createTask(meetingId, taskInput);
-      setMeetings(
-        meetings.map((m) => {
-          if (m.id === meetingId) return { ...m, tasks: [...(m.tasks || []), newTask] };
-          return m;
-        })
-      );
+      setMeetings((prevMeetings) => {
+        const exists = prevMeetings.some((m) => m.id === targetMeetingId);
+        if (exists) {
+          return prevMeetings.map((m) => {
+            if (m.id === targetMeetingId) {
+              return { ...m, tasks: [...(m.tasks || []), newTask] };
+            }
+            return m;
+          });
+        }
+        // If target was general-tasks and not yet in state, create container meeting
+        const today = new Date().toISOString().split('T')[0];
+        const generalMeeting: Meeting = {
+          id: 'general-tasks',
+          title: 'Tugas Mandiri',
+          meetingDate: today,
+          participants: [],
+          meetingNotes: 'Tugas umum tanpa rapat',
+          tasks: [newTask],
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        };
+        return [...prevMeetings, generalMeeting];
+      });
       showToast('Tugas berhasil ditambahkan.');
       return newTask;
     } catch (err: any) {
@@ -345,15 +374,18 @@ export default function App() {
 
   // ─── Derived data ───
   const allTasksWithOrigin = meetings.flatMap((m) =>
-    (m.tasks || []).map((t) => ({
-      ...t,
-      meetingTitle: m.title || `Rapat ${m.meetingDate}`,
-      meetingDate: m.meetingDate,
-    }))
+    (m.tasks || []).map((t) => {
+      const isStandalone = m.id === 'general-tasks' || !t.meetingId || t.meetingId === 'general-tasks';
+      return {
+        ...t,
+        meetingTitle: isStandalone ? 'Tugas Mandiri' : (m.title || `Rapat ${m.meetingDate}`),
+        meetingDate: isStandalone ? '' : m.meetingDate,
+      };
+    })
   );
 
   const selectedMeeting = meetings.find((m) => m.id === selectedMeetingId);
-  const totalMeetings = meetings.length;
+  const totalMeetings = meetings.filter((m) => m.id !== 'general-tasks').length;
   const totalTasks = allTasksWithOrigin.length;
 
   // Tab navigation handler
@@ -396,7 +428,7 @@ export default function App() {
   }
 
   return (
-    <div className="min-h-screen bg-notion-kanban-bg text-notion-text font-sans antialiased flex">
+    <div className="min-h-screen bg-gradient-to-br from-[#faf6f2] via-[#f7f2fa] to-[#f4f7fd] dark:from-[#121316] dark:via-[#16171d] dark:to-[#111215] text-notion-text font-sans antialiased flex">
       {/* macOS Sidebar — desktop only */}
       <Sidebar
         currentTab={currentTab}
@@ -475,8 +507,10 @@ export default function App() {
                 <Dashboard
                   meetings={meetings}
                   t={t}
+                  currentUser={currentUser}
                   onSelectMeeting={handleSelectMeeting}
                   onTabChange={handleTabChange}
+                  onOpenAddTask={() => setIsAddTaskOpen(true)}
                 />
               )}
 
@@ -491,45 +525,90 @@ export default function App() {
                     setNewMeetingDefaultDate(date);
                     setIsNewMeetingOpen(true);
                   }}
+                  onOpenAddTask={() => setIsAddTaskOpen(true)}
                 />
               )}
 
               {/* TAB: MEETINGS LIST */}
               {currentTab === 'meetings' && (
-                <div className="space-y-5">
-                  <div className="ios-card p-5">
-                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                      <div>
-                        <h2 className="ios-large-title">{t.meetings.title}</h2>
-                        <p className="text-sm text-notion-text-secondary mt-0.5">
-                          {t.meetings.subtitle}
-                        </p>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <span className="notion-badge bg-notion-sidebar text-notion-text-secondary">
-                          {totalMeetings} {t.meetings.title.toLowerCase()}
+                <div className="space-y-6 max-w-6xl mx-auto pb-12">
+                  {/* Top Header & Actions */}
+                  <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 pt-1">
+                    <div>
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-blue-50 dark:bg-blue-950/40 text-ios-blue shadow-xs">
+                          <BookOpen className="w-3.5 h-3.5" />
+                          <span>Meetings & Minutes</span>
                         </span>
-                        <span className="notion-badge bg-notion-sidebar text-notion-text-secondary">
-                          {totalTasks} {t.tasks.title.toLowerCase()}
+                        <span className="text-xs font-bold text-gray-400 dark:text-zinc-500">
+                          {totalMeetings} Rapat Tercatat
                         </span>
                       </div>
+                      <h1 className="text-3xl sm:text-4xl font-black tracking-tight text-gray-950 dark:text-white leading-tight">
+                        Daftar Rapat &<br />Notulen Agenda
+                      </h1>
                     </div>
 
-                    {/* Search */}
-                    <div className="mt-4 relative">
+                    {/* Actions & Switcher */}
+                    <div className="flex flex-wrap items-center gap-2.5">
+                      {/* Segmented Switcher for Mobile/Desktop: Rapat vs Tugas */}
+                      <div className="flex items-center bg-white dark:bg-zinc-800 p-1 rounded-full border border-gray-200/70 dark:border-zinc-700/60 shadow-sm text-xs font-bold">
+                        <span className="px-3.5 py-1.5 rounded-full bg-[#18191d] text-white shadow-xs">
+                          📅 Rapat
+                        </span>
+                        <button
+                          onClick={() => setCurrentTab('all-tasks')}
+                          className="px-3.5 py-1.5 rounded-full text-gray-600 dark:text-zinc-400 hover:text-black dark:hover:text-white transition"
+                        >
+                          ✓ Tugas
+                        </button>
+                      </div>
+
+                      <button
+                        onClick={() => setIsAiExtractOpen(true)}
+                        className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-2xl bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-950/40 dark:hover:bg-indigo-900/50 text-indigo-700 dark:text-indigo-300 text-xs font-bold transition shadow-sm"
+                      >
+                        <span>✨</span>
+                        <span>Ekstrak AI</span>
+                      </button>
+
+                      <button
+                        onClick={() => setIsNewMeetingOpen(true)}
+                        className="inline-flex items-center gap-2 px-5 py-2.5 rounded-2xl bg-[#18191d] hover:bg-black text-white text-xs font-extrabold shadow-lg transition active:scale-95"
+                      >
+                        <Plus className="w-4 h-4" />
+                        <span>Tambah Rapat</span>
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Search Bar (Pill-Style) */}
+                  <div className="bg-white/90 dark:bg-zinc-800/90 backdrop-blur-md rounded-[28px] p-4 border border-gray-200/70 dark:border-zinc-700/60 shadow-sm flex flex-col sm:flex-row items-center justify-between gap-3">
+                    <div className="relative w-full sm:max-w-md">
+                      <BookOpen className="w-4 h-4 text-gray-400 absolute left-4 top-3.5" />
                       <input
                         type="text"
-                        placeholder={`${t.common.search} rapat...`}
+                        placeholder="Cari judul rapat, tanggal, peserta, notulen..."
                         value={searchQuery}
                         onChange={(e) => setSearchQuery(e.target.value)}
-                        className="notion-input pl-4"
+                        className="w-full bg-gray-50 dark:bg-zinc-750/70 rounded-full pl-11 pr-4 py-2.5 text-xs sm:text-sm font-semibold text-gray-900 dark:text-white placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-black dark:focus:ring-white border border-transparent"
                       />
+                    </div>
+
+                    <div className="flex items-center gap-2 text-xs font-bold text-gray-500 dark:text-zinc-400">
+                      <span className="px-3 py-1.5 rounded-full bg-gray-50 dark:bg-zinc-750">
+                        {totalMeetings} Total Rapat
+                      </span>
+                      <span className="px-3 py-1.5 rounded-full bg-gray-50 dark:bg-zinc-750">
+                        {totalTasks} Action Items
+                      </span>
                     </div>
                   </div>
 
                   {/* Meeting Grid */}
                   {(() => {
                     const filtered = meetings.filter((m) => {
+                      if (m.id === 'general-tasks') return false;
                       if (!searchQuery.trim()) return true;
                       const q = searchQuery.toLowerCase();
                       return (
@@ -547,30 +626,27 @@ export default function App() {
 
                     if (filtered.length === 0) {
                       return (
-                        <div className="ios-card p-12 text-center">
-                          <BookOpen className="w-10 h-10 text-notion-text-secondary mx-auto mb-3 opacity-20" />
-                          <h3 className="text-base font-bold text-notion-text mb-1">
-                            {searchQuery
-                              ? t.meetings.noMeetingsFound
-                              : t.meetings.noMeetings}
+                        <div className="bg-white dark:bg-zinc-800/80 rounded-[32px] p-12 text-center border border-gray-100 dark:border-zinc-700/60 shadow-sm">
+                          <BookOpen className="w-12 h-12 text-gray-300 dark:text-zinc-600 mx-auto mb-3" />
+                          <h3 className="text-base font-bold text-gray-900 dark:text-white mb-1">
+                            {searchQuery ? 'Rapat Tidak Ditemukan' : 'Belum Ada Rapat'}
                           </h3>
-                          <p className="text-sm text-notion-text-secondary max-w-sm mx-auto mb-4">
-                            {t.meetings.noMeetingsSubtitle}
+                          <p className="text-xs text-gray-500 dark:text-zinc-400 max-w-sm mx-auto mb-5">
+                            {searchQuery ? 'Coba cari dengan kata kunci lain.' : 'Buat jadwal rapat baru untuk mulai mencatat notulen dan action items.'}
                           </p>
                           <div className="flex items-center justify-center gap-3">
                             <button
                               onClick={() => setIsNewMeetingOpen(true)}
-                              className="notion-btn notion-btn-primary"
+                              className="px-5 py-2.5 rounded-full bg-[#18191d] hover:bg-black text-white text-xs font-bold shadow-md"
                             >
-                              <Plus className="w-3.5 h-3.5" />
-                              {t.meetings.addManual}
+                              <Plus className="w-3.5 h-3.5 inline mr-1" />
+                              Tambah Manual
                             </button>
                             <button
                               onClick={() => setIsAiExtractOpen(true)}
-                              className="notion-btn text-ios-indigo hover:bg-indigo-50 dark:hover:bg-indigo-950/30"
+                              className="px-5 py-2.5 rounded-full bg-indigo-50 text-indigo-700 text-xs font-bold hover:bg-indigo-100"
                             >
-                              <span>✨</span>
-                              {t.meetings.aiParse}
+                              ✨ Ekstrak AI
                             </button>
                           </div>
                         </div>
@@ -594,63 +670,84 @@ export default function App() {
                             <div
                               key={meeting.id}
                               onClick={() => handleSelectMeeting(meeting)}
-                              className="ios-card-interactive p-4 group"
+                              className="bg-white dark:bg-zinc-800/90 rounded-[30px] p-6 shadow-sm border border-gray-100 dark:border-zinc-700/60 hover:shadow-md transition-all group flex flex-col justify-between cursor-pointer"
                             >
-                              <div className="flex items-start justify-between gap-2 mb-3">
-                                <span className="notion-badge bg-blue-50 dark:bg-blue-950/30 text-ios-blue text-[10px]">
-                                  📅 {fmtDate}
-                                </span>
-                                <button
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    if (confirm(t.meetings.deleteConfirm)) {
-                                      handleDeleteMeeting(meeting.id);
-                                    }
-                                  }}
-                                  className="sm:opacity-0 sm:group-hover:opacity-100 p-1 rounded-lg hover:bg-red-50 hover:text-red-500 text-notion-text-secondary transition-all"
-                                  title="Hapus rapat"
-                                >
-                                  ✕
-                                </button>
-                              </div>
-
-                              <h3 className="text-sm font-bold text-notion-text mb-1.5 line-clamp-2">
-                                {meeting.title || `Rapat ${meeting.meetingDate}`}
-                              </h3>
-
-                              <p className="text-xs text-notion-text-secondary line-clamp-2 mb-3 leading-relaxed">
-                                {meeting.meetingNotes || 'Tidak ada catatan.'}
-                              </p>
-
-                              <div className="flex flex-wrap gap-1 mb-3">
-                                {meeting.participants.slice(0, 3).map((p, i) => (
-                                  <span key={i} className="notion-badge bg-notion-sidebar text-notion-text-secondary">
-                                    {p}
+                              <div>
+                                {/* Top Row: Date Badge & Action Buttons */}
+                                <div className="flex items-start justify-between gap-2 mb-3">
+                                  <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-bold bg-blue-50 dark:bg-blue-950/40 text-ios-blue">
+                                    📅 {fmtDate}
                                   </span>
-                                ))}
-                                {meeting.participants.length > 3 && (
-                                  <span className="notion-badge bg-notion-sidebar text-notion-text-secondary">
-                                    +{meeting.participants.length - 3}
-                                  </span>
-                                )}
-                              </div>
 
-                              <div className="pt-3 border-t border-notion-border">
-                                <div className="flex items-center justify-between text-xs mb-2">
-                                  <span className="text-notion-text-secondary">
-                                    {totalT} {t.meetings.actionItems}
-                                    {totalT > 0 && ` · ${doneT} ${t.meetings.completed}`}
-                                  </span>
-                                  <span className="font-semibold text-notion-text">{progress}%</span>
+                                  <div className="flex items-center gap-1">
+                                    <button
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        if (confirm(t.meetings.deleteConfirm)) {
+                                          handleDeleteMeeting(meeting.id);
+                                        }
+                                      }}
+                                      className="w-8 h-8 rounded-full bg-gray-50 dark:bg-zinc-700/50 hover:bg-rose-50 hover:text-rose-600 text-gray-400 flex items-center justify-center transition"
+                                      title="Hapus rapat"
+                                    >
+                                      ✕
+                                    </button>
+                                  </div>
                                 </div>
-                                {totalT > 0 && (
-                                  <div className="h-1 rounded-full bg-notion-sidebar overflow-hidden">
+
+                                {/* Meeting Title */}
+                                <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-1.5 line-clamp-2 group-hover:text-ios-blue transition-colors">
+                                  {meeting.title || `Rapat ${meeting.meetingDate}`}
+                                </h3>
+
+                                {/* Notes Preview */}
+                                <p className="text-xs text-gray-500 dark:text-zinc-400 line-clamp-2 mb-4 leading-relaxed">
+                                  {meeting.meetingNotes || 'Tidak ada catatan khusus.'}
+                                </p>
+
+                                {/* Participants Avatar Stack */}
+                                <div className="flex items-center -space-x-2 mb-4">
+                                  {(meeting.participants || []).slice(0, 4).map((p, i) => (
                                     <div
-                                      className="h-full rounded-full bg-ios-green transition-all"
+                                      key={i}
+                                      className="w-7 h-7 rounded-full bg-gradient-to-tr from-indigo-500 to-purple-500 border-2 border-white dark:border-zinc-800 flex items-center justify-center text-white text-[10px] font-bold shadow-sm"
+                                      title={p}
+                                    >
+                                      {p.charAt(0).toUpperCase()}
+                                    </div>
+                                  ))}
+                                  {(meeting.participants?.length || 0) > 4 && (
+                                    <div className="w-7 h-7 rounded-full bg-black text-white dark:bg-white dark:text-black border-2 border-white dark:border-zinc-800 flex items-center justify-center text-[10px] font-extrabold shadow-sm">
+                                      +{(meeting.participants?.length || 0) - 4}
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+
+                              {/* Bottom Stats: Progress bar + Meet button */}
+                              <div className="pt-3.5 border-t border-gray-100 dark:border-zinc-750 flex items-center justify-between">
+                                <div className="flex-1 mr-4">
+                                  <div className="flex items-center justify-between text-xs font-bold mb-1">
+                                    <span className="text-gray-400">
+                                      {doneT}/{totalT} Selesai
+                                    </span>
+                                    <span className="text-gray-800 dark:text-zinc-200">{progress}%</span>
+                                  </div>
+                                  <div className="h-1.5 rounded-full bg-gray-100 dark:bg-zinc-700 overflow-hidden">
+                                    <div
+                                      className="h-full rounded-full bg-emerald-500 transition-all duration-500"
                                       style={{ width: `${progress}%` }}
                                     />
                                   </div>
-                                )}
+                                </div>
+
+                                <button
+                                  onClick={() => handleSelectMeeting(meeting)}
+                                  className="w-8 h-8 rounded-full bg-gray-50 dark:bg-zinc-700/60 group-hover:bg-[#18191d] group-hover:text-white dark:group-hover:bg-white dark:group-hover:text-black flex items-center justify-center text-gray-400 transition"
+                                  title="Lihat Detail"
+                                >
+                                  <span className="text-xs">↗</span>
+                                </button>
                               </div>
                             </div>
                           );
@@ -692,6 +789,7 @@ export default function App() {
                     setCurrentTab('active-meeting');
                   }}
                   onOpenAddTask={() => setIsAddTaskOpen(true)}
+                  onOpenMeetings={() => setCurrentTab('meetings')}
                 />
               )}
 

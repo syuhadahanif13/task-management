@@ -42,8 +42,9 @@ export const api = {
     return res.json();
   },
 
-  async createTask(meetingId: string, task: CreateTaskInput): Promise<Task> {
-    const res = await fetch(`/api/meetings/${meetingId}/tasks`, {
+  async createTask(meetingId: string | undefined | null, task: CreateTaskInput): Promise<Task> {
+    const url = meetingId ? `/api/meetings/${meetingId}/tasks` : '/api/tasks';
+    const res = await fetch(url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(task),

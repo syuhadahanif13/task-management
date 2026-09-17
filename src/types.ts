@@ -8,15 +8,20 @@
  * Relationship: Meetings (1) -> Tasks (Many)
  */
 
-export type TaskStatus = 'To Do' | 'In Progress' | 'Done' | 'Blocked' | 'Pending Approval';
+export type TaskStatus = 'To Do' | 'In Progress' | 'Done' | 'Pending Approval';
+export type TaskPriority = 'Low' | 'Medium' | 'High';
 
 export interface Task {
   id: string;
-  meetingId: string;
+  meetingId?: string;
   title: string;
   assignee: string;
   dueDate: string;
+  dueTime?: string;
   status: TaskStatus;
+  priority?: TaskPriority;
+  description?: string;
+  tags?: string[];
   createdAt?: string;
   updatedAt?: string;
 }
@@ -70,7 +75,12 @@ export interface CreateTaskInput {
   title: string;
   assignee: string;
   dueDate: string;
+  dueTime?: string;
   status: TaskStatus;
+  priority?: TaskPriority;
+  description?: string;
+  tags?: string[];
+  meetingId?: string;
 }
 
 export interface AIParseResult {
@@ -140,7 +150,6 @@ export interface EmployeeStats {
   inProgressTasks: number;
   overdueTasks: number;
   pendingApprovalTasks: number;
-  blockedTasks: number;
   completionRate: number;
   tasks: Array<Task & { meetingTitle: string; meetingDate: string }>;
 }

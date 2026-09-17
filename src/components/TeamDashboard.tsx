@@ -133,10 +133,11 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({
     const result: Array<Task & { meetingTitle: string; meetingDate: string }> = [];
     for (const m of meetings) {
       for (const t of m.tasks || []) {
+        const isStandalone = m.id === 'general-tasks' || !t.meetingId || t.meetingId === 'general-tasks';
         result.push({
           ...t,
-          meetingTitle: m.title || `Rapat ${m.meetingDate}`,
-          meetingDate: m.meetingDate,
+          meetingTitle: isStandalone ? 'Tugas Mandiri' : (m.title || `Rapat ${m.meetingDate}`),
+          meetingDate: isStandalone ? '' : m.meetingDate,
         });
       }
     }
@@ -168,7 +169,6 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({
         inProgressTasks: 0,
         overdueTasks: 0,
         pendingApprovalTasks: 0,
-        blockedTasks: 0,
         completionRate: 0,
         tasks: [],
       });
@@ -191,7 +191,6 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({
           inProgressTasks: 0,
           overdueTasks: 0,
           pendingApprovalTasks: 0,
-          blockedTasks: 0,
           completionRate: 0,
           tasks: [],
         });
@@ -204,7 +203,6 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({
       if (task.status === 'Done') stats.doneTasks++;
       else if (task.status === 'In Progress') stats.inProgressTasks++;
       else if (task.status === 'Pending Approval') stats.pendingApprovalTasks++;
-      else if (task.status === 'Blocked') stats.blockedTasks++;
 
       if (task.status !== 'Done' && task.dueDate && task.dueDate < today) {
         stats.overdueTasks++;
@@ -249,7 +247,6 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({
       case 'Done': return 'status-done';
       case 'In Progress': return 'status-inprogress';
       case 'Pending Approval': return 'status-pending';
-      case 'Blocked': return 'status-blocked';
       default: return 'status-todo';
     }
   };
@@ -441,18 +438,11 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({
                           title={`${emp.pendingApprovalTasks} menunggu persetujuan`}
                         />
                       )}
-                      {emp.blockedTasks > 0 && (
-                        <div
-                          className="h-1.5 rounded-full bg-ios-red transition-all"
-                          style={{ flex: emp.blockedTasks }}
-                          title={`${emp.blockedTasks} terhalang`}
-                        />
-                      )}
-                      {emp.totalTasks - emp.doneTasks - emp.inProgressTasks - emp.pendingApprovalTasks - emp.blockedTasks > 0 && (
+                      {emp.totalTasks - emp.doneTasks - emp.inProgressTasks - emp.pendingApprovalTasks > 0 && (
                         <div
                           className="h-1.5 rounded-full bg-ios-gray4 transition-all"
                           style={{
-                            flex: emp.totalTasks - emp.doneTasks - emp.inProgressTasks - emp.pendingApprovalTasks - emp.blockedTasks,
+                            flex: emp.totalTasks - emp.doneTasks - emp.inProgressTasks - emp.pendingApprovalTasks,
                           }}
                           title="Belum mulai"
                         />
@@ -470,9 +460,6 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({
                     )}
                     {emp.pendingApprovalTasks > 0 && (
                       <span className="notion-badge status-pending">{emp.pendingApprovalTasks} review</span>
-                    )}
-                    {emp.blockedTasks > 0 && (
-                      <span className="notion-badge status-blocked">{emp.blockedTasks} terhalang</span>
                     )}
                     {emp.overdueTasks > 0 && (
                       <span className="notion-badge bg-red-100 text-red-700 dark:bg-red-950/40 dark:text-red-300">
@@ -498,8 +485,10 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({
                             key={task.id}
                             className="px-4 py-3 hover:bg-notion-hover transition-colors cursor-pointer"
                             onClick={() => {
-                              const m = meetings.find((x) => x.id === task.meetingId);
-                              if (m) onSelectMeeting(m);
+                              if (task.meetingId && task.meetingId !== 'general-tasks') {
+                                const m = meetings.find((x) => x.id === task.meetingId);
+                                if (m) onSelectMeeting(m);
+                              }
                             }}
                           >
                             <div className="flex items-start justify-between gap-3">
@@ -514,7 +503,7 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({
                                   {task.title}
                                 </p>
                                 <p className="text-xs text-notion-text-secondary mt-0.5">
-                                  {task.meetingTitle} · {task.meetingDate}
+                                  {task.meetingTitle} {task.meetingDate ? `· ${task.meetingDate}` : ''}
                                 </p>
                               </div>
                               <div className="flex flex-col items-end gap-1 shrink-0">

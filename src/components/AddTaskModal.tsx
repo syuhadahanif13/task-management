@@ -1,12 +1,20 @@
 import React, { useState, useEffect } from 'react';
-import { Meeting, Task, TaskStatus, Division, User } from '../types';
+import { Meeting, TaskStatus, TaskPriority, Division, User, CreateTaskInput } from '../types';
 import { api } from '../api/client';
-import { X, Plus, CheckSquare, Calendar, User as UserIcon, BookOpen } from 'lucide-react';
+import {
+  X,
+  Check,
+  Calendar as CalendarIcon,
+  Clock,
+  Folder,
+  User as UserIcon,
+  Plus,
+} from 'lucide-react';
 
 interface AddTaskModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onAddTask: (meetingId: string, taskInput: { title: string; assignee: string; dueDate: string; status: TaskStatus }) => Promise<any>;
+  onAddTask: (meetingId: string | undefined, taskInput: CreateTaskInput) => Promise<any>;
 }
 
 export const AddTaskModal: React.FC<AddTaskModalProps> = ({ isOpen, onClose, onAddTask }) => {
@@ -15,11 +23,17 @@ export const AddTaskModal: React.FC<AddTaskModalProps> = ({ isOpen, onClose, onA
   const [users, setUsers] = useState<Omit<User, 'password'>[]>([]);
   const [selectedMeetingId, setSelectedMeetingId] = useState('');
   const [title, setTitle] = useState('');
+  const [description, setDescription] = useState('');
   const [assignee, setAssignee] = useState('');
   const [dueDate, setDueDate] = useState(
     new Date(Date.now() + 7 * 86400000).toISOString().split('T')[0]
   );
+  const [dueTime, setDueTime] = useState('10:00');
+  const [priority, setPriority] = useState<TaskPriority>('Medium');
   const [status, setStatus] = useState<TaskStatus>('To Do');
+  const [tags, setTags] = useState<string[]>(['Work', 'Design']);
+  const [newTagInput, setNewTagInput] = useState('');
+  const [showAddTag, setShowAddTag] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
 
@@ -30,32 +44,34 @@ export const AddTaskModal: React.FC<AddTaskModalProps> = ({ isOpen, onClose, onA
         api.getDivisions(),
         api.getUsers()
       ]).then(([meetingsData, divisionsData, usersData]) => {
-        setMeetings(meetingsData);
+        const realMeetings = meetingsData.filter((m) => m.id !== 'general-tasks');
+        setMeetings(realMeetings);
         setDivisions(divisionsData);
         setUsers(usersData);
-        if (meetingsData.length > 0) {
-          setSelectedMeetingId(meetingsData[0].id);
-        }
       }).catch((err) => {
         setErrorMsg(err.message || 'Gagal memuat data.');
       });
     }
   }, [isOpen]);
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!selectedMeetingId || !title.trim() || !assignee.trim()) {
-      setErrorMsg('Meeting, judul, dan PIC wajib diisi.');
+  const handleSubmit = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    if (!title.trim()) {
+      setErrorMsg('Task Title wajib diisi.');
       return;
     }
     setIsSubmitting(true);
     setErrorMsg('');
     try {
-      await onAddTask(selectedMeetingId, {
+      await onAddTask(selectedMeetingId || undefined, {
         title: title.trim(),
-        assignee: assignee.trim(),
+        assignee: assignee.trim() || 'Unassigned',
         dueDate,
+        dueTime,
         status,
+        priority,
+        description: description.trim(),
+        tags,
       });
       handleClose();
     } catch (err: any) {
@@ -66,89 +82,206 @@ export const AddTaskModal: React.FC<AddTaskModalProps> = ({ isOpen, onClose, onA
   };
 
   const handleClose = () => {
+    setSelectedMeetingId('');
     setTitle('');
+    setDescription('');
     setAssignee('');
     setDueDate(new Date(Date.now() + 7 * 86400000).toISOString().split('T')[0]);
+    setDueTime('10:00');
+    setPriority('Medium');
     setStatus('To Do');
+    setTags(['Work', 'Design']);
     setErrorMsg('');
+    setShowAddTag(false);
     onClose();
+  };
+
+  const handleAddTag = () => {
+    if (newTagInput.trim() && !tags.includes(newTagInput.trim())) {
+      setTags([...tags, newTagInput.trim()]);
+      setNewTagInput('');
+      setShowAddTag(false);
+    }
+  };
+
+  const handleRemoveTag = (tagToRemove: string) => {
+    setTags(tags.filter((t) => t !== tagToRemove));
   };
 
   if (!isOpen) return null;
 
-  const selectedMeeting = meetings.find(m => m.id === selectedMeetingId);
+  const selectedMeeting = meetings.find((m) => m.id === selectedMeetingId);
   const meetingParticipants = selectedMeeting?.participants || [];
-  const userOptions = assignee ? users : [];
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-      <div className="notion-card w-full max-w-lg">
-        <div className="flex items-center justify-between p-5 border-b border-notion-border">
-          <div>
-            <h2 className="notion-page-title text-xl">Tambah Tugas</h2>
-            <p className="text-xs text-notion-text-secondary mt-0.5">
-              Tambah tugas baru ke rapat yang dipilih.
-            </p>
-          </div>
-          <button onClick={handleClose} className="notion-btn notion-btn-ghost text-xs">
-            <X className="h-4 w-4" />
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/60 backdrop-blur-sm p-0 sm:p-4 transition-all">
+      <div className="bg-[#f8f9fb] dark:bg-zinc-900 w-full sm:max-w-lg rounded-t-[36px] sm:rounded-[36px] p-6 sm:p-7 shadow-2xl border border-gray-100 dark:border-zinc-800 max-h-[92vh] overflow-y-auto">
+        {/* ─── TOP BAR: X | Add New Task | Checkmark ─── */}
+        <div className="flex items-center justify-between pb-5 border-b border-gray-200/60 dark:border-zinc-800">
+          <button
+            onClick={handleClose}
+            className="w-10 h-10 rounded-full bg-white dark:bg-zinc-800 flex items-center justify-center text-gray-500 dark:text-zinc-300 shadow-sm hover:bg-gray-100 dark:hover:bg-zinc-700 transition"
+            title="Cancel"
+          >
+            <X className="w-5 h-5" />
+          </button>
+
+          <h2 className="text-base sm:text-lg font-black text-gray-900 dark:text-white tracking-tight">
+            Add New Task
+          </h2>
+
+          <button
+            onClick={() => handleSubmit()}
+            disabled={isSubmitting}
+            className="w-10 h-10 rounded-full bg-white dark:bg-zinc-800 flex items-center justify-center text-gray-800 dark:text-white shadow-sm hover:bg-black hover:text-white dark:hover:bg-white dark:hover:text-black transition"
+            title="Submit"
+          >
+            <Check className="w-5 h-5" />
           </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="p-5 space-y-4">
-          {errorMsg && (
-            <div className="p-3 text-xs bg-rose-50 border border-rose-200 text-rose-700 rounded-lg">
-              {errorMsg}
-            </div>
-          )}
-
-          <div>
-            <label className="text-xs font-semibold text-notion-text flex items-center gap-1.5 mb-1">
-              <BookOpen className="w-3.5 h-3.5 text-notion-text-secondary" />
-              <span>Rapat *</span>
-            </label>
-            <select
-              value={selectedMeetingId}
-              onChange={(e) => setSelectedMeetingId(e.target.value)}
-              className="notion-input"
-            >
-              <option value="">Pilih rapat...</option>
-              {meetings.map((m) => (
-                <option key={m.id} value={m.id}>
-                  {m.title || `Rapat ${m.meetingDate}`} - {m.meetingDate}
-                </option>
-              ))}
-            </select>
+        {errorMsg && (
+          <div className="mt-4 p-3.5 text-xs bg-rose-50 border border-rose-200 text-rose-700 rounded-2xl">
+            {errorMsg}
           </div>
+        )}
 
+        <form onSubmit={handleSubmit} className="space-y-4 pt-4">
+          {/* ─── 1. Task Title ─── */}
           <div>
-            <label className="text-xs font-semibold text-notion-text flex items-center gap-1.5 mb-1">
-              <CheckSquare className="w-3.5 h-3.5 text-notion-text-secondary" />
-              <span>Judul Tugas *</span>
+            <label className="text-xs font-bold text-gray-700 dark:text-zinc-300 block mb-1.5">
+              Task Title
             </label>
             <input
               type="text"
               value={title}
               onChange={(e) => setTitle(e.target.value)}
-              placeholder="Contoh: Buat draf kebijakan privasi..."
-              className="notion-input"
+              placeholder="Finish landing page design"
+              className="w-full bg-white dark:bg-zinc-800/90 rounded-2xl px-4 py-3.5 text-sm text-gray-900 dark:text-white placeholder:text-gray-400 border border-gray-200/80 dark:border-zinc-750 shadow-sm focus:outline-none focus:ring-2 focus:ring-black dark:focus:ring-white transition"
               autoFocus
             />
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div>
-              <label className="text-xs font-semibold text-notion-text flex items-center gap-1.5 mb-1">
-                <UserIcon className="w-3.5 h-3.5 text-notion-text-secondary" />
-                <span>PIC / Assignee *</span>
-              </label>
+          {/* ─── 2. Description ─── */}
+          <div>
+            <label className="text-xs font-bold text-gray-700 dark:text-zinc-300 block mb-1.5">
+              Description
+            </label>
+            <textarea
+              rows={3}
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              placeholder="Design the new landing page for the product launch."
+              className="w-full bg-white dark:bg-zinc-800/90 rounded-2xl p-4 text-sm text-gray-900 dark:text-white placeholder:text-gray-400 border border-gray-200/80 dark:border-zinc-750 shadow-sm focus:outline-none focus:ring-2 focus:ring-black dark:focus:ring-white transition resize-none"
+            />
+          </div>
+
+          {/* ─── 3. Due Date & Time (Split Pills) ─── */}
+          <div>
+            <label className="text-xs font-bold text-gray-700 dark:text-zinc-300 block mb-1.5">
+              Due Date & time
+            </label>
+            <div className="grid grid-cols-2 gap-3">
+              {/* Date */}
+              <div className="relative bg-white dark:bg-zinc-800/90 rounded-2xl px-3.5 py-3 border border-gray-200/80 dark:border-zinc-750 shadow-sm flex items-center gap-2">
+                <CalendarIcon className="w-4 h-4 text-gray-400 shrink-0" />
+                <input
+                  type="date"
+                  value={dueDate}
+                  onChange={(e) => setDueDate(e.target.value)}
+                  className="w-full bg-transparent text-xs font-semibold text-gray-800 dark:text-white focus:outline-none cursor-pointer"
+                />
+              </div>
+
+              {/* Time */}
+              <div className="relative bg-white dark:bg-zinc-800/90 rounded-2xl px-3.5 py-3 border border-gray-200/80 dark:border-zinc-750 shadow-sm flex items-center gap-2">
+                <Clock className="w-4 h-4 text-gray-400 shrink-0" />
+                <input
+                  type="time"
+                  value={dueTime}
+                  onChange={(e) => setDueTime(e.target.value)}
+                  className="w-full bg-transparent text-xs font-semibold text-gray-800 dark:text-white focus:outline-none cursor-pointer"
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* ─── 4. Priority Selector Pills ─── */}
+          <div>
+            <label className="text-xs font-bold text-gray-700 dark:text-zinc-300 block mb-1.5">
+              Priority
+            </label>
+            <div className="grid grid-cols-3 gap-2.5">
+              {[
+                {
+                  value: 'Low' as TaskPriority,
+                  label: 'Low',
+                  activeClass: 'bg-emerald-500 text-white border-emerald-500 shadow-md shadow-emerald-500/20',
+                  inactiveClass: 'bg-emerald-50/60 dark:bg-emerald-950/20 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800/50',
+                },
+                {
+                  value: 'Medium' as TaskPriority,
+                  label: 'Medium',
+                  activeClass: 'bg-amber-500 text-white border-amber-500 shadow-md shadow-amber-500/20',
+                  inactiveClass: 'bg-amber-50/60 dark:bg-amber-950/20 text-amber-700 dark:text-amber-300 border-amber-200 dark:border-amber-800/50',
+                },
+                {
+                  value: 'High' as TaskPriority,
+                  label: 'High',
+                  activeClass: 'bg-rose-500 text-white border-rose-500 shadow-md shadow-rose-500/20',
+                  inactiveClass: 'bg-rose-50/60 dark:bg-rose-950/20 text-rose-700 dark:text-rose-300 border-rose-200 dark:border-rose-800/50',
+                },
+              ].map(({ value, label, activeClass, inactiveClass }) => (
+                <button
+                  key={value}
+                  type="button"
+                  onClick={() => setPriority(value)}
+                  className={`py-3 rounded-2xl text-xs font-bold border transition-all ${
+                    priority === value ? activeClass : inactiveClass
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* ─── 5. Project / Rapat Dropdown ─── */}
+          <div>
+            <label className="text-xs font-bold text-gray-700 dark:text-zinc-300 block mb-1.5">
+              Project
+            </label>
+            <div className="relative bg-white dark:bg-zinc-800/90 rounded-2xl px-4 py-3.5 border border-gray-200/80 dark:border-zinc-750 shadow-sm flex items-center gap-3">
+              <Folder className="w-4 h-4 text-indigo-500 shrink-0" />
+              <select
+                value={selectedMeetingId}
+                onChange={(e) => setSelectedMeetingId(e.target.value)}
+                className="w-full bg-transparent text-sm font-semibold text-gray-800 dark:text-white focus:outline-none cursor-pointer"
+              >
+                <option value="">📁 General Tasks (Tugas Mandiri / Tanpa Rapat)</option>
+                {meetings.map((m) => (
+                  <option key={m.id} value={m.id}>
+                    📁 {m.title || `Rapat ${m.meetingDate}`} ({m.meetingDate})
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          {/* ─── 6. PIC / Assignee ─── */}
+          <div>
+            <label className="text-xs font-bold text-gray-700 dark:text-zinc-300 block mb-1.5">
+              PIC / Assignee
+            </label>
+            <div className="relative bg-white dark:bg-zinc-800/90 rounded-2xl px-4 py-3.5 border border-gray-200/80 dark:border-zinc-750 shadow-sm flex items-center gap-2">
+              <UserIcon className="w-4 h-4 text-gray-400 shrink-0" />
               <input
                 type="text"
                 list="assignee-list"
                 value={assignee}
                 onChange={(e) => setAssignee(e.target.value)}
-                placeholder="Nama penanggung jawab"
-                className="notion-input"
+                placeholder="Pilih atau ketik nama PIC..."
+                className="w-full bg-transparent text-sm font-semibold text-gray-800 dark:text-white placeholder:text-gray-400 focus:outline-none"
               />
               <datalist id="assignee-list">
                 {meetingParticipants.map((p, idx) => {
@@ -170,52 +303,66 @@ export const AddTaskModal: React.FC<AddTaskModalProps> = ({ isOpen, onClose, onA
                 })}
               </datalist>
             </div>
+          </div>
 
-            <div>
-              <label className="text-xs font-semibold text-notion-text flex items-center gap-1.5 mb-1">
-                <Calendar className="w-3.5 h-3.5 text-notion-text-secondary" />
-                <span>Tenggat Waktu *</span>
-              </label>
-              <input
-                type="date"
-                value={dueDate}
-                onChange={(e) => setDueDate(e.target.value)}
-                className="notion-input font-mono"
-              />
+          {/* ─── 7. Tags (Pill Badges) ─── */}
+          <div>
+            <label className="text-xs font-bold text-gray-700 dark:text-zinc-300 block mb-1.5">
+              Tags
+            </label>
+            <div className="flex flex-wrap items-center gap-2">
+              {tags.map((tag) => (
+                <span
+                  key={tag}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold bg-purple-50 dark:bg-purple-950/40 text-purple-700 dark:text-purple-300 border border-purple-200/80 dark:border-purple-800/50"
+                >
+                  {tag}
+                  <button
+                    type="button"
+                    onClick={() => handleRemoveTag(tag)}
+                    className="hover:text-purple-950 dark:hover:text-white"
+                  >
+                    <X className="w-3 h-3" />
+                  </button>
+                </span>
+              ))}
+
+              {showAddTag ? (
+                <div className="inline-flex items-center gap-1 bg-white dark:bg-zinc-800 px-2 py-1 rounded-full border border-gray-200 text-xs">
+                  <input
+                    type="text"
+                    value={newTagInput}
+                    onChange={(e) => setNewTagInput(e.target.value)}
+                    onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), handleAddTag())}
+                    placeholder="Tag..."
+                    className="w-16 bg-transparent text-xs focus:outline-none"
+                    autoFocus
+                  />
+                  <button type="button" onClick={handleAddTag} className="text-emerald-600 font-bold">
+                    ✓
+                  </button>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => setShowAddTag(true)}
+                  className="inline-flex items-center gap-1 px-3 py-1.5 rounded-full text-xs font-bold bg-white dark:bg-zinc-800 text-gray-700 dark:text-zinc-300 border border-gray-200/80 dark:border-zinc-700 hover:bg-gray-50"
+                >
+                  <Plus className="w-3 h-3" />
+                  <span>Add</span>
+                </button>
+              )}
             </div>
           </div>
 
-          <div>
-            <label className="text-xs font-semibold text-notion-text block mb-1">
-              Status
-            </label>
-            <select
-              value={status}
-              onChange={(e) => setStatus(e.target.value as TaskStatus)}
-              className="notion-input"
-            >
-              <option value="To Do">To Do</option>
-              <option value="In Progress">In Progress</option>
-              <option value="Done">Done</option>
-              <option value="Blocked">Blocked</option>
-              <option value="Pending Approval">Pending Approval</option>
-            </select>
-          </div>
-
-          <div className="flex items-center justify-end gap-2 pt-2">
-            <button
-              type="button"
-              onClick={handleClose}
-              className="notion-btn notion-btn-ghost text-xs"
-            >
-              Batal
-            </button>
+          {/* ─── 8. Bottom Sticky Button: Create Task ─── */}
+          <div className="pt-4">
             <button
               type="submit"
               disabled={isSubmitting}
-              className="notion-btn notion-btn-primary text-xs"
+              className="w-full py-4 rounded-2xl bg-[#18191d] hover:bg-black text-white dark:bg-white dark:text-black dark:hover:bg-zinc-100 font-extrabold text-sm shadow-xl hover:shadow-2xl transition-all active:scale-[0.98] disabled:opacity-50"
             >
-              {isSubmitting ? 'Menyimpan...' : 'Tambah Tugas'}
+              {isSubmitting ? 'Creating...' : 'Create Task'}
             </button>
           </div>
         </form>

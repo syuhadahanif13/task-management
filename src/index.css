@@ -227,13 +227,14 @@ html.dark .ios-frosted {
   background-color: rgba(28, 28, 30, 0.85);
 }
 
-/* iOS Tab Bar (Mobile Only) */
+/* iOS Tab Bar (Mobile Only) - Dribbble Task Management App Style */
 .ios-tab-bar {
-  @apply fixed bottom-0 left-0 right-0 z-40 border-t border-notion-border flex items-center justify-around;
+  @apply fixed bottom-0 left-0 right-0 z-40 border-t border-notion-border flex items-center justify-around px-2 py-1;
   background-color: var(--color-mac-toolbar);
-  backdrop-filter: blur(20px) saturate(180%);
-  -webkit-backdrop-filter: blur(20px) saturate(180%);
-  padding-bottom: env(safe-area-inset-bottom, 0px);
+  backdrop-filter: blur(24px) saturate(190%);
+  -webkit-backdrop-filter: blur(24px) saturate(190%);
+  padding-bottom: max(env(safe-area-inset-bottom, 0px), 8px);
+  box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.03);
 }
 
 @media (min-width: 1024px) {
@@ -243,28 +244,34 @@ html.dark .ios-frosted {
 }
 
 .ios-tab-item {
-  @apply flex flex-col items-center gap-0.5 px-4 py-2 cursor-pointer transition-all;
-  min-width: 56px;
+  @apply flex flex-col items-center justify-center gap-1 px-3 py-1.5 rounded-2xl cursor-pointer transition-all;
+  min-width: 60px;
 }
 
 .ios-tab-item .tab-icon {
-  @apply w-6 h-6 transition-all;
-  color: var(--color-ios-gray2);
+  @apply w-5 h-5 transition-transform duration-200;
+  color: var(--color-ios-gray);
+  stroke-width: 2;
 }
 
 .ios-tab-item .tab-label {
-  @apply text-[10px] font-medium transition-all;
-  color: var(--color-ios-gray2);
+  @apply text-[11px] font-medium tracking-tight transition-colors duration-200;
+  color: var(--color-ios-gray);
+}
+
+.ios-tab-item.active {
+  @apply bg-blue-50/70 dark:bg-blue-950/30;
 }
 
 .ios-tab-item.active .tab-icon {
   color: var(--color-ios-blue);
-  transform: scale(1.1);
+  transform: scale(1.08);
+  stroke-width: 2.3;
 }
 
 .ios-tab-item.active .tab-label {
   color: var(--color-ios-blue);
-  @apply font-semibold;
+  @apply font-bold;
 }
 
 /* FAB Button */

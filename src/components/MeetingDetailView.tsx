@@ -99,7 +99,6 @@ export const MeetingDetailView: React.FC<MeetingDetailViewProps> = ({
 
   const doneCount = tasks.filter((t) => t.status === 'Done').length;
   const inProgressCount = tasks.filter((t) => t.status === 'In Progress').length;
-  const blockedCount = tasks.filter((t) => t.status === 'Blocked').length;
   const todoCount = tasks.filter((t) => t.status === 'To Do').length;
   const pendingApprovalCount = tasks.filter((t) => t.status === 'Pending Approval').length;
   const completionRate = tasks.length > 0 ? Math.round((doneCount / tasks.length) * 100) : 0;
@@ -164,23 +163,23 @@ export const MeetingDetailView: React.FC<MeetingDetailViewProps> = ({
   };
 
   return (
-    <div className="notion-card">
+    <div className="bg-white/95 dark:bg-zinc-850 rounded-[32px] p-5 sm:p-7 border border-gray-200/70 dark:border-zinc-750 shadow-sm space-y-6 max-w-6xl mx-auto">
       {/* Header */}
-      <div className="flex items-center justify-between p-4 border-b border-notion-border">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-5 border-b border-gray-100 dark:border-zinc-800 gap-4">
         <div className="flex items-center gap-3">
           <button
             onClick={onBack}
-            className="rounded-md p-1.5 text-notion-text-secondary hover:bg-notion-hover"
+            className="w-11 h-11 rounded-full bg-gray-100/80 dark:bg-zinc-800 flex items-center justify-center text-gray-700 dark:text-zinc-300 hover:bg-black hover:text-white transition active:scale-95 shadow-xs"
             title="Kembali"
           >
-            <ArrowLeft className="h-4 w-4" />
+            <ArrowLeft className="h-5 w-5" />
           </button>
           <div>
-            <h1 className="notion-page-title">
+            <h1 className="text-2xl sm:text-3xl font-black text-gray-900 dark:text-white tracking-tight">
               {meeting.title || `Rapat ${meeting.meetingDate}`}
             </h1>
-            <p className="text-xs text-notion-text-secondary mt-0.5">
-              {new Date(meeting.meetingDate).toLocaleDateString('id-ID', {
+            <p className="text-xs font-semibold text-gray-400 dark:text-zinc-500 mt-0.5">
+              📅 {new Date(meeting.meetingDate).toLocaleDateString('id-ID', {
                 weekday: 'long',
                 year: 'numeric',
                 month: 'long',
@@ -201,10 +200,10 @@ export const MeetingDetailView: React.FC<MeetingDetailViewProps> = ({
                   setEditParticipants(meeting.participants.join(', '));
                   setIsEditingMeeting(true);
                 }}
-                className="notion-btn notion-btn-ghost text-xs"
+                className="px-4 py-2 rounded-full bg-gray-100 dark:bg-zinc-800 hover:bg-gray-200 text-gray-800 dark:text-zinc-200 text-xs font-bold transition flex items-center gap-1.5"
               >
                 <Edit3 className="h-3.5 w-3.5" />
-                <span className="hidden sm:inline">Edit</span>
+                <span>Edit</span>
               </button>
               <button
                 onClick={() => {
@@ -212,24 +211,24 @@ export const MeetingDetailView: React.FC<MeetingDetailViewProps> = ({
                     onDeleteMeeting(meeting.id);
                   }
                 }}
-                className="notion-btn text-xs text-notion-danger hover:bg-rose-50"
+                className="px-4 py-2 rounded-full bg-rose-50 dark:bg-rose-950/40 text-rose-600 dark:text-rose-300 hover:bg-rose-100 text-xs font-bold transition flex items-center gap-1.5"
               >
                 <Trash2 className="h-3.5 w-3.5" />
-                <span className="hidden sm:inline">Hapus</span>
+                <span>Hapus</span>
               </button>
             </>
           ) : (
             <>
               <button
                 onClick={handleSaveMeetingEdits}
-                className="notion-btn notion-btn-primary text-xs"
+                className="px-5 py-2 rounded-full bg-[#18191d] hover:bg-black text-white text-xs font-bold transition flex items-center gap-1.5 shadow-sm"
               >
                 <Check className="h-3.5 w-3.5" />
                 Simpan
               </button>
               <button
                 onClick={() => setIsEditingMeeting(false)}
-                className="notion-btn notion-btn-ghost text-xs"
+                className="px-4 py-2 rounded-full bg-gray-100 dark:bg-zinc-800 text-gray-700 dark:text-zinc-300 text-xs font-bold hover:bg-gray-200 transition"
               >
                 <X className="h-3.5 w-3.5" />
                 Batal
@@ -239,14 +238,14 @@ export const MeetingDetailView: React.FC<MeetingDetailViewProps> = ({
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 p-4">
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
         {/* Left Column: Core Fields */}
         <div className="lg:col-span-5 space-y-4">
           {/* Meeting Date */}
-          <div className="notion-card p-4">
+          <div className="bg-[#f8f9fa] dark:bg-zinc-800/60 rounded-[26px] p-5 border border-gray-200/50 dark:border-zinc-700/50">
             <div className="flex items-center gap-2 mb-2">
-              <Calendar className="h-4 w-4 text-notion-text-secondary" />
-              <h3 className="text-xs font-semibold text-notion-text-secondary uppercase tracking-wide">
+              <Calendar className="h-4 w-4 text-ios-blue" />
+              <h3 className="text-xs font-bold text-gray-500 dark:text-zinc-400 uppercase tracking-wider">
                 Tanggal Rapat
               </h3>
             </div>
@@ -255,35 +254,35 @@ export const MeetingDetailView: React.FC<MeetingDetailViewProps> = ({
                 type="date"
                 value={editDate}
                 onChange={(e) => setEditDate(e.target.value)}
-                className="notion-input"
+                className="w-full bg-white dark:bg-zinc-700/80 rounded-xl px-3.5 py-2.5 text-xs font-semibold text-gray-800 dark:text-white border border-gray-200"
               />
             ) : (
-              <p className="text-sm font-medium text-notion-text">{meeting.meetingDate}</p>
+              <p className="text-sm font-bold text-gray-900 dark:text-white">{meeting.meetingDate}</p>
             )}
           </div>
 
           {/* Participants */}
-          <div className="notion-card p-4">
-            <div className="flex items-center justify-between mb-2">
+          <div className="bg-[#f8f9fa] dark:bg-zinc-800/60 rounded-[26px] p-5 border border-gray-200/50 dark:border-zinc-700/50">
+            <div className="flex items-center justify-between mb-3">
               <div className="flex items-center gap-2">
-                <Users className="h-4 w-4 text-notion-text-secondary" />
-                <h3 className="text-xs font-semibold text-notion-text-secondary uppercase tracking-wide">
+                <Users className="h-4 w-4 text-indigo-500" />
+                <h3 className="text-xs font-bold text-gray-500 dark:text-zinc-400 uppercase tracking-wider">
                   Peserta ({meeting.participants.length})
                 </h3>
               </div>
               {!isEditingMeeting && (
                 <button
                   onClick={() => setIsAddingParticipant(true)}
-                  className="notion-btn notion-btn-ghost text-xs"
+                  className="px-3 py-1 rounded-full bg-white dark:bg-zinc-700 text-gray-800 dark:text-zinc-200 hover:bg-gray-100 text-xs font-bold border border-gray-200/60 shadow-xs inline-flex items-center gap-1"
                 >
-                  <UserPlus className="h-3.5 w-3.5" />
+                  <UserPlus className="h-3 w-3" />
                   Tambah
                 </button>
               )}
             </div>
             {isEditingMeeting ? (
               <div>
-                <label className="text-[11px] text-notion-text-secondary block mb-1">
+                <label className="text-[11px] text-gray-400 block mb-1">
                   Pisahkan dengan koma:
                 </label>
                 <input
@@ -291,7 +290,7 @@ export const MeetingDetailView: React.FC<MeetingDetailViewProps> = ({
                   value={editParticipants}
                   onChange={(e) => setEditParticipants(e.target.value)}
                   placeholder="Contoh: Budi, Siti, Alex"
-                  className="notion-input"
+                  className="w-full bg-white dark:bg-zinc-700/80 rounded-xl px-3.5 py-2.5 text-xs font-semibold text-gray-800 dark:text-white border border-gray-200"
                 />
               </div>
             ) : (
@@ -303,11 +302,14 @@ export const MeetingDetailView: React.FC<MeetingDetailViewProps> = ({
                     return (
                       <span
                         key={idx}
-                        className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-notion-sidebar text-xs font-medium text-notion-text"
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white dark:bg-zinc-700/80 border border-gray-200/60 dark:border-zinc-600 text-xs font-bold text-gray-800 dark:text-zinc-200 shadow-2xs"
                       >
+                        <span className="w-5 h-5 rounded-full bg-gradient-to-tr from-indigo-500 to-purple-500 text-white text-[9px] flex items-center justify-center font-black">
+                          {participant.charAt(0).toUpperCase()}
+                        </span>
                         <span>{participant}</span>
                         {divName && (
-                          <span className="text-[9px] text-notion-text-secondary bg-notion-bg px-1.5 py-0.5 rounded border border-notion-border">
+                          <span className="text-[9px] text-gray-400 bg-gray-100 dark:bg-zinc-800 px-1.5 py-0.5 rounded-full">
                             {divName}
                           </span>
                         )}
@@ -317,24 +319,23 @@ export const MeetingDetailView: React.FC<MeetingDetailViewProps> = ({
                 </div>
 
                 {isAddingParticipant && (
-                  <div className="p-3 bg-notion-sidebar/60 border border-notion-border rounded-xl space-y-2 pt-2">
+                  <div className="p-3.5 bg-white dark:bg-zinc-750 border border-gray-200 dark:border-zinc-700 rounded-2xl space-y-2 pt-2 shadow-sm">
                     <div className="flex items-center justify-between">
-                      <span className="text-xs font-semibold text-notion-text">Tambah Peserta ke Rapat:</span>
+                      <span className="text-xs font-bold text-gray-800 dark:text-white">Tambah Peserta:</span>
                       <button
                         onClick={() => setIsAddingParticipant(false)}
-                        className="text-notion-text-secondary hover:text-notion-text text-xs"
+                        className="text-gray-400 hover:text-black text-xs"
                       >
                         ✕
                       </button>
                     </div>
 
-                    {/* Quick add from registered users */}
                     {users.filter((u) => !meeting.participants.includes(u.username)).length > 0 && (
                       <div>
-                        <span className="text-[10px] text-notion-text-secondary block mb-1">
+                        <span className="text-[10px] text-gray-400 block mb-1">
                           Pilih pengguna terdaftar:
                         </span>
-                        <div className="flex flex-wrap gap-1 max-h-24 overflow-y-auto">
+                        <div className="flex flex-wrap gap-1.5 max-h-24 overflow-y-auto">
                           {users
                             .filter((u) => !meeting.participants.includes(u.username))
                             .map((u) => (
@@ -345,36 +346,30 @@ export const MeetingDetailView: React.FC<MeetingDetailViewProps> = ({
                                   const updated = [...meeting.participants, u.username];
                                   await onUpdateMeeting(meeting.id, { participants: updated });
                                 }}
-                                className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] bg-notion-bg border border-notion-border hover:border-ios-blue hover:text-ios-blue transition-all"
+                                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold bg-gray-50 dark:bg-zinc-800 border border-gray-200/80 hover:border-black dark:hover:border-white transition-all"
                               >
                                 <span>+ {u.username}</span>
-                                <span className="text-[9px] text-notion-text-secondary">
-                                  ({getDivisionName(u.divisionId)})
-                                </span>
                               </button>
                             ))}
                         </div>
                       </div>
                     )}
 
-                    {/* Manual input */}
-                    <div className="flex items-center gap-2 pt-1">
+                    <div className="flex gap-2">
                       <input
                         type="text"
-                        placeholder="Atau ketik nama peserta manual / tamu..."
+                        placeholder="Nama peserta baru..."
                         value={newParticipantInput}
                         onChange={(e) => setNewParticipantInput(e.target.value)}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter') handleAddQuickParticipant();
-                        }}
-                        autoFocus
-                        className="notion-input text-xs py-1.5"
+                        onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), handleAddParticipantSubmit())}
+                        className="flex-1 bg-gray-50 dark:bg-zinc-800 rounded-xl px-3 py-1.5 text-xs font-semibold"
                       />
                       <button
-                        onClick={handleAddQuickParticipant}
-                        className="notion-btn notion-btn-primary text-xs shrink-0 py-1.5"
+                        type="button"
+                        onClick={handleAddParticipantSubmit}
+                        className="px-3 py-1.5 rounded-xl bg-[#18191d] text-white text-xs font-bold"
                       >
-                        Simpan
+                        +
                       </button>
                     </div>
                   </div>
@@ -384,21 +379,21 @@ export const MeetingDetailView: React.FC<MeetingDetailViewProps> = ({
           </div>
 
           {/* Meeting Notes */}
-          <div className="notion-card p-4">
-            <div className="flex items-center justify-between mb-2">
+          <div className="bg-[#f8f9fa] dark:bg-zinc-800/60 rounded-[26px] p-5 border border-gray-200/50 dark:border-zinc-700/50">
+            <div className="flex items-center justify-between mb-3">
               <div className="flex items-center gap-2">
-                <FileText className="h-4 w-4 text-notion-text-secondary" />
-                <h3 className="text-xs font-semibold text-notion-text-secondary uppercase tracking-wide">
-                  Catatan Notula
+                <FileText className="h-4 w-4 text-emerald-500" />
+                <h3 className="text-xs font-bold text-gray-500 dark:text-zinc-400 uppercase tracking-wider">
+                  Catatan Rapat
                 </h3>
               </div>
-              {!isEditingMeeting && (
+              {!isEditingMeeting && onAiExtractNotes && (
                 <button
                   onClick={() => onAiExtractNotes(meeting.meetingNotes, meeting.meetingDate)}
-                  className="notion-btn text-xs text-notion-accent hover:bg-blue-50"
+                  className="px-3 py-1 rounded-full bg-indigo-50 dark:bg-indigo-950/40 text-indigo-600 dark:text-indigo-300 text-xs font-bold flex items-center gap-1 hover:bg-indigo-100"
                 >
-                  <Sparkles className="h-3.5 w-3.5" />
-                  <span className="hidden sm:inline">AI Parse</span>
+                  <Sparkles className="h-3 w-3" />
+                  <span>AI Parse</span>
                 </button>
               )}
             </div>
@@ -406,12 +401,12 @@ export const MeetingDetailView: React.FC<MeetingDetailViewProps> = ({
               <textarea
                 value={editNotes}
                 onChange={(e) => setEditNotes(e.target.value)}
-                rows={12}
-                className="notion-input font-mono text-xs"
+                rows={10}
+                className="w-full bg-white dark:bg-zinc-700/80 rounded-2xl p-3.5 text-xs text-gray-800 dark:text-white border border-gray-200 resize-none leading-relaxed"
                 placeholder="Tuliskan poin-poin pembahasan rapat di sini..."
               />
             ) : (
-              <div className="text-sm text-notion-text whitespace-pre-wrap leading-relaxed max-h-[380px] overflow-y-auto">
+              <div className="text-xs sm:text-sm text-gray-800 dark:text-zinc-200 whitespace-pre-wrap leading-relaxed max-h-[380px] overflow-y-auto">
                 {meeting.meetingNotes || 'Tidak ada catatan tertulis.'}
               </div>
             )}
@@ -420,17 +415,17 @@ export const MeetingDetailView: React.FC<MeetingDetailViewProps> = ({
 
         {/* Right Column: Tasks */}
         <div className="lg:col-span-7 space-y-4">
-          <div className="notion-card p-4">
+          <div className="bg-[#f8f9fa] dark:bg-zinc-800/60 rounded-[28px] p-5 sm:p-6 border border-gray-200/50 dark:border-zinc-700/50">
             <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
               <div className="flex items-center gap-2">
-                <CheckSquare className="h-4 w-4 text-notion-text-secondary" />
-                <h3 className="text-xs font-semibold text-notion-text-secondary uppercase tracking-wide">
+                <CheckSquare className="h-4 w-4 text-ios-blue" />
+                <h3 className="text-xs font-bold text-gray-500 dark:text-zinc-400 uppercase tracking-wider">
                   Action Items ({tasks.length})
                 </h3>
               </div>
               <button
                 onClick={() => setIsAddingTask(true)}
-                className="notion-btn notion-btn-primary text-xs"
+                className="inline-flex items-center gap-1.5 px-4 py-2 rounded-full bg-[#18191d] hover:bg-black text-white text-xs font-bold shadow-md transition active:scale-95"
               >
                 <Plus className="h-3.5 w-3.5" />
                 Tambah Action Item
@@ -438,42 +433,48 @@ export const MeetingDetailView: React.FC<MeetingDetailViewProps> = ({
             </div>
 
             {/* Progress */}
-            <div className="mb-4">
-              <div className="flex items-center justify-between text-xs text-notion-text-secondary mb-1">
-                <span>Progres: {completionRate}%</span>
-                <span>{doneCount}/{tasks.length} selesai</span>
+            <div className="mb-5 bg-white dark:bg-zinc-750 p-4 rounded-2xl border border-gray-200/60 dark:border-zinc-700/60">
+              <div className="flex items-center justify-between text-xs font-bold text-gray-600 dark:text-zinc-300 mb-1.5">
+                <span>Progres Tindak Lanjut</span>
+                <span className="text-emerald-600 font-extrabold">{completionRate}% ({doneCount}/{tasks.length} selesai)</span>
               </div>
-              <div className="h-1.5 rounded-full bg-notion-sidebar">
+              <div className="h-2 rounded-full bg-gray-100 dark:bg-zinc-700 overflow-hidden">
                 <div
-                  className="h-full rounded-full bg-notion-accent transition-all duration-300"
+                  className="h-full rounded-full bg-[#a3e635] transition-all duration-500"
                   style={{ width: `${completionRate}%` }}
                 />
               </div>
             </div>
 
-            {/* Filter Tabs */}
-            <div className="flex items-center gap-1 overflow-x-auto text-xs border-b border-notion-border pb-2 mb-3">
-              <Filter className="h-3 w-3 text-notion-text-secondary mr-1" />
+            {/* Filter Tabs matching Dribbble style */}
+            <div className="flex items-center gap-2 overflow-x-auto pb-3 mb-4 scrollbar-none">
               {[
-                { id: 'all', label: `Semua (${tasks.length})` },
-                { id: 'To Do', label: `To Do (${todoCount})` },
-                { id: 'In Progress', label: `In Progress (${inProgressCount})` },
-                { id: 'Pending Approval', label: `Pending (${pendingApprovalCount})` },
-                { id: 'Done', label: `Done (${doneCount})` },
-                { id: 'Blocked', label: `Blocked (${blockedCount})` },
-              ].map((tab) => (
-                <button
-                  key={tab.id}
-                  onClick={() => setFilterStatus(tab.id)}
-                  className={`px-2.5 py-1 rounded-md text-xs font-medium transition-colors ${
-                    filterStatus === tab.id
-                      ? 'bg-notion-hover text-notion-text'
-                      : 'text-notion-text-secondary hover:bg-notion-hover'
-                  }`}
-                >
-                  {tab.label}
-                </button>
-              ))}
+                { id: 'all', label: `Semua`, count: tasks.length },
+                { id: 'To Do', label: `To Do`, count: todoCount },
+                { id: 'In Progress', label: `In Progress`, count: inProgressCount },
+                { id: 'Pending Approval', label: `In Review`, count: pendingApprovalCount },
+                { id: 'Done', label: `Done`, count: doneCount },
+              ].map((tab) => {
+                const isActive = filterStatus === tab.id;
+                return (
+                  <button
+                    key={tab.id}
+                    onClick={() => setFilterStatus(tab.id)}
+                    className={`px-3.5 py-1.5 rounded-full text-xs font-bold transition-all shrink-0 flex items-center gap-1.5 ${
+                      isActive
+                        ? 'bg-[#c5e848] text-gray-950 shadow-xs'
+                        : 'bg-white dark:bg-zinc-750 text-gray-600 dark:text-zinc-400 border border-gray-200/60 dark:border-zinc-700 hover:bg-gray-50'
+                    }`}
+                  >
+                    <span>{tab.label}</span>
+                    <span className={`w-4 h-4 rounded-full flex items-center justify-center text-[10px] ${
+                      isActive ? 'bg-white text-black' : 'bg-gray-100 dark:bg-zinc-700 text-gray-600 dark:text-zinc-300'
+                    }`}>
+                      {tab.count}
+                    </span>
+                  </button>
+                );
+              })}
             </div>
 
             {/* Quick Add Task Form */}
@@ -568,8 +569,8 @@ export const MeetingDetailView: React.FC<MeetingDetailViewProps> = ({
                     >
                       <option value="To Do">To Do</option>
                       <option value="In Progress">In Progress</option>
+                      <option value="Pending Approval">Pending Approval</option>
                       <option value="Done">Done</option>
-                      <option value="Blocked">Blocked</option>
                     </select>
                   </div>
                 </div>

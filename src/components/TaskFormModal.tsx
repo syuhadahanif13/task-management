@@ -153,9 +153,8 @@ export const TaskFormModal: React.FC<TaskFormModalProps> = ({
               >
                 <option value="To Do">To Do</option>
                 <option value="In Progress">In Progress</option>
-                <option value="Done">Done</option>
-                <option value="Blocked">Blocked</option>
                 <option value="Pending Approval">Pending Approval</option>
+                <option value="Done">Done</option>
               </select>
             </div>
           </div>

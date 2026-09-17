@@ -5,10 +5,16 @@ import {
   ChevronLeft,
   ChevronRight,
   Plus,
-  Calendar,
+  Calendar as CalendarIcon,
   Clock,
   CheckSquare,
   AlertCircle,
+  Video,
+  Briefcase,
+  User,
+  Star,
+  MoreHorizontal,
+  ArrowLeft,
 } from 'lucide-react';
 
 interface CalendarViewProps {
@@ -17,16 +23,16 @@ interface CalendarViewProps {
   onSelectMeeting: (meeting: Meeting) => void;
   onOpenNewMeeting: () => void;
   onOpenNewMeetingOnDate?: (date: string) => void;
+  onOpenAddTask?: () => void;
 }
 
-type CalendarMode = 'month' | 'week' | 'day';
+type CalendarViewMode = 'schedule' | 'month' | 'week' | 'day';
 
 const STATUS_COLORS: Record<string, string> = {
   'To Do': '#8e8e93',
-  'In Progress': '#007aff',
-  'Pending Approval': '#ff9500',
-  'Blocked': '#ff3b30',
-  'Done': '#34c759',
+  'In Progress': '#8b5cf6',
+  'Pending Approval': '#f59e0b',
+  'Done': '#10b981',
 };
 
 export const CalendarView: React.FC<CalendarViewProps> = ({
@@ -35,13 +41,14 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
   onSelectMeeting,
   onOpenNewMeeting,
   onOpenNewMeetingOnDate,
+  onOpenAddTask,
 }) => {
-  const [mode, setMode] = useState<CalendarMode>('month');
+  const [viewMode, setViewMode] = useState<CalendarViewMode>('schedule');
   const [currentDate, setCurrentDate] = useState(new Date());
-  const [selectedDate, setSelectedDate] = useState<string | null>(
+  const [selectedDate, setSelectedDate] = useState<string>(
     new Date().toISOString().split('T')[0]
   );
-  const [hoveredDate, setHoveredDate] = useState<string | null>(null);
+  const [activeCategory, setActiveCategory] = useState<string>('all');
 
   const today = new Date().toISOString().split('T')[0];
 
@@ -55,17 +62,17 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
     };
 
     for (const m of meetings) {
-      // Meeting event
-      addEvent(m.meetingDate, {
-        id: `m-${m.id}`,
-        date: m.meetingDate,
-        title: m.title || `Rapat ${m.meetingDate}`,
-        type: 'meeting',
-        meetingId: m.id,
-        color: '#007aff',
-      });
+      if (m.id !== 'general-tasks') {
+        addEvent(m.meetingDate, {
+          id: `m-${m.id}`,
+          date: m.meetingDate,
+          title: m.title || `Rapat ${m.meetingDate}`,
+          type: 'meeting',
+          meetingId: m.id,
+          color: '#3b82f6',
+        });
+      }
 
-      // Task due date events
       for (const task of m.tasks || []) {
         if (!task.dueDate) continue;
         const isOverdue = task.status !== 'Done' && task.dueDate < today;
@@ -76,7 +83,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
           type: isOverdue ? 'task-overdue' : 'task-due',
           meetingId: m.id,
           taskId: task.id,
-          color: isOverdue ? '#ff3b30' : STATUS_COLORS[task.status] || '#8e8e93',
+          color: isOverdue ? '#ef4444' : STATUS_COLORS[task.status] || '#8e8e93',
         });
       }
     }
@@ -84,517 +91,441 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
     return map;
   }, [meetings, today]);
 
-  // --- MONTH VIEW HELPERS ---
-  const getMonthGrid = () => {
+  // Weekly Date Strip (7 days around currentDate)
+  const weekDays = useMemo(() => {
+    const base = new Date(currentDate);
+    const dayOfWeek = base.getDay(); // 0 = Sun
+    // Adjust so week starts on Monday
+    const distanceToMonday = (dayOfWeek + 6) % 7;
+    const monday = new Date(base);
+    monday.setDate(base.getDate() - distanceToMonday);
+
+    return Array.from({ length: 7 }, (_, i) => {
+      const d = new Date(monday);
+      d.setDate(monday.getDate() + i);
+      const iso = d.toISOString().split('T')[0];
+      const dayName = d.toLocaleDateString('en-US', { weekday: 'short' });
+      const dayNum = d.getDate();
+      return { date: d, iso, dayName, dayNum };
+    });
+  }, [currentDate]);
+
+  // Selected date's events & tasks
+  const selectedDateEvents = useMemo(() => {
+    const items: Array<{
+      id: string;
+      title: string;
+      subtitle?: string;
+      time: string;
+      type: 'meeting' | 'task';
+      meeting?: Meeting;
+      task?: Task;
+      status?: string;
+      participants?: string[];
+      category?: string;
+    }> = [];
+
+    // Meetings on selected date
+    for (const m of meetings) {
+      if (m.id !== 'general-tasks' && m.meetingDate === selectedDate) {
+        items.push({
+          id: `m-${m.id}`,
+          title: m.title || `Meeting with Client`,
+          subtitle: m.meetingNotes || 'Client meeting to review project progress and align on goals.',
+          time: '9:00 AM',
+          type: 'meeting',
+          meeting: m,
+          participants: m.participants,
+          category: 'work',
+        });
+      }
+
+      // Tasks on selected date
+      for (const t of m.tasks || []) {
+        if (t.dueDate === selectedDate) {
+          items.push({
+            id: `t-${t.id}`,
+            title: t.title,
+            subtitle: t.description || (m.title ? `From: ${m.title}` : undefined),
+            time: t.dueTime ? `${t.dueTime}` : '11:00 AM',
+            type: 'task',
+            task: t,
+            status: t.status,
+            participants: [t.assignee],
+            category: t.tags?.includes('Personal') ? 'personal' : 'work',
+          });
+        }
+      }
+    }
+
+    if (activeCategory === 'work') return items.filter((i) => i.category !== 'personal');
+    if (activeCategory === 'personal') return items.filter((i) => i.category === 'personal');
+    return items;
+  }, [meetings, selectedDate, activeCategory]);
+
+  const selectedDateFormatted = useMemo(() => {
+    try {
+      const d = new Date(selectedDate + 'T00:00:00');
+      return d.toLocaleDateString('en-US', {
+        weekday: 'short',
+        month: 'long',
+        day: 'numeric',
+      });
+    } catch {
+      return selectedDate;
+    }
+  }, [selectedDate]);
+
+  const navigateWeek = (direction: -1 | 1) => {
+    const d = new Date(currentDate);
+    d.setDate(d.getDate() + direction * 7);
+    setCurrentDate(d);
+  };
+
+  // Month grid calculations for full calendar view
+  const monthGrid = useMemo(() => {
     const year = currentDate.getFullYear();
     const month = currentDate.getMonth();
     const firstDay = new Date(year, month, 1);
     const lastDay = new Date(year, month + 1, 0);
-    const startDow = firstDay.getDay(); // 0=Sun
+    const startDow = (firstDay.getDay() + 6) % 7; // Monday = 0
 
-    const cells: Array<{ date: Date; isCurrentMonth: boolean }> = [];
+    const cells: Array<{ date: Date; iso: string; isCurrentMonth: boolean }> = [];
 
-    // Prev month padding
     for (let i = 0; i < startDow; i++) {
       const d = new Date(year, month, -startDow + 1 + i);
-      cells.push({ date: d, isCurrentMonth: false });
+      cells.push({ date: d, iso: d.toISOString().split('T')[0], isCurrentMonth: false });
     }
-    // Current month
     for (let d = 1; d <= lastDay.getDate(); d++) {
-      cells.push({ date: new Date(year, month, d), isCurrentMonth: true });
+      const dt = new Date(year, month, d);
+      cells.push({ date: dt, iso: dt.toISOString().split('T')[0], isCurrentMonth: true });
     }
-    // Next month padding
     const remaining = 42 - cells.length;
     for (let i = 1; i <= remaining; i++) {
-      cells.push({ date: new Date(year, month + 1, i), isCurrentMonth: false });
+      const dt = new Date(year, month + 1, i);
+      cells.push({ date: dt, iso: dt.toISOString().split('T')[0], isCurrentMonth: false });
     }
-
     return cells;
-  };
-
-  // --- WEEK VIEW HELPERS ---
-  const getWeekDays = () => {
-    const date = new Date(currentDate);
-    const dow = date.getDay();
-    const sunday = new Date(date);
-    sunday.setDate(date.getDate() - dow);
-
-    return Array.from({ length: 7 }, (_, i) => {
-      const d = new Date(sunday);
-      d.setDate(sunday.getDate() + i);
-      return d;
-    });
-  };
-
-  const fmtDate = (d: Date) => d.toISOString().split('T')[0];
-  const fmtMonthYear = (d: Date) =>
-    `${t.calendar.months[d.getMonth()]} ${d.getFullYear()}`;
-  const fmtDayShort = (d: Date) => d.getDate();
-  const fmtDayOfWeek = (d: Date, short = true) =>
-    short ? t.calendar.days[d.getDay()] : t.calendar.days[d.getDay()];
-
-  const navigate = (dir: -1 | 1) => {
-    const d = new Date(currentDate);
-    if (mode === 'month') d.setMonth(d.getMonth() + dir);
-    else if (mode === 'week') d.setDate(d.getDate() + dir * 7);
-    else d.setDate(d.getDate() + dir);
-    setCurrentDate(d);
-  };
-
-  const goToday = () => {
-    setCurrentDate(new Date());
-    setSelectedDate(today);
-  };
-
-  // Selected date panel data
-  const selectedEvents = selectedDate ? eventsByDate.get(selectedDate) || [] : [];
-  const selectedMeetings = meetings.filter((m) => m.meetingDate === selectedDate);
-
-  const headerLabel = () => {
-    if (mode === 'month') return fmtMonthYear(currentDate);
-    if (mode === 'week') {
-      const days = getWeekDays();
-      const first = days[0];
-      const last = days[6];
-      if (first.getMonth() === last.getMonth()) {
-        return `${first.getDate()} – ${last.getDate()} ${t.calendar.months[first.getMonth()]} ${first.getFullYear()}`;
-      }
-      return `${t.calendar.months[first.getMonth()].slice(0, 3)} ${first.getDate()} – ${t.calendar.months[last.getMonth()].slice(0, 3)} ${last.getDate()}, ${first.getFullYear()}`;
-    }
-    return `${currentDate.getDate()} ${t.calendar.months[currentDate.getMonth()]} ${currentDate.getFullYear()}`;
-  };
+  }, [currentDate]);
 
   return (
-    <div className="space-y-4">
-      {/* HEADER BAR */}
-      <div className="ios-card p-4">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-          <div>
-            <h2 className="ios-large-title">{t.calendar.title}</h2>
-            <p className="text-sm text-notion-text-secondary mt-0.5">{t.calendar.subtitle}</p>
-          </div>
+    <div className="space-y-6 max-w-4xl mx-auto pb-12">
+      {/* ─── 1. TOP HEADER (Arrow | Formatted Date | + | ...) ─── */}
+      <div className="flex items-center justify-between pt-1">
+        <button
+          onClick={() => navigateWeek(-1)}
+          className="w-11 h-11 rounded-full bg-white dark:bg-zinc-800 border border-gray-200/80 dark:border-zinc-700 flex items-center justify-center text-gray-700 dark:text-zinc-200 shadow-sm hover:bg-gray-50 active:scale-95 transition"
+          title="Previous week"
+        >
+          <ChevronLeft className="w-5 h-5" />
+        </button>
+
+        <h3 className="text-sm sm:text-base font-bold text-gray-900 dark:text-white">
+          {selectedDateFormatted}
+        </h3>
+
+        <div className="flex items-center gap-2">
           <button
-            onClick={onOpenNewMeeting}
-            className="notion-btn notion-btn-primary self-start sm:self-auto"
+            onClick={() => onOpenAddTask ? onOpenAddTask() : onOpenNewMeeting()}
+            className="w-11 h-11 rounded-full bg-[#18191d] hover:bg-black text-white flex items-center justify-center shadow-lg transition active:scale-95"
+            title="Tambah Tugas / Rapat"
           >
-            <Plus className="w-4 h-4" />
-            {t.calendar.addMeeting}
+            <Plus className="w-5 h-5" />
+          </button>
+          <button
+            onClick={() => navigateWeek(1)}
+            className="w-11 h-11 rounded-full bg-white dark:bg-zinc-800 border border-gray-200/80 dark:border-zinc-700 flex items-center justify-center text-gray-700 dark:text-zinc-200 shadow-sm hover:bg-gray-50 active:scale-95 transition"
+            title="Next week"
+          >
+            <ChevronRight className="w-5 h-5" />
           </button>
         </div>
-
-        {/* Controls */}
-        <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
-          {/* Navigation */}
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => navigate(-1)}
-              className="p-2 rounded-xl hover:bg-notion-hover transition-colors"
-            >
-              <ChevronLeft className="w-4 h-4 text-notion-text-secondary" />
-            </button>
-            <span className="text-sm font-semibold text-notion-text min-w-[160px] text-center">
-              {headerLabel()}
-            </span>
-            <button
-              onClick={() => navigate(1)}
-              className="p-2 rounded-xl hover:bg-notion-hover transition-colors"
-            >
-              <ChevronRight className="w-4 h-4 text-notion-text-secondary" />
-            </button>
-            <button
-              onClick={goToday}
-              className="notion-btn text-xs font-medium text-ios-blue hover:bg-blue-50 dark:hover:bg-blue-950/30 ml-1"
-            >
-              {t.calendar.today}
-            </button>
-          </div>
-
-          {/* View Mode Toggle */}
-          <div className="flex items-center gap-0.5 bg-notion-sidebar p-1 rounded-xl border border-notion-border">
-            {(['month', 'week', 'day'] as CalendarMode[]).map((m) => (
-              <button
-                key={m}
-                onClick={() => setMode(m)}
-                className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
-                  mode === m
-                    ? 'bg-notion-bg text-notion-text shadow-sm'
-                    : 'text-notion-text-secondary hover:text-notion-text'
-                }`}
-              >
-                {m === 'month' ? t.calendar.month : m === 'week' ? t.calendar.week : t.calendar.day}
-              </button>
-            ))}
-          </div>
-        </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-[1fr_280px] gap-4">
-        {/* =====================
-            MONTH VIEW
-            ===================== */}
-        {mode === 'month' && (
-          <div className="ios-card overflow-hidden">
-            {/* Day headers */}
-            <div className="grid grid-cols-7 border-b border-notion-border">
-              {t.calendar.days.map((day) => (
-                <div
-                  key={day}
-                  className="py-2.5 text-center text-[11px] font-semibold text-notion-text-secondary uppercase tracking-wide"
-                >
-                  {day}
-                </div>
-              ))}
-            </div>
+      {/* ─── 2. TITLE ROW: "Task Schedule" + [📅 Calendar] Pill ─── */}
+      <div className="flex items-end justify-between gap-4 pt-2">
+        <div>
+          <h1 className="text-3xl sm:text-4xl font-black tracking-tight text-gray-950 dark:text-white leading-tight">
+            Task<br />Schedule
+          </h1>
+        </div>
 
-            {/* Cells */}
-            <div className="grid grid-cols-7">
-              {getMonthGrid().map((cell, idx) => {
-                const dateStr = fmtDate(cell.date);
-                const events = eventsByDate.get(dateStr) || [];
-                const isToday = dateStr === today;
-                const isSelected = dateStr === selectedDate;
-                const meetingEvents = events.filter((e) => e.type === 'meeting');
-                const taskEvents = events.filter((e) => e.type !== 'meeting');
-                const hasOverdue = events.some((e) => e.type === 'task-overdue');
+        <button
+          onClick={() => setViewMode(viewMode === 'schedule' ? 'month' : 'schedule')}
+          className={`px-4 py-2.5 rounded-full text-xs font-bold border transition-all flex items-center gap-2 shadow-sm ${
+            viewMode === 'month'
+              ? 'bg-[#18191d] text-white border-black dark:bg-white dark:text-black'
+              : 'bg-white dark:bg-zinc-800 text-gray-800 dark:text-white border-gray-200/80 dark:border-zinc-700 hover:bg-gray-50'
+          }`}
+        >
+          <CalendarIcon className="w-4 h-4 text-gray-600 dark:text-zinc-300" />
+          <span>{viewMode === 'month' ? 'Schedule' : 'Calendar'}</span>
+        </button>
+      </div>
 
-                return (
-                  <div
-                    key={idx}
-                    onClick={() => setSelectedDate(dateStr)}
-                    onMouseEnter={() => setHoveredDate(dateStr)}
-                    onMouseLeave={() => setHoveredDate(null)}
-                    className={`min-h-[80px] p-1.5 border-b border-r border-notion-border cursor-pointer transition-colors
-                      ${isSelected ? 'bg-blue-50 dark:bg-blue-950/20' : 'hover:bg-notion-hover'}
-                      ${!cell.isCurrentMonth ? 'opacity-40' : ''}
-                    `}
-                  >
-                    {/* Day number */}
-                    <div className="flex justify-center mb-1">
-                      <span
-                        className={`text-xs font-medium w-6 h-6 flex items-center justify-center rounded-full transition-all ${
-                          isToday
-                            ? 'bg-ios-blue text-white font-bold'
-                            : isSelected
-                            ? 'text-ios-blue font-semibold'
-                            : 'text-notion-text'
-                        }`}
-                      >
-                        {cell.date.getDate()}
-                      </span>
-                    </div>
+      {/* ─── VIEW 1: DRIBBLE SCHEDULE TIMELINE VIEW (DEFAULT) ─── */}
+      {viewMode === 'schedule' && (
+        <div className="space-y-6">
+          {/* 3. Horizontal Weekly Date Strip */}
+          <div className="bg-white/80 dark:bg-zinc-800/80 backdrop-blur-md rounded-[28px] p-3 border border-gray-200/60 dark:border-zinc-700/60 shadow-sm flex items-center justify-between gap-1.5 overflow-x-auto">
+            {weekDays.map((item) => {
+              const isSelected = item.iso === selectedDate;
+              const isToday = item.iso === today;
 
-                    {/* Event chips — show up to 2 */}
-                    <div className="space-y-0.5">
-                      {meetingEvents.slice(0, 1).map((ev) => (
-                        <div
-                          key={ev.id}
-                          className="calendar-event-chip bg-blue-100 text-blue-700 dark:bg-blue-950/50 dark:text-blue-300"
-                          title={ev.title}
-                        >
-                          {ev.title}
-                        </div>
-                      ))}
-                      {taskEvents.slice(0, 1).map((ev) => (
-                        <div
-                          key={ev.id}
-                          className={`calendar-event-chip ${
-                            ev.type === 'task-overdue'
-                              ? 'bg-red-100 text-red-700 dark:bg-red-950/50 dark:text-red-300'
-                              : 'bg-orange-50 text-orange-700 dark:bg-orange-950/50 dark:text-orange-300'
-                          }`}
-                          title={ev.title}
-                        >
-                          {ev.title}
-                        </div>
-                      ))}
-                      {events.length > 2 && (
-                        <div className="text-[9px] text-notion-text-secondary pl-1">
-                          +{events.length - 2} lainnya
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        )}
-
-        {/* =====================
-            WEEK VIEW
-            ===================== */}
-        {mode === 'week' && (
-          <div className="ios-card overflow-hidden">
-            <div className="grid grid-cols-7 border-b border-notion-border">
-              {getWeekDays().map((day) => {
-                const dateStr = fmtDate(day);
-                const isToday = dateStr === today;
-                const isSelected = dateStr === selectedDate;
-                const events = eventsByDate.get(dateStr) || [];
-                return (
-                  <div
-                    key={dateStr}
-                    onClick={() => setSelectedDate(dateStr)}
-                    className={`p-3 text-center cursor-pointer transition-colors border-r border-notion-border last:border-r-0 ${
-                      isSelected ? 'bg-blue-50 dark:bg-blue-950/20' : 'hover:bg-notion-hover'
-                    }`}
-                  >
-                    <p className="text-[10px] font-medium text-notion-text-secondary uppercase tracking-wide mb-1">
-                      {fmtDayOfWeek(day)}
-                    </p>
-                    <div
-                      className={`text-sm font-semibold w-8 h-8 flex items-center justify-center rounded-full mx-auto transition-all ${
-                        isToday ? 'bg-ios-blue text-white' : 'text-notion-text'
-                      }`}
-                    >
-                      {fmtDayShort(day)}
-                    </div>
-                    {events.length > 0 && (
-                      <div className="flex justify-center gap-0.5 mt-1.5">
-                        {events.slice(0, 3).map((ev, i) => (
-                          <span
-                            key={i}
-                            className="w-1.5 h-1.5 rounded-full"
-                            style={{ backgroundColor: ev.color || '#007aff' }}
-                          />
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-
-            {/* Week day content */}
-            <div className="grid grid-cols-7 min-h-[400px]">
-              {getWeekDays().map((day) => {
-                const dateStr = fmtDate(day);
-                const isSelected = dateStr === selectedDate;
-                const events = eventsByDate.get(dateStr) || [];
-                return (
-                  <div
-                    key={dateStr}
-                    onClick={() => setSelectedDate(dateStr)}
-                    className={`p-2 border-r border-notion-border last:border-r-0 cursor-pointer min-h-[200px] transition-colors ${
-                      isSelected ? 'bg-blue-50/50 dark:bg-blue-950/10' : 'hover:bg-notion-hover/50'
-                    }`}
-                  >
-                    <div className="space-y-1">
-                      {events.map((ev) => (
-                        <div
-                          key={ev.id}
-                          className="calendar-event-chip"
-                          style={{
-                            backgroundColor: `${ev.color}20`,
-                            color: ev.color,
-                          }}
-                          title={ev.title}
-                        >
-                          {ev.title}
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        )}
-
-        {/* =====================
-            DAY VIEW
-            ===================== */}
-        {mode === 'day' && (
-          <div className="ios-card p-5">
-            <div className="flex items-center gap-3 mb-4">
-              <div
-                className={`w-12 h-12 rounded-2xl flex items-center justify-center text-lg font-bold ${
-                  fmtDate(currentDate) === today
-                    ? 'bg-ios-blue text-white'
-                    : 'bg-notion-sidebar text-notion-text'
-                }`}
-              >
-                {currentDate.getDate()}
-              </div>
-              <div>
-                <p className="text-xs text-notion-text-secondary font-medium uppercase tracking-wide">
-                  {fmtDayOfWeek(currentDate, false)}
-                </p>
-                <p className="text-sm font-semibold text-notion-text">
-                  {t.calendar.months[currentDate.getMonth()]} {currentDate.getFullYear()}
-                </p>
-              </div>
-            </div>
-
-            {(() => {
-              const dateStr = fmtDate(currentDate);
-              const events = eventsByDate.get(dateStr) || [];
-              if (events.length === 0) {
-                return (
-                  <div className="text-center py-12">
-                    <Calendar className="w-10 h-10 text-notion-text-secondary opacity-30 mx-auto mb-3" />
-                    <p className="text-sm text-notion-text-secondary">{t.calendar.noEvents}</p>
-                    <button
-                      onClick={() => onOpenNewMeetingOnDate?.(dateStr) || onOpenNewMeeting()}
-                      className="mt-3 notion-btn text-xs text-ios-blue hover:bg-blue-50 dark:hover:bg-blue-950/30"
-                    >
-                      <Plus className="w-3.5 h-3.5" />
-                      {t.calendar.addMeeting}
-                    </button>
-                  </div>
-                );
-              }
               return (
-                <div className="space-y-3">
-                  {events.map((ev) => (
-                    <div
-                      key={ev.id}
-                      onClick={() => {
-                        if (ev.meetingId) {
-                          const m = meetings.find((x) => x.id === ev.meetingId);
-                          if (m) onSelectMeeting(m);
-                        }
-                      }}
-                      className={`p-3 rounded-xl border-l-2 cursor-pointer hover:bg-notion-hover transition-colors ${
-                        ev.type === 'meeting'
-                          ? 'border-ios-blue bg-blue-50/50 dark:bg-blue-950/10'
-                          : ev.type === 'task-overdue'
-                          ? 'border-red-500 bg-red-50/50 dark:bg-red-950/10'
-                          : 'border-orange-400 bg-orange-50/50 dark:bg-orange-950/10'
-                      }`}
-                    >
-                      <div className="flex items-center gap-2">
-                        {ev.type === 'meeting' ? (
-                          <Calendar className="w-3.5 h-3.5 text-ios-blue shrink-0" />
-                        ) : ev.type === 'task-overdue' ? (
-                          <AlertCircle className="w-3.5 h-3.5 text-red-500 shrink-0" />
-                        ) : (
-                          <CheckSquare className="w-3.5 h-3.5 text-orange-500 shrink-0" />
-                        )}
-                        <span className="text-sm font-medium text-notion-text">{ev.title}</span>
-                      </div>
-                      <p className="text-xs text-notion-text-secondary mt-0.5 ml-5">
-                        {ev.type === 'meeting' ? 'Rapat' : 'Tugas jatuh tempo'}
-                      </p>
-                    </div>
-                  ))}
-                </div>
-              );
-            })()}
-          </div>
-        )}
-
-        {/* =====================
-            SIDE PANEL — selected date detail
-            ===================== */}
-        <div className="space-y-3">
-          {/* Selected date header */}
-          <div className="ios-card p-4">
-            <div className="flex items-center justify-between mb-3">
-              <h3 className="text-sm font-bold text-notion-text">
-                {selectedDate
-                  ? (() => {
-                      const d = new Date(selectedDate + 'T00:00:00');
-                      return `${d.getDate()} ${t.calendar.months[d.getMonth()]}`;
-                    })()
-                  : 'Pilih tanggal'}
-              </h3>
-              {selectedDate && (
                 <button
-                  onClick={() =>
-                    onOpenNewMeetingOnDate?.(selectedDate) || onOpenNewMeeting()
-                  }
-                  className="notion-btn text-xs text-ios-blue hover:bg-blue-50 dark:hover:bg-blue-950/30 px-2 py-1"
+                  key={item.iso}
+                  onClick={() => setSelectedDate(item.iso)}
+                  className={`flex-1 min-w-[50px] py-3.5 px-2 rounded-2xl flex flex-col items-center justify-center transition-all ${
+                    isSelected
+                      ? 'bg-[#18191d] text-white shadow-xl scale-[1.03]'
+                      : 'hover:bg-gray-100/70 dark:hover:bg-zinc-700/50 text-gray-600 dark:text-zinc-400'
+                  }`}
+                >
+                  <span className={`text-[11px] font-medium uppercase tracking-wider mb-1 ${
+                    isSelected ? 'text-zinc-300' : 'text-gray-400 dark:text-zinc-500'
+                  }`}>
+                    {item.dayName}
+                  </span>
+                  <span className={`text-base sm:text-lg font-black ${
+                    isSelected ? 'text-white' : 'text-gray-900 dark:text-white'
+                  }`}>
+                    {item.dayNum}
+                  </span>
+                  {isToday && !isSelected && (
+                    <span className="w-1.5 h-1.5 rounded-full bg-ios-blue mt-1" />
+                  )}
+                </button>
+              );
+            })}
+          </div>
+
+          {/* 4. Category Filter Pills */}
+          <div className="flex items-center gap-2.5 overflow-x-auto pb-1 scrollbar-none">
+            <button
+              onClick={() => setActiveCategory('all')}
+              className={`px-5 py-2.5 rounded-full text-xs font-bold transition-all ${
+                activeCategory === 'all'
+                  ? 'bg-[#18191d] text-white shadow-md'
+                  : 'bg-white dark:bg-zinc-800 text-gray-700 dark:text-zinc-300 border border-gray-200/70 dark:border-zinc-700'
+              }`}
+            >
+              All
+            </button>
+
+            <button
+              onClick={() => setActiveCategory('work')}
+              className={`px-4 py-2.5 rounded-full text-xs font-bold flex items-center gap-2 border transition-all ${
+                activeCategory === 'work'
+                  ? 'bg-[#18191d] text-white border-black'
+                  : 'bg-white dark:bg-zinc-800 text-gray-700 dark:text-zinc-300 border-gray-200/70 dark:border-zinc-700'
+              }`}
+            >
+              <Briefcase className="w-3.5 h-3.5" />
+              <span>Work</span>
+            </button>
+
+            <button
+              onClick={() => setActiveCategory('personal')}
+              className={`px-4 py-2.5 rounded-full text-xs font-bold flex items-center gap-2 border transition-all ${
+                activeCategory === 'personal'
+                  ? 'bg-[#18191d] text-white border-black'
+                  : 'bg-white dark:bg-zinc-800 text-gray-700 dark:text-zinc-300 border-gray-200/70 dark:border-zinc-700'
+              }`}
+            >
+              <User className="w-3.5 h-3.5" />
+              <span>Personal</span>
+            </button>
+
+            <button
+              className="p-2.5 rounded-full bg-white dark:bg-zinc-800 border border-gray-200/70 dark:border-zinc-700 text-gray-500 hover:text-amber-500 transition"
+              title="Starred"
+            >
+              <Star className="w-3.5 h-3.5" />
+            </button>
+          </div>
+
+          {/* 5. Timeline Schedule Section */}
+          <div className="space-y-4 pt-1">
+            {/* Section Header: Morning | Today */}
+            <div className="flex items-center justify-between text-xs font-bold text-gray-400 dark:text-zinc-500 uppercase tracking-wider">
+              <span className="flex items-center gap-1.5">
+                <span>☀️ Schedule</span>
+              </span>
+              <span>{selectedDate === today ? 'Today' : selectedDateFormatted}</span>
+            </div>
+
+            {selectedDateEvents.length === 0 ? (
+              <div className="bg-white dark:bg-zinc-800/70 rounded-[28px] p-8 text-center border border-gray-100 dark:border-zinc-700/60 shadow-sm">
+                <CalendarIcon className="w-10 h-10 text-gray-300 dark:text-zinc-600 mx-auto mb-2" />
+                <h4 className="text-sm font-bold text-gray-800 dark:text-zinc-200">
+                  Tidak ada agenda terjadwal
+                </h4>
+                <p className="text-xs text-gray-400 dark:text-zinc-500 mt-1 max-w-xs mx-auto">
+                  Belum ada rapat atau tugas pada tanggal ini.
+                </p>
+                <button
+                  onClick={() => onOpenAddTask ? onOpenAddTask() : onOpenNewMeeting()}
+                  className="mt-4 inline-flex items-center gap-1.5 px-4 py-2 rounded-full bg-[#18191d] hover:bg-black text-white text-xs font-bold shadow-sm"
                 >
                   <Plus className="w-3.5 h-3.5" />
+                  <span>Tambah Kegiatan</span>
                 </button>
-              )}
-            </div>
-
-            {selectedDate === today && (
-              <span className="notion-badge bg-ios-blue text-white text-[10px] mb-2">
-                {t.calendar.today}
-              </span>
-            )}
-
-            {selectedEvents.length === 0 ? (
-              <div className="text-center py-6">
-                <Calendar className="w-8 h-8 text-notion-text-secondary opacity-20 mx-auto mb-2" />
-                <p className="text-xs text-notion-text-secondary">{t.calendar.noEvents}</p>
               </div>
             ) : (
-              <div className="space-y-2">
-                {/* Meetings */}
-                {selectedMeetings.map((m) => (
-                  <div
-                    key={m.id}
-                    onClick={() => onSelectMeeting(m)}
-                    className="p-2.5 rounded-xl bg-blue-50 dark:bg-blue-950/20 cursor-pointer hover:bg-blue-100 dark:hover:bg-blue-950/30 transition-colors"
-                  >
-                    <div className="flex items-center gap-2">
-                      <Calendar className="w-3.5 h-3.5 text-ios-blue shrink-0" />
-                      <p className="text-xs font-semibold text-notion-text line-clamp-1">
-                        {m.title || `Rapat ${m.meetingDate}`}
+              <div className="space-y-5 relative before:absolute before:left-[45px] before:top-4 before:bottom-4 before:w-[2px] before:bg-gray-200 dark:before:bg-zinc-700/70">
+                {selectedDateEvents.map((item, idx) => (
+                  <div key={item.id} className="flex items-start gap-4 sm:gap-6 relative">
+                    {/* Time Label & Timeline Dot */}
+                    <div className="w-20 pt-1 shrink-0 text-right pr-2">
+                      <p className="text-xs font-extrabold text-gray-800 dark:text-white">
+                        {item.time}
                       </p>
                     </div>
-                    <p className="text-[10px] text-notion-text-secondary mt-0.5 ml-5">
-                      {m.participants.length} peserta · {m.tasks?.length || 0} tugas
-                    </p>
+
+                    {/* Dot on line */}
+                    <div className="absolute left-[41px] top-2.5 w-2.5 h-2.5 rounded-full bg-white dark:bg-zinc-900 ring-4 ring-[#18191d] dark:ring-white z-10" />
+
+                    {/* Event Card */}
+                    <div
+                      onClick={() => {
+                        if (item.type === 'meeting' && item.meeting) {
+                          onSelectMeeting(item.meeting);
+                        }
+                      }}
+                      className="flex-1 bg-white dark:bg-zinc-800/90 rounded-[28px] p-5 sm:p-6 shadow-sm border border-gray-100 dark:border-zinc-700/60 hover:shadow-md transition-all cursor-pointer"
+                    >
+                      <h4 className="text-base sm:text-lg font-bold text-gray-900 dark:text-white leading-snug">
+                        {item.title}
+                      </h4>
+
+                      {item.subtitle && (
+                        <p className="text-xs text-gray-500 dark:text-zinc-400 mt-1.5 line-clamp-2 leading-relaxed">
+                          {item.subtitle}
+                        </p>
+                      )}
+
+                      {/* Bottom Row: Avatars + Action Button */}
+                      <div className="mt-4 pt-3 border-t border-gray-50 dark:border-zinc-750 flex items-center justify-between">
+                        {/* Avatars */}
+                        <div className="flex items-center -space-x-2">
+                          {(item.participants || ['User']).slice(0, 3).map((p, pIdx) => (
+                            <div
+                              key={pIdx}
+                              className="w-7 h-7 rounded-full bg-gradient-to-tr from-indigo-500 to-purple-500 border-2 border-white dark:border-zinc-800 flex items-center justify-center text-white text-[10px] font-bold shadow-sm"
+                              title={p}
+                            >
+                              {p.charAt(0).toUpperCase()}
+                            </div>
+                          ))}
+                          {(item.participants?.length || 1) > 3 && (
+                            <div className="w-7 h-7 rounded-full bg-black text-white dark:bg-white dark:text-black border-2 border-white dark:border-zinc-800 flex items-center justify-center text-[10px] font-extrabold shadow-sm">
+                              +{item.participants!.length - 3}
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Action Pill: Meet button or Status Badge */}
+                        {item.type === 'meeting' ? (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              if (item.meeting) onSelectMeeting(item.meeting);
+                            }}
+                            className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-ios-blue text-white text-xs font-bold shadow-sm hover:bg-blue-600 transition"
+                          >
+                            <Video className="w-3.5 h-3.5" />
+                            <span>Meet</span>
+                          </button>
+                        ) : (
+                          <span
+                            className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-bold text-purple-700 bg-purple-50 dark:bg-purple-950/40 dark:text-purple-300"
+                          >
+                            {item.status || 'In Progress'}
+                          </span>
+                        )}
+                      </div>
+                    </div>
                   </div>
                 ))}
-
-                {/* Tasks due on this date */}
-                {selectedEvents
-                  .filter((e) => e.type !== 'meeting')
-                  .map((ev) => (
-                    <div
-                      key={ev.id}
-                      className={`p-2.5 rounded-xl ${
-                        ev.type === 'task-overdue'
-                          ? 'bg-red-50 dark:bg-red-950/20'
-                          : 'bg-orange-50 dark:bg-orange-950/20'
-                      }`}
-                    >
-                      <div className="flex items-center gap-2">
-                        {ev.type === 'task-overdue' ? (
-                          <AlertCircle className="w-3.5 h-3.5 text-red-500 shrink-0" />
-                        ) : (
-                          <CheckSquare className="w-3.5 h-3.5 text-orange-500 shrink-0" />
-                        )}
-                        <p className="text-xs font-medium text-notion-text line-clamp-1">{ev.title}</p>
-                      </div>
-                      <p className="text-[10px] text-notion-text-secondary mt-0.5 ml-5">
-                        Tugas jatuh tempo
-                      </p>
-                    </div>
-                  ))}
               </div>
             )}
           </div>
+        </div>
+      )}
 
-          {/* Legend */}
-          <div className="ios-card p-4">
-            <p className="text-[11px] font-semibold text-notion-text-secondary uppercase tracking-widest mb-2">
-              Keterangan
-            </p>
-            <div className="space-y-1.5">
-              {[
-                { color: '#007aff', label: 'Rapat', bg: 'bg-blue-100 dark:bg-blue-950/50' },
-                { color: '#ff9500', label: 'Tugas jatuh tempo', bg: 'bg-orange-50 dark:bg-orange-950/30' },
-                { color: '#ff3b30', label: 'Tugas terlambat', bg: 'bg-red-50 dark:bg-red-950/30' },
-              ].map(({ color, label, bg }) => (
-                <div key={label} className="flex items-center gap-2">
-                  <span
-                    className="w-2.5 h-2.5 rounded-full shrink-0"
-                    style={{ backgroundColor: color }}
-                  />
-                  <span className="text-xs text-notion-text-secondary">{label}</span>
+      {/* ─── VIEW 2: FULL MONTH CALENDAR GRID ─── */}
+      {viewMode === 'month' && (
+        <div className="bg-white dark:bg-zinc-800 rounded-[32px] p-5 sm:p-6 border border-gray-100 dark:border-zinc-700/60 shadow-sm space-y-4">
+          {/* Days of week header */}
+          <div className="grid grid-cols-7 text-center text-xs font-bold text-gray-400 dark:text-zinc-500 py-2 border-b border-gray-100 dark:border-zinc-700">
+            {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map((day) => (
+              <div key={day}>{day}</div>
+            ))}
+          </div>
+
+          {/* Month Cells Grid */}
+          <div className="grid grid-cols-7 gap-1 sm:gap-2">
+            {monthGrid.map(({ date, iso, isCurrentMonth }) => {
+              const dayEvents = eventsByDate.get(iso) || [];
+              const isSelected = iso === selectedDate;
+              const isToday = iso === today;
+
+              return (
+                <div
+                  key={iso}
+                  onClick={() => {
+                    setSelectedDate(iso);
+                    setViewMode('schedule');
+                  }}
+                  className={`min-h-[70px] sm:min-h-[85px] p-1.5 rounded-2xl border transition-all cursor-pointer flex flex-col justify-between ${
+                    isSelected
+                      ? 'border-black dark:border-white bg-gray-50 dark:bg-zinc-700/50 shadow-sm'
+                      : isCurrentMonth
+                      ? 'border-gray-100 dark:border-zinc-700/40 hover:bg-gray-50/80 dark:hover:bg-zinc-700/30'
+                      : 'border-transparent opacity-30'
+                  }`}
+                >
+                  <div className="flex items-center justify-between">
+                    <span
+                      className={`text-xs font-bold w-6 h-6 rounded-full flex items-center justify-center ${
+                        isToday
+                          ? 'bg-ios-blue text-white'
+                          : 'text-gray-800 dark:text-white'
+                      }`}
+                    >
+                      {date.getDate()}
+                    </span>
+                    {dayEvents.length > 0 && (
+                      <span className="text-[10px] font-bold text-gray-400">
+                        {dayEvents.length}
+                      </span>
+                    )}
+                  </div>
+
+                  {/* Dot / Chip preview */}
+                  <div className="space-y-1 mt-1">
+                    {dayEvents.slice(0, 2).map((ev) => (
+                      <div
+                        key={ev.id}
+                        style={{ backgroundColor: `${ev.color}15`, color: ev.color }}
+                        className="text-[10px] font-bold px-1.5 py-0.5 rounded-md truncate"
+                      >
+                        {ev.title}
+                      </div>
+                    ))}
+                    {dayEvents.length > 2 && (
+                      <span className="text-[9px] text-gray-400 font-semibold pl-1">
+                        +{dayEvents.length - 2} more
+                      </span>
+                    )}
+                  </div>
                 </div>
-              ))}
-            </div>
+              );
+            })}
           </div>
         </div>
-      </div>
+      )}
     </div>
   );
 };

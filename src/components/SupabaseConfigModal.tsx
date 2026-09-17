@@ -158,7 +158,7 @@ public.tasks (N Children)
 ├── title: TEXT                  <-- 4a. Judul Tindakan
 ├── assignee: TEXT               <-- 4b. Penanggung Jawab
 ├── due_date: DATE               <-- 4c. Tenggat Waktu
-├── status: TEXT                 <-- 4d. Status ('To Do' | 'In Progress' | 'Done' | 'Blocked')
+├── status: TEXT                 <-- 4d. Status ('To Do' | 'In Progress' | 'Done' | 'Pending Approval')
 └── created_at / updated_at: TIMESTAMPTZ`}
                 </div>
               </div>

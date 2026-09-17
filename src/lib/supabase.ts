@@ -65,7 +65,7 @@ CREATE TABLE IF NOT EXISTS public.tasks (
     status TEXT NOT NULL DEFAULT 'To Do',               -- Core Field 4d: Status
     created_at TIMESTAMPTZ NOT NULL DEFAULT timezone('utc'::text, now()),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT timezone('utc'::text, now()),
-    CONSTRAINT chk_task_status CHECK (status IN ('To Do', 'In Progress', 'Done', 'Blocked'))
+    CONSTRAINT chk_task_status CHECK (status IN ('To Do', 'In Progress', 'Done', 'Pending Approval'))
 );
 
 -- 3. Indexes untuk performa kueri relasional tinggi

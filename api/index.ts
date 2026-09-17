@@ -6,7 +6,7 @@ import dotenv from 'dotenv';
 
 dotenv.config();
 
-export type TaskStatus = 'To Do' | 'In Progress' | 'Done' | 'Blocked' | 'Pending Approval';
+export type TaskStatus = 'To Do' | 'In Progress' | 'Done' | 'Pending Approval';
 
 export interface Task {
   id: string;
@@ -189,7 +189,7 @@ router.post('/meetings', async (req, res) => {
         title: String(t.title || 'Untitled Action Item').trim(),
         assignee: String(t.assignee || (participants[0] || 'Unassigned')).trim(),
         dueDate: String(t.dueDate || new Date(Date.now() + 7 * 86400000).toISOString().split('T')[0]),
-        status: (['To Do', 'In Progress', 'Done', 'Blocked'].includes(t.status) ? t.status : 'To Do') as TaskStatus,
+        status: (['To Do', 'In Progress', 'Done', 'Pending Approval'].includes(t.status) ? t.status : 'To Do') as TaskStatus,
         createdAt: now,
         updatedAt: now
       }))
@@ -371,8 +371,107 @@ router.get('/tasks', async (req, res) => {
   res.json(allTasks);
 });
 
+// Ensure virtual general-tasks meeting exists (for standalone tasks)
+async function ensureGeneralMeeting(): Promise<Meeting> {
+  let generalMeeting = meetings.find(m => m.id === 'general-tasks');
+  const now = new Date().toISOString();
+  const today = now.split('T')[0];
+
+  if (!generalMeeting) {
+    generalMeeting = {
+      id: 'general-tasks',
+      title: 'Tugas Mandiri',
+      meetingDate: today,
+      participants: [],
+      meetingNotes: 'Tugas umum tanpa rapat',
+      tasks: [],
+      createdAt: now,
+      updatedAt: now,
+    };
+    meetings.push(generalMeeting);
+
+    if (supabase) {
+      try {
+        const { data: existing } = await supabase.from('meetings').select('id').eq('id', 'general-tasks').single();
+        if (!existing) {
+          await supabase.from('meetings').insert([{
+            id: 'general-tasks',
+            title: 'Tugas Mandiri',
+            meeting_date: today,
+            participants: [],
+            meeting_notes: 'Tugas umum tanpa rapat',
+            created_at: now,
+            updated_at: now,
+          }]);
+        }
+      } catch (err: any) {
+        console.warn('Supabase ensure general meeting warning:', err?.message);
+      }
+    }
+  }
+
+  return generalMeeting;
+}
+
+// POST /api/tasks - Create a standalone task (tanpa rapat wajib)
+router.post('/tasks', async (req, res) => {
+  const { title, assignee, dueDate, status, meetingId } = req.body;
+  if (!title || !dueDate) return res.status(400).json({ error: 'Title and due date are required.' });
+
+  let targetMeeting: Meeting | undefined;
+  if (meetingId && meetingId !== 'general-tasks') {
+    targetMeeting = meetings.find(m => m.id === meetingId);
+  }
+  if (!targetMeeting) {
+    targetMeeting = await ensureGeneralMeeting();
+  }
+
+  const now = new Date().toISOString();
+  const newTask: Task = {
+    id: generateId('task'),
+    meetingId: targetMeeting.id,
+    title: String(title).trim(),
+    assignee: String(assignee || (targetMeeting.participants[0] || 'Unassigned')).trim(),
+    dueDate: String(dueDate).trim(),
+    dueTime: req.body.dueTime ? String(req.body.dueTime).trim() : undefined,
+    status: (['To Do', 'In Progress', 'Done', 'Pending Approval'].includes(status) ? status : 'To Do') as TaskStatus,
+    priority: (['Low', 'Medium', 'High'].includes(req.body.priority) ? req.body.priority : 'Medium') as any,
+    description: req.body.description ? String(req.body.description).trim() : undefined,
+    tags: Array.isArray(req.body.tags) ? req.body.tags : [],
+    createdAt: now,
+    updatedAt: now,
+  };
+
+  if (supabase) {
+    try {
+      await supabase.from('tasks').insert([{
+        id: newTask.id,
+        meeting_id: newTask.meetingId,
+        title: newTask.title,
+        assignee: newTask.assignee,
+        due_date: newTask.dueDate,
+        status: newTask.status,
+        created_at: newTask.createdAt,
+        updated_at: newTask.updatedAt
+      }]);
+    } catch (err: any) {
+      console.warn('Supabase task insert warning:', err?.message);
+    }
+  }
+
+  targetMeeting.tasks.push(newTask);
+  targetMeeting.updatedAt = now;
+  res.status(201).json(newTask);
+});
+
 router.post('/meetings/:meetingId/tasks', async (req, res) => {
-  const meeting = meetings.find(m => m.id === req.params.meetingId);
+  const meetingId = req.params.meetingId;
+  let meeting: Meeting | undefined;
+  if (meetingId === 'general-tasks') {
+    meeting = await ensureGeneralMeeting();
+  } else {
+    meeting = meetings.find(m => m.id === meetingId);
+  }
   if (!meeting) return res.status(404).json({ error: 'Parent meeting not found' });
   const { title, assignee, dueDate, status } = req.body;
   if (!title || !dueDate) return res.status(400).json({ error: 'Title and due date are required.' });
@@ -383,7 +482,11 @@ router.post('/meetings/:meetingId/tasks', async (req, res) => {
     title: String(title).trim(),
     assignee: String(assignee || (meeting.participants[0] || 'Unassigned')).trim(),
     dueDate: String(dueDate).trim(),
-    status: (['To Do', 'In Progress', 'Done', 'Blocked', 'Pending Approval'].includes(status) ? status : 'To Do') as TaskStatus,
+    dueTime: req.body.dueTime ? String(req.body.dueTime).trim() : undefined,
+    status: (['To Do', 'In Progress', 'Done', 'Pending Approval'].includes(status) ? status : 'To Do') as TaskStatus,
+    priority: (['Low', 'Medium', 'High'].includes(req.body.priority) ? req.body.priority : 'Medium') as any,
+    description: req.body.description ? String(req.body.description).trim() : undefined,
+    tags: Array.isArray(req.body.tags) ? req.body.tags : [],
     createdAt: now,
     updatedAt: now,
   };
@@ -584,7 +687,7 @@ router.put('/tasks/:id', async (req, res) => {
   if (title !== undefined) targetTask.title = String(title).trim();
   if (assignee !== undefined) targetTask.assignee = String(assignee).trim();
   if (dueDate !== undefined) targetTask.dueDate = String(dueDate).trim();
-  if (status !== undefined && ['To Do', 'In Progress', 'Done', 'Blocked', 'Pending Approval'].includes(status)) {
+  if (status !== undefined && ['To Do', 'In Progress', 'Done', 'Pending Approval'].includes(status)) {
     targetTask.status = status as TaskStatus;
   }
   targetTask.updatedAt = now;

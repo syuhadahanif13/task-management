@@ -28,7 +28,6 @@ export const TaskItem: React.FC<TaskItemProps> = ({
   onSelectMeeting,
 }) => {
   const isDone = task.status === 'Done';
-  const isBlocked = task.status === 'Blocked';
   const isInProgress = task.status === 'In Progress';
   const isPendingApproval = task.status === 'Pending Approval';
 
@@ -36,43 +35,70 @@ export const TaskItem: React.FC<TaskItemProps> = ({
   const isOverdue = !isDone && !isPendingApproval && task.dueDate < today;
 
   const statusColors: Record<TaskStatus, { bg: string; text: string }> = {
-    'To Do': { bg: 'bg-notion-sidebar', text: 'text-notion-text-secondary' },
-    'In Progress': { bg: 'bg-sky-50', text: 'text-sky-700' },
-    'Done': { bg: 'bg-emerald-50', text: 'text-emerald-700' },
-    'Blocked': { bg: 'bg-rose-50', text: 'text-rose-700' },
-    'Pending Approval': { bg: 'bg-amber-50', text: 'text-amber-700' }
+    'To Do': { bg: 'bg-zinc-100 dark:bg-zinc-800', text: 'text-zinc-700 dark:text-zinc-300' },
+    'In Progress': { bg: 'bg-sky-50 dark:bg-sky-950/40', text: 'text-sky-700 dark:text-sky-300' },
+    'Done': { bg: 'bg-emerald-50 dark:bg-emerald-950/40', text: 'text-emerald-700 dark:text-emerald-300' },
+    'Pending Approval': { bg: 'bg-amber-50 dark:bg-amber-950/40', text: 'text-amber-700 dark:text-amber-300' }
   };
 
   return (
-    <div className="notion-task-card p-4 group">
+    <div className="bg-white dark:bg-zinc-800/90 rounded-[22px] p-4 shadow-sm border border-gray-200/60 dark:border-zinc-700/60 hover:shadow-md transition-all group">
       <div className="flex items-start gap-3">
         {/* Checkbox */}
         <button
           onClick={() => onStatusChange(task.id, isDone || isPendingApproval ? 'In Progress' : 'Done')}
-          className="mt-0.5 text-notion-text-secondary hover:text-notion-accent transition-colors"
+          className="mt-0.5 text-gray-400 hover:text-black dark:hover:text-white transition-colors shrink-0"
           title={isDone || isPendingApproval ? "Tandai belum selesai" : "Tandai selesai"}
         >
           {(isDone || isPendingApproval) ? (
-            <CheckCircle2 className="h-5 w-5 text-notion-success" />
+            <CheckCircle2 className="h-5 w-5 text-emerald-500" />
           ) : (
-            <Circle className="h-5 w-5" />
+            <Circle className="h-5 w-5 stroke-[1.5]" />
           )}
         </button>
 
         <div className="flex-1 min-w-0">
-          {showMeetingOrigin && (meetingTitle || meetingDate) && (
-            <div className="mb-1 flex items-center gap-1.5 text-[11px] text-notion-text-secondary">
-              <span>Dari Rapat:</span>
-              <button
-                onClick={() => onSelectMeeting?.(task.meetingId)}
-                className="font-medium hover:underline truncate max-w-[200px] text-notion-accent"
-                title={meetingTitle}
-              >
-                {meetingTitle || 'Rapat'}
-              </button>
-              {meetingDate && <span>({meetingDate})</span>}
-            </div>
+          {showMeetingOrigin && (
+            (!task.meetingId || task.meetingId === 'general-tasks') ? (
+              <div className="mb-1 flex items-center gap-1.5 text-[11px] text-notion-text-secondary">
+                <span className="notion-badge bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300 text-[10px] font-medium">
+                  Tugas Mandiri
+                </span>
+              </div>
+            ) : (meetingTitle || meetingDate) ? (
+              <div className="mb-1 flex items-center gap-1.5 text-[11px] text-notion-text-secondary">
+                <span>Dari Rapat:</span>
+                <button
+                  onClick={() => task.meetingId && onSelectMeeting?.(task.meetingId)}
+                  className="font-medium hover:underline truncate max-w-[200px] text-notion-accent"
+                  title={meetingTitle}
+                >
+                  {meetingTitle || 'Rapat'}
+                </button>
+                {meetingDate && <span>({meetingDate})</span>}
+              </div>
+            ) : null
           )}
+
+          <div className="flex items-center gap-2 flex-wrap mb-1">
+            {task.priority && (
+              <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full inline-flex items-center gap-1 ${
+                task.priority === 'High' ? 'bg-rose-50 text-rose-600 dark:bg-rose-950/40 dark:text-rose-300' :
+                task.priority === 'Low' ? 'bg-emerald-50 text-emerald-600 dark:bg-emerald-950/40 dark:text-emerald-300' :
+                'bg-amber-50 text-amber-600 dark:bg-amber-950/40 dark:text-amber-300'
+              }`}>
+                <span className={`w-1 h-1 rounded-full ${
+                  task.priority === 'High' ? 'bg-rose-500' : task.priority === 'Low' ? 'bg-emerald-500' : 'bg-amber-500'
+                }`} />
+                {task.priority}
+              </span>
+            )}
+            {task.tags && task.tags.map((tag) => (
+              <span key={tag} className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-purple-50 text-purple-700 dark:bg-purple-950/40 dark:text-purple-300">
+                {tag}
+              </span>
+            ))}
+          </div>
 
           <h4 className={`text-sm font-medium leading-snug ${isDone || isPendingApproval ? 'line-through text-notion-text-secondary' : 'text-notion-text'}`}>
             {task.title}
@@ -104,9 +130,8 @@ export const TaskItem: React.FC<TaskItemProps> = ({
           >
             <option value="To Do">To Do</option>
             <option value="In Progress">In Progress</option>
-            <option value="Done">Done</option>
-            <option value="Blocked">Blocked</option>
             <option value="Pending Approval">Pending Approval</option>
+            <option value="Done">Done</option>
           </select>
 
           <div className="flex items-center gap-1 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">

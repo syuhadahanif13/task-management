@@ -44,7 +44,7 @@ CREATE TABLE tasks (
     assignee VARCHAR(128) NOT NULL,          -- 4b. Assignee (Penanggung Jawab)
     due_date DATE NOT NULL,                  -- 4c. Due Date (Tenggat Waktu)
     status VARCHAR(32) NOT NULL              -- 4d. Status
-        CHECK (status IN ('To Do', 'In Progress', 'Done', 'Blocked')),
+        CHECK (status IN ('To Do', 'In Progress', 'Done', 'Pending Approval')),
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
