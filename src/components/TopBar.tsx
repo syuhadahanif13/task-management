@@ -96,9 +96,10 @@ export const TopBar: React.FC<TopBarProps> = ({
           Hidden on Desktop (lg:hidden)
          ──────────────────────────────────────────────────────────── */}
       <header
-        className="lg:hidden sticky top-0 z-30 bg-white/95 dark:bg-[#0f1015]/95 backdrop-blur-md border-b border-gray-100/80 dark:border-zinc-800/60 px-4 pb-3 transition-colors"
+        className="lg:hidden sticky top-0 z-30 bg-white/60 dark:bg-[#090a0f]/60 backdrop-blur-2xl backdrop-saturate-150 border-b border-white/40 dark:border-white/10 shadow-[0_4px_24px_rgba(0,0,0,0.03)] dark:shadow-[0_4px_24px_rgba(0,0,0,0.35)] px-4 pb-3 transition-colors"
         style={{
           paddingTop: 'max(env(safe-area-inset-top, 0px), 12px)',
+          WebkitBackdropFilter: 'blur(20px) saturate(150%)',
         }}
       >
         {isHome ? (
@@ -126,15 +127,15 @@ export const TopBar: React.FC<TopBarProps> = ({
             </div>
 
             {/* Right: Notification Bell + Burger Menu (≡) */}
-            <div className="flex items-center gap-1 shrink-0">
+            <div className="flex items-center gap-1.5 shrink-0">
               {/* Bell Icon */}
               <div className="relative">
                 <button
                   onClick={() => setIsNotifOpen(!isNotifOpen)}
-                  className="w-10 h-10 rounded-full flex items-center justify-center text-gray-700 dark:text-zinc-300 hover:bg-gray-100 dark:hover:bg-zinc-800 transition-colors active:scale-95"
+                  className="w-10 h-10 rounded-full flex items-center justify-center text-gray-700 dark:text-zinc-300 bg-white/40 hover:bg-white/70 dark:bg-white/5 dark:hover:bg-white/10 border border-white/60 dark:border-white/10 backdrop-blur-md transition-all active:scale-95 shadow-2xs"
                   aria-label="Notifikasi"
                 >
-                  <Bell className="w-5 h-5 stroke-[1.8]" />
+                  <Bell className="w-4.5 h-4.5 stroke-[1.8]" />
                   {overdueCount > 0 && (
                     <span className="absolute top-2 right-2 w-2 h-2 bg-rose-500 rounded-full ring-2 ring-white dark:ring-[#0f1015]" />
                   )}
@@ -142,7 +143,7 @@ export const TopBar: React.FC<TopBarProps> = ({
 
                 {/* Notification Dropdown */}
                 {isNotifOpen && (
-                  <div className="absolute right-0 mt-2 w-72 bg-white dark:bg-zinc-800 rounded-2xl shadow-xl border border-gray-100 dark:border-zinc-700 p-4 z-40 animate-in fade-in slide-in-from-top-2 duration-200">
+                  <div className="absolute right-0 mt-2 w-72 bg-white/85 dark:bg-zinc-900/85 backdrop-blur-2xl rounded-2xl shadow-2xl border border-white/50 dark:border-white/10 p-4 z-40 animate-in fade-in slide-in-from-top-2 duration-200">
                     <div className="flex items-center justify-between mb-2">
                       <p className="text-xs font-bold text-gray-900 dark:text-white">Pemberitahuan</p>
                       <button
@@ -153,7 +154,7 @@ export const TopBar: React.FC<TopBarProps> = ({
                       </button>
                     </div>
                     {overdueCount > 0 ? (
-                      <div className="p-2.5 rounded-xl bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300 text-xs flex items-center gap-2">
+                      <div className="p-2.5 rounded-xl bg-rose-50/80 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300 text-xs flex items-center gap-2">
                         <AlertCircle className="w-4 h-4 shrink-0" />
                         <span>Ada <strong>{overdueCount} tugas</strong> yang terlambat!</span>
                       </div>
@@ -169,7 +170,7 @@ export const TopBar: React.FC<TopBarProps> = ({
               {/* Burger Menu Button (≡) */}
               <button
                 onClick={() => setIsDrawerOpen(true)}
-                className="w-10 h-10 rounded-full flex items-center justify-center text-gray-800 dark:text-zinc-200 hover:bg-gray-100 dark:hover:bg-zinc-800 transition-colors active:scale-95"
+                className="w-10 h-10 rounded-full flex items-center justify-center text-gray-800 dark:text-zinc-200 bg-white/40 hover:bg-white/70 dark:bg-white/5 dark:hover:bg-white/10 border border-white/60 dark:border-white/10 backdrop-blur-md transition-all active:scale-95 shadow-2xs"
                 aria-label="Menu"
               >
                 <Menu className="w-5 h-5 stroke-[2]" />
@@ -182,7 +183,7 @@ export const TopBar: React.FC<TopBarProps> = ({
             {/* Left: Clean Back Button (←) */}
             <button
               onClick={handleBackClick}
-              className="w-10 h-10 -ml-1 rounded-full flex items-center justify-center text-gray-800 dark:text-zinc-200 hover:bg-gray-100 dark:hover:bg-zinc-800 transition-colors active:scale-95"
+              className="w-10 h-10 rounded-full flex items-center justify-center text-gray-800 dark:text-zinc-200 bg-white/40 hover:bg-white/70 dark:bg-white/5 dark:hover:bg-white/10 border border-white/60 dark:border-white/10 backdrop-blur-md transition-all active:scale-95 shadow-2xs"
               aria-label="Kembali"
             >
               <ArrowLeft className="w-5 h-5 stroke-[2]" />
@@ -196,11 +197,11 @@ export const TopBar: React.FC<TopBarProps> = ({
             </div>
 
             {/* Right: Plus (+) Action Button & Burger Menu (≡) */}
-            <div className="flex items-center gap-0.5 shrink-0">
+            <div className="flex items-center gap-1.5 shrink-0">
               {currentTab === 'all-tasks' && onOpenAddTask && (
                 <button
                   onClick={onOpenAddTask}
-                  className="w-9 h-9 rounded-full flex items-center justify-center text-gray-800 dark:text-zinc-200 hover:bg-gray-100 dark:hover:bg-zinc-800 transition-colors active:scale-95"
+                  className="w-10 h-10 rounded-full flex items-center justify-center text-gray-800 dark:text-zinc-200 bg-white/40 hover:bg-white/70 dark:bg-white/5 dark:hover:bg-white/10 border border-white/60 dark:border-white/10 backdrop-blur-md transition-all active:scale-95 shadow-2xs"
                   title="Tambah Tugas"
                   aria-label="Tambah Tugas"
                 >
@@ -211,7 +212,7 @@ export const TopBar: React.FC<TopBarProps> = ({
               {currentTab === 'meetings' && (
                 <button
                   onClick={onOpenNewMeeting}
-                  className="w-9 h-9 rounded-full flex items-center justify-center text-gray-800 dark:text-zinc-200 hover:bg-gray-100 dark:hover:bg-zinc-800 transition-colors active:scale-95"
+                  className="w-10 h-10 rounded-full flex items-center justify-center text-gray-800 dark:text-zinc-200 bg-white/40 hover:bg-white/70 dark:bg-white/5 dark:hover:bg-white/10 border border-white/60 dark:border-white/10 backdrop-blur-md transition-all active:scale-95 shadow-2xs"
                   title="Tambah Rapat"
                   aria-label="Tambah Rapat"
                 >
@@ -222,7 +223,7 @@ export const TopBar: React.FC<TopBarProps> = ({
               {/* Burger Menu Button (≡) */}
               <button
                 onClick={() => setIsDrawerOpen(true)}
-                className="w-10 h-10 rounded-full flex items-center justify-center text-gray-800 dark:text-zinc-200 hover:bg-gray-100 dark:hover:bg-zinc-800 transition-colors active:scale-95"
+                className="w-10 h-10 rounded-full flex items-center justify-center text-gray-800 dark:text-zinc-200 bg-white/40 hover:bg-white/70 dark:bg-white/5 dark:hover:bg-white/10 border border-white/60 dark:border-white/10 backdrop-blur-md transition-all active:scale-95 shadow-2xs"
                 aria-label="Menu"
               >
                 <Menu className="w-5 h-5 stroke-[2]" />
