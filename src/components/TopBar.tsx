@@ -37,6 +37,7 @@ interface TopBarProps {
   currentUser?: { username: string; role?: string; divisionId?: string } | null;
   overdueCount?: number;
   showBack?: boolean;
+  onSwitchToAdmin?: () => void;
 }
 
 export const TopBar: React.FC<TopBarProps> = ({
@@ -56,6 +57,7 @@ export const TopBar: React.FC<TopBarProps> = ({
   currentUser,
   overdueCount = 0,
   showBack,
+  onSwitchToAdmin,
 }) => {
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [isNotifOpen, setIsNotifOpen] = useState(false);
@@ -283,11 +285,26 @@ export const TopBar: React.FC<TopBarProps> = ({
                   <h4 className="text-xs font-bold text-gray-900 dark:text-white truncate leading-tight">
                     {userName}
                   </h4>
-                  <div className="flex items-center gap-1.5 mt-0.5">
-                    <span className="w-1.5 h-1.5 rounded-full bg-[#a3e635] shadow-[0_0_6px_#a3e635]" />
-                    <p className="text-[10px] text-gray-500 dark:text-zinc-400 capitalize truncate">
-                      {currentUser?.role || 'Member'}
-                    </p>
+                  <div className="flex items-center justify-between gap-1.5 mt-0.5">
+                    <div className="flex items-center gap-1.5 min-w-0">
+                      <span className="w-1.5 h-1.5 rounded-full bg-[#a3e635] shadow-[0_0_6px_#a3e635] shrink-0" />
+                      <p className="text-[10px] text-gray-500 dark:text-zinc-400 capitalize truncate">
+                        {currentUser?.role || 'Member'}
+                      </p>
+                    </div>
+                    {currentUser?.role === 'user' && onSwitchToAdmin && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setIsDrawerOpen(false);
+                          onSwitchToAdmin();
+                        }}
+                        className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-600 dark:text-indigo-400 transition-colors shrink-0"
+                        title="Beralih kembali ke Admin"
+                      >
+                        👑 Ke Admin
+                      </button>
+                    )}
                   </div>
                 </div>
               </div>

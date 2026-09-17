@@ -175,9 +175,18 @@ export const TaskItem: React.FC<TaskItemProps> = ({
       <div className="flex items-start gap-2.5 my-0.5">
         <button
           type="button"
-          onClick={() => onStatusChange(task.id, isDone || isPendingApproval ? 'In Progress' : 'Done')}
+          onClick={() => {
+            if (isDone || isPendingApproval) {
+              onStatusChange(task.id, 'In Progress');
+            } else if (onOpenSubmit) {
+              // Regular user: submitting work opens approval modal
+              onOpenSubmit(task);
+            } else {
+              onStatusChange(task.id, 'Done');
+            }
+          }}
           className="mt-0.5 text-gray-400 hover:text-emerald-500 transition-colors shrink-0"
-          title={isDone || isPendingApproval ? "Tandai belum selesai" : "Tandai selesai"}
+          title={isDone || isPendingApproval ? "Tandai belum selesai" : (onOpenSubmit ? "Kirim untuk persetujuan" : "Tandai selesai")}
         >
           {(isDone || isPendingApproval) ? (
             <CheckCircle2 className="w-5 h-5 text-emerald-500" />
@@ -221,7 +230,14 @@ export const TaskItem: React.FC<TaskItemProps> = ({
         <div className="relative shrink-0">
           <select
             value={task.status}
-            onChange={(e) => onStatusChange(task.id, e.target.value as TaskStatus)}
+            onChange={(e) => {
+              const newStatus = e.target.value as TaskStatus;
+              if (newStatus === 'Pending Approval' && onOpenSubmit) {
+                onOpenSubmit(task);
+              } else {
+                onStatusChange(task.id, newStatus);
+              }
+            }}
             className={`text-xs font-semibold pl-2.5 pr-6 py-1 rounded-full border border-gray-200/80 dark:border-zinc-700 cursor-pointer appearance-none transition-colors shadow-2xs ${statusColors[task.status].bg} ${statusColors[task.status].text}`}
           >
             <option value="To Do">To Do</option>

@@ -107,12 +107,27 @@ export const MeetingDetailView: React.FC<MeetingDetailViewProps> = ({
 
   const handleOpenReview = async (task: Task) => {
     try {
-      const submissions = await api.getTaskSubmissions(task.id);
+      let submissions: TaskSubmission[] = [];
+      try {
+        submissions = await api.getTaskSubmissions(task.id);
+      } catch (e) {
+        console.warn('Failed to load submissions:', e);
+      }
+
       const latest = submissions[0];
       if (latest) {
         setReviewSubmission(latest);
-        setReviewingTask(task);
+      } else {
+        setReviewSubmission({
+          id: 'sub-placeholder-' + task.id,
+          taskId: task.id,
+          submittedBy: task.assignee || 'User',
+          submittedAt: task.updatedAt || new Date().toISOString(),
+          status: 'pending',
+          notes: 'Pekerjaan telah diajukan dan menunggu review.',
+        });
       }
+      setReviewingTask(task);
     } catch (err) {
       console.error('Failed to load submissions:', err);
     }
@@ -205,17 +220,19 @@ export const MeetingDetailView: React.FC<MeetingDetailViewProps> = ({
                 <Edit3 className="h-3.5 w-3.5" />
                 <span>Edit</span>
               </button>
-              <button
-                onClick={() => {
-                  if (confirm('Hapus rapat ini dan seluruh tugas/action item yang terhubung?')) {
-                    onDeleteMeeting(meeting.id);
-                  }
-                }}
-                className="px-4 py-2 rounded-full bg-rose-50 dark:bg-rose-950/40 text-rose-600 dark:text-rose-300 hover:bg-rose-100 text-xs font-bold transition flex items-center gap-1.5"
-              >
-                <Trash2 className="h-3.5 w-3.5" />
-                <span>Hapus</span>
-              </button>
+              {currentUserRole === 'admin' && (
+                <button
+                  onClick={() => {
+                    if (confirm('Hapus rapat ini dan seluruh tugas/action item yang terhubung?')) {
+                      onDeleteMeeting(meeting.id);
+                    }
+                  }}
+                  className="px-4 py-2 rounded-full bg-rose-50 dark:bg-rose-950/40 text-rose-600 dark:text-rose-300 hover:bg-rose-100 text-xs font-bold transition flex items-center gap-1.5"
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                  <span>Hapus</span>
+                </button>
+              )}
             </>
           ) : (
             <>

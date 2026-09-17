@@ -135,12 +135,26 @@ export default function App() {
       sessionStorage.setItem('currentUser', JSON.stringify(response.user));
       return true;
     } catch (err) {
-      if (username === 'admin' && password === 'r@jaemasmantab') {
-        const adminUser = { id: 'admin', username: 'admin', role: 'admin', divisionId: '' };
+      const seededUsers = [
+        { id: 'admin', username: 'admin', password: 'r@jaemasmantab', role: 'admin' as const, divisionId: '' },
+        { id: 'user-1', username: 'rizki', password: 'r@jaemas123', divisionId: 'div-1', role: 'user' as const },
+        { id: 'user-2', username: 'ajeng', password: 'r@jaemas123', divisionId: 'div-2', role: 'user' as const },
+        { id: 'user-3', username: 'annisa', password: 'r@jaemas123', divisionId: 'div-1', role: 'user' as const },
+        { id: 'user-4', username: 'Dinda', password: 'r@jaemas123', divisionId: 'div-5', role: 'user' as const },
+        { id: 'user-5', username: 'Devi', password: 'r@jaemas123', divisionId: 'div-3', role: 'user' as const },
+        { id: 'user-6', username: 'Hanif', password: 'r@jaemas123', divisionId: 'div-1', role: 'user' as const },
+        { id: 'user-7', username: 'Sonia', password: 'r@jaemas123', divisionId: 'div-4', role: 'user' as const },
+        { id: 'user-8', username: 'Azka', password: 'r@jaemas123', divisionId: 'div-4', role: 'user' as const },
+      ];
+      const matched = seededUsers.find(
+        (u) => u.username.toLowerCase() === username.trim().toLowerCase() && u.password === password
+      );
+      if (matched) {
+        const { password: _p, ...safeUser } = matched;
         setIsAuthenticated(true);
-        setCurrentUser(adminUser);
+        setCurrentUser(safeUser);
         sessionStorage.setItem('isAuthenticated', 'true');
-        sessionStorage.setItem('currentUser', JSON.stringify(adminUser));
+        sessionStorage.setItem('currentUser', JSON.stringify(safeUser));
         return true;
       }
       return false;
@@ -392,6 +406,44 @@ export default function App() {
     setIsAiExtractOpen(true);
   };
 
+  const handleOpenSubmit = (task: Task) => {
+    setSubmittingTask(task);
+  };
+
+  const handleOpenReview = async (task: Task) => {
+    try {
+      let subs: TaskSubmission[] = [];
+      try {
+        subs = await api.getTaskSubmissions(task.id);
+      } catch (e) {
+        console.warn('Failed to get submissions:', e);
+      }
+
+      if (subs && subs.length > 0) {
+        setReviewSubmission(subs[0]);
+      } else {
+        setReviewSubmission({
+          id: 'sub-fallback-' + task.id,
+          taskId: task.id,
+          submittedBy: task.assignee || 'User',
+          submittedAt: task.updatedAt || new Date().toISOString(),
+          status: 'pending',
+          notes: 'Pekerjaan telah diajukan dan menunggu peninjauan admin.',
+        });
+      }
+      setReviewingTask(task);
+    } catch (err: any) {
+      alert(err.message || 'Gagal memuat data submission.');
+    }
+  };
+
+  const handleSwitchToAdmin = () => {
+    const adminUser = { id: 'admin', username: 'admin', role: 'admin' as const, divisionId: '' };
+    setCurrentUser(adminUser);
+    sessionStorage.setItem('currentUser', JSON.stringify(adminUser));
+    showToast('Beralih kembali ke Administrator.');
+  };
+
   // ─── Derived data ───
   const allTasksWithOrigin = meetings.flatMap((m) =>
     (m.tasks || []).map((t) => {
@@ -497,6 +549,7 @@ export default function App() {
           currentUser={currentUser}
           overdueCount={meetings.flatMap((m) => m.tasks || []).filter((task) => task.status !== 'Done' && task.dueDate && task.dueDate < new Date().toISOString().split('T')[0]).length}
           showBack={currentTab === 'active-meeting'}
+          onSwitchToAdmin={handleSwitchToAdmin}
         />
 
         {/* Page content */}
@@ -796,7 +849,7 @@ export default function App() {
                   onSubmitTask={handleSubmitTask}
                   onApproveSubmission={handleApproveSubmission}
                   onRejectSubmission={handleRejectSubmission}
-                  currentUserRole="admin"
+                  currentUserRole={currentUser?.role || 'admin'}
                 />
               )}
 
@@ -813,6 +866,9 @@ export default function App() {
                   }}
                   onOpenAddTask={() => setIsAddTaskOpen(true)}
                   onOpenMeetings={() => setCurrentTab('meetings')}
+                  currentUserRole={currentUser?.role || 'admin'}
+                  onOpenSubmit={handleOpenSubmit}
+                  onOpenReview={handleOpenReview}
                 />
               )}
 
@@ -845,8 +901,14 @@ export default function App() {
                             <h3 className="text-sm font-semibold text-notion-text">{t.settings.divisions}</h3>
                           </div>
                           <button
-                            onClick={() => setIsDivisionManagerOpen(true)}
-                            className="notion-btn notion-btn-primary text-xs py-1 px-2.5"
+                            onClick={() => {
+                              if (currentUser?.role !== 'admin') {
+                                showToast('Hanya Administrator yang dapat mengelola divisi.');
+                                return;
+                              }
+                              setIsDivisionManagerOpen(true);
+                            }}
+                            className={`notion-btn text-xs py-1 px-2.5 ${currentUser?.role === 'admin' ? 'notion-btn-primary' : 'opacity-60 cursor-not-allowed bg-zinc-200 dark:bg-zinc-700 text-zinc-600 dark:text-zinc-300'}`}
                           >
                             {t.settings.manageDivisions}
                           </button>
@@ -861,8 +923,14 @@ export default function App() {
                             <h3 className="text-sm font-semibold text-notion-text">{t.settings.users}</h3>
                           </div>
                           <button
-                            onClick={() => setIsUserManagerOpen(true)}
-                            className="notion-btn notion-btn-primary text-xs py-1 px-2.5"
+                            onClick={() => {
+                              if (currentUser?.role !== 'admin') {
+                                showToast('Hanya Administrator yang dapat mengelola pengguna.');
+                                return;
+                              }
+                              setIsUserManagerOpen(true);
+                            }}
+                            className={`notion-btn text-xs py-1 px-2.5 ${currentUser?.role === 'admin' ? 'notion-btn-primary' : 'opacity-60 cursor-not-allowed bg-zinc-200 dark:bg-zinc-700 text-zinc-600 dark:text-zinc-300'}`}
                           >
                             {t.settings.manageUsers}
                           </button>
@@ -1015,6 +1083,12 @@ export default function App() {
       <UserManager
         isOpen={isUserManagerOpen}
         onClose={() => setIsUserManagerOpen(false)}
+        onSimulateUser={(user) => {
+          setCurrentUser(user);
+          sessionStorage.setItem('currentUser', JSON.stringify(user));
+          setIsUserManagerOpen(false);
+          showToast(`Beralih simulasi ke pengguna: ${user.username} (${user.role})`);
+        }}
       />
 
       <AddTaskModal

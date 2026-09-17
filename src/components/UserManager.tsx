@@ -1,14 +1,15 @@
 import React, { useState, useEffect } from 'react';
 import { Division, User, CreateUserInput } from '../types';
 import { api } from '../api/client';
-import { Plus, Trash2, Edit3, X, Check, Users } from 'lucide-react';
+import { Plus, Trash2, Edit3, X, Check, Users, LogIn } from 'lucide-react';
 
 interface UserManagerProps {
   isOpen: boolean;
   onClose: () => void;
+  onSimulateUser?: (user: Omit<User, 'password'>) => void;
 }
 
-export const UserManager: React.FC<UserManagerProps> = ({ isOpen, onClose }) => {
+export const UserManager: React.FC<UserManagerProps> = ({ isOpen, onClose, onSimulateUser }) => {
   const [users, setUsers] = useState<Omit<User, 'password'>[]>([]);
   const [divisions, setDivisions] = useState<Division[]>([]);
   const [isCreating, setIsCreating] = useState(false);
@@ -229,6 +230,16 @@ export const UserManager: React.FC<UserManagerProps> = ({ isOpen, onClose }) => 
                         </div>
                       </div>
                       <div className="flex items-center gap-1">
+                        {onSimulateUser && (
+                          <button
+                            onClick={() => onSimulateUser(user)}
+                            className="px-2 py-1 text-xs text-indigo-600 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-950/40 rounded-md font-semibold flex items-center gap-1 transition-colors"
+                            title={`Simulasi login sebagai ${user.username}`}
+                          >
+                            <LogIn className="w-3.5 h-3.5" />
+                            <span className="hidden sm:inline text-[11px]">Simulasi</span>
+                          </button>
+                        )}
                         <button
                           onClick={() => {
                             setEditingId(user.id);
@@ -240,12 +251,14 @@ export const UserManager: React.FC<UserManagerProps> = ({ isOpen, onClose }) => 
                             });
                           }}
                           className="p-1.5 text-notion-text-secondary hover:text-notion-text hover:bg-notion-hover rounded-md"
+                          title="Edit User"
                         >
                           <Edit3 className="h-3.5 w-3.5" />
                         </button>
                         <button
                           onClick={() => handleDelete(user.id)}
                           className="p-1.5 text-notion-text-secondary hover:text-notion-danger hover:bg-rose-50 rounded-md"
+                          title="Hapus User"
                         >
                           <Trash2 className="h-3.5 w-3.5" />
                         </button>

@@ -18,6 +18,8 @@ export const TaskFormModal: React.FC<TaskFormModalProps> = ({
   participants = [],
 }) => {
   const [title, setTitle] = useState('');
+  const [description, setDescription] = useState('');
+  const [priority, setPriority] = useState<string>('Medium');
   const [assignee, setAssignee] = useState('');
   const [dueDate, setDueDate] = useState('');
   const [status, setStatus] = useState<TaskStatus>('To Do');
@@ -27,6 +29,8 @@ export const TaskFormModal: React.FC<TaskFormModalProps> = ({
   useEffect(() => {
     if (task) {
       setTitle(task.title);
+      setDescription(task.description || '');
+      setPriority(task.priority || 'Medium');
       setAssignee(task.assignee);
       setDueDate(task.dueDate);
       setStatus(task.status);
@@ -47,6 +51,8 @@ export const TaskFormModal: React.FC<TaskFormModalProps> = ({
     try {
       await onSave(task.id, {
         title: title.trim(),
+        description: description.trim(),
+        priority,
         assignee: assignee.trim() || 'Unassigned',
         dueDate: dueDate.trim(),
         status,
@@ -91,6 +97,47 @@ export const TaskFormModal: React.FC<TaskFormModalProps> = ({
               required
               className="notion-input text-sm py-2 px-3"
             />
+          </div>
+
+          {/* Description */}
+          <div>
+            <label className="text-xs font-semibold text-zinc-800 dark:text-zinc-200 block mb-1">
+              Deskripsi (Opsional)
+            </label>
+            <textarea
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              rows={2}
+              placeholder="Tambahkan detail catatan atau instruksi tugas..."
+              className="notion-input text-xs py-2 px-3 resize-none"
+            />
+          </div>
+
+          {/* Priority */}
+          <div>
+            <label className="text-xs font-semibold text-zinc-800 dark:text-zinc-200 block mb-1">
+              Prioritas
+            </label>
+            <div className="grid grid-cols-3 gap-2">
+              {(['Low', 'Medium', 'High'] as const).map((p) => (
+                <button
+                  key={p}
+                  type="button"
+                  onClick={() => setPriority(p)}
+                  className={`py-1.5 px-3 rounded-lg text-xs font-bold border transition-all ${
+                    priority === p
+                      ? p === 'High'
+                        ? 'bg-rose-50 border-rose-300 text-rose-700 dark:bg-rose-950/40 dark:border-rose-800 dark:text-rose-300'
+                        : p === 'Low'
+                        ? 'bg-emerald-50 border-emerald-300 text-emerald-700 dark:bg-emerald-950/40 dark:border-emerald-800 dark:text-emerald-300'
+                        : 'bg-amber-50 border-amber-300 text-amber-700 dark:bg-amber-950/40 dark:border-amber-800 dark:text-amber-300'
+                      : 'bg-zinc-50 dark:bg-zinc-800 border-zinc-200 dark:border-zinc-700 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100'
+                  }`}
+                >
+                  {p}
+                </button>
+              ))}
+            </div>
           </div>
 
           {/* Assignee */}

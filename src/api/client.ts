@@ -99,6 +99,8 @@ export const api = {
             assignee: sbTask.assignee,
             dueDate: sbTask.due_date,
             status: sbTask.status,
+            priority: (updates.priority || sbTask.priority || 'Medium') as any,
+            description: updates.description !== undefined ? updates.description : sbTask.description,
             createdAt: sbTask.created_at,
             updatedAt: sbTask.updated_at,
           };
@@ -130,6 +132,8 @@ export const api = {
             assignee: sbTask.assignee,
             dueDate: sbTask.due_date,
             status: sbTask.status,
+            priority: (updates.priority || sbTask.priority || 'Medium') as any,
+            description: updates.description !== undefined ? updates.description : sbTask.description,
             createdAt: sbTask.created_at,
             updatedAt: sbTask.updated_at,
           };
