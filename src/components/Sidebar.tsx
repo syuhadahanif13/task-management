@@ -88,12 +88,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             <p className="text-sm font-bold text-gray-900 dark:text-white leading-tight truncate tracking-tight">
               TaskManager
             </p>
-            <div className="flex items-center gap-1.5 mt-0.5">
-              <span className="w-1.5 h-1.5 rounded-full bg-[#a3e635] shadow-[0_0_8px_#a3e635]" />
-              <p className="text-[10px] font-semibold text-gray-500 dark:text-zinc-400 uppercase tracking-wider">
-                Glass Workspace
-              </p>
-            </div>
+
           </div>
         </div>
       </div>
@@ -150,11 +145,10 @@ export const Sidebar: React.FC<SidebarProps> = ({
             <button
               key={tab}
               onClick={() => onTabChange(tab)}
-              className={`group w-full flex items-center gap-3 px-3.5 py-2.5 rounded-2xl text-xs font-semibold text-left transition-all duration-200 relative overflow-hidden ${
-                active
+              className={`group w-full flex items-center gap-3 px-3.5 py-2.5 rounded-2xl text-xs font-semibold text-left transition-all duration-200 relative overflow-hidden ${active
                   ? 'bg-white/95 dark:bg-white/10 text-gray-950 dark:text-white border border-white dark:border-white/20 shadow-[0_0_22px_rgba(163,230,53,0.35)] dark:shadow-[0_0_24px_rgba(163,230,53,0.22)]'
                   : 'text-gray-600 dark:text-zinc-400 hover:text-gray-950 dark:hover:text-white hover:bg-white/50 dark:hover:bg-white/5 border border-transparent hover:border-white/40 dark:hover:border-white/10'
-              }`}
+                }`}
             >
               {/* Neon active bar indicator */}
               {active && (
@@ -162,22 +156,20 @@ export const Sidebar: React.FC<SidebarProps> = ({
               )}
 
               <Icon
-                className={`w-4 h-4 shrink-0 transition-transform group-hover:scale-110 ${
-                  active
+                className={`w-4 h-4 shrink-0 transition-transform group-hover:scale-110 ${active
                     ? 'text-lime-600 dark:text-[#a3e635] drop-shadow-[0_0_8px_rgba(163,230,53,0.7)]'
                     : 'text-gray-400 dark:text-zinc-500 group-hover:text-gray-700 dark:group-hover:text-zinc-300'
-                }`}
+                  }`}
               />
 
               <span className="flex-1 truncate">{label}</span>
 
               {badge !== undefined && badge > 0 && (
                 <span
-                  className={`text-[10px] font-bold px-2 py-0.5 rounded-full min-w-[20px] text-center transition-all ${
-                    active
+                  className={`text-[10px] font-bold px-2 py-0.5 rounded-full min-w-[20px] text-center transition-all ${active
                       ? 'bg-[#a3e635] text-zinc-950 shadow-[0_0_10px_rgba(163,230,53,0.6)]'
                       : 'bg-black/5 dark:bg-white/10 text-gray-600 dark:text-zinc-400 group-hover:bg-white/30 dark:group-hover:bg-white/15'
-                  }`}
+                    }`}
                 >
                   {badge}
                 </span>
@@ -193,21 +185,19 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
           <button
             onClick={() => onTabChange('settings')}
-            className={`group w-full flex items-center gap-3 px-3.5 py-2.5 rounded-2xl text-xs font-semibold text-left transition-all duration-200 relative overflow-hidden ${
-              isActive('settings')
+            className={`group w-full flex items-center gap-3 px-3.5 py-2.5 rounded-2xl text-xs font-semibold text-left transition-all duration-200 relative overflow-hidden ${isActive('settings')
                 ? 'bg-white/95 dark:bg-white/10 text-gray-950 dark:text-white border border-white dark:border-white/20 shadow-[0_0_22px_rgba(163,230,53,0.35)] dark:shadow-[0_0_24px_rgba(163,230,53,0.22)]'
                 : 'text-gray-600 dark:text-zinc-400 hover:text-gray-950 dark:hover:text-white hover:bg-white/50 dark:hover:bg-white/5 border border-transparent hover:border-white/40 dark:hover:border-white/10'
-            }`}
+              }`}
           >
             {isActive('settings') && (
               <span className="absolute left-0 top-2 bottom-2 w-1.5 rounded-r-full bg-[#a3e635] shadow-[0_0_12px_#a3e635]" />
             )}
             <Settings
-              className={`w-4 h-4 shrink-0 transition-transform group-hover:rotate-45 ${
-                isActive('settings')
+              className={`w-4 h-4 shrink-0 transition-transform group-hover:rotate-45 ${isActive('settings')
                   ? 'text-lime-600 dark:text-[#a3e635] drop-shadow-[0_0_8px_rgba(163,230,53,0.7)]'
                   : 'text-gray-400 dark:text-zinc-500 group-hover:text-gray-700 dark:group-hover:text-zinc-300'
-              }`}
+                }`}
             />
             <span className="flex-1 truncate">{t.nav.settings}</span>
           </button>
