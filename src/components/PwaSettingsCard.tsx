@@ -24,10 +24,10 @@ export const PwaSettingsCard: React.FC = () => {
       <div className="p-4 rounded-2xl bg-notion-sidebar border border-notion-border flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div className="flex items-start sm:items-center gap-3.5">
           <div className="w-12 h-12 rounded-2xl bg-[#18191d] border border-white/10 flex items-center justify-center shrink-0 shadow-sm overflow-hidden">
-            <img src="/icons/icon-192.png" alt="TaskManager" className="w-9 h-9 object-contain" />
+            <img src="/icons/icon-192.png" alt="MeetungHub" className="w-9 h-9 object-contain" />
           </div>
           <div>
-            <h4 className="text-sm font-semibold text-notion-text">TaskManager Mobile & Desktop</h4>
+            <h4 className="text-sm font-semibold text-notion-text">MeetingHub Mobile & Desktop</h4>
             <p className="text-xs text-notion-text-secondary mt-0.5">
               Install ke layar beranda untuk pengalaman layar penuh, loading instan, dan performa maksimal.
             </p>
