@@ -250,7 +250,7 @@ export const TopBar: React.FC<TopBarProps> = ({
                   <div className="w-7 h-7 rounded-lg bg-gray-950 dark:bg-white/10 border border-white/20 flex items-center justify-center text-[#a3e635] font-black text-xs shadow-[0_0_12px_rgba(163,230,53,0.4)]">
                     T
                   </div>
-                  <span className="font-bold text-sm text-gray-900 dark:text-white">TaskManager</span>
+                  <span className="font-bold text-sm text-gray-900 dark:text-white">Meeting Hub</span>
                 </div>
                 <button
                   onClick={() => setIsDrawerOpen(false)}
@@ -338,21 +338,19 @@ export const TopBar: React.FC<TopBarProps> = ({
                     <button
                       key={tab}
                       onClick={() => handleNavClick(tab)}
-                      className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-2xl text-xs font-semibold text-left transition-all duration-200 relative overflow-hidden ${
-                        active
+                      className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-2xl text-xs font-semibold text-left transition-all duration-200 relative overflow-hidden ${active
                           ? 'bg-white/95 dark:bg-white/10 text-gray-950 dark:text-white border border-white dark:border-white/20 shadow-[0_0_20px_rgba(163,230,53,0.3)]'
                           : 'text-gray-600 dark:text-zinc-400 hover:text-gray-950 dark:hover:text-white hover:bg-white/40 dark:hover:bg-white/5 border border-transparent'
-                      }`}
+                        }`}
                     >
                       {active && (
                         <span className="absolute left-0 top-2 bottom-2 w-1.5 rounded-r-full bg-[#a3e635] shadow-[0_0_10px_#a3e635]" />
                       )}
                       <Icon
-                        className={`w-4 h-4 shrink-0 ${
-                          active
+                        className={`w-4 h-4 shrink-0 ${active
                             ? 'text-lime-600 dark:text-[#a3e635] drop-shadow-[0_0_6px_rgba(163,230,53,0.7)]'
                             : 'text-gray-400 dark:text-zinc-500'
-                        }`}
+                          }`}
                       />
                       <span className="truncate">{label}</span>
                     </button>
