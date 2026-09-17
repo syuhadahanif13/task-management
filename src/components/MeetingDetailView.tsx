@@ -361,12 +361,12 @@ export const MeetingDetailView: React.FC<MeetingDetailViewProps> = ({
                         placeholder="Nama peserta baru..."
                         value={newParticipantInput}
                         onChange={(e) => setNewParticipantInput(e.target.value)}
-                        onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), handleAddParticipantSubmit())}
+                        onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), handleAddQuickParticipant())}
                         className="flex-1 bg-gray-50 dark:bg-zinc-800 rounded-xl px-3 py-1.5 text-xs font-semibold"
                       />
                       <button
                         type="button"
-                        onClick={handleAddParticipantSubmit}
+                        onClick={handleAddQuickParticipant}
                         className="px-3 py-1.5 rounded-xl bg-[#18191d] text-white text-xs font-bold"
                       >
                         +

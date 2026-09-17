@@ -10,11 +10,15 @@ export type TaskStatus = 'To Do' | 'In Progress' | 'Done' | 'Pending Approval';
 
 export interface Task {
   id: string;
-  meetingId: string;
+  meetingId?: string;
   title: string;
   assignee: string;
   dueDate: string;
+  dueTime?: string;
   status: TaskStatus;
+  priority?: string;
+  description?: string;
+  tags?: string[];
   createdAt?: string;
   updatedAt?: string;
 }
@@ -949,7 +953,18 @@ seedInitialData();
 // Serve static frontend in production (Vercel)
 if (process.env.NODE_ENV === 'production' || process.env.VERCEL) {
   const distPath = path.join(process.cwd(), 'dist');
-  app.use(express.static(distPath));
+  app.use(
+    express.static(distPath, {
+      setHeaders: (res, filePath) => {
+        if (filePath.endsWith('sw.js')) {
+          res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+          res.setHeader('Service-Worker-Allowed', '/');
+        } else if (filePath.endsWith('manifest.webmanifest')) {
+          res.setHeader('Content-Type', 'application/manifest+json; charset=utf-8');
+        }
+      },
+    })
+  );
   app.get('*', (req, res) => {
     res.sendFile(path.join(distPath, 'index.html'));
   });

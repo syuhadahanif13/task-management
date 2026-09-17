@@ -26,6 +26,8 @@ import { DivisionManager } from './components/DivisionManager';
 import { UserManager } from './components/UserManager';
 import { AddTaskModal } from './components/AddTaskModal';
 import { LoginPage } from './components/LoginPage';
+import { PwaInstallBanner } from './components/PwaInstallBanner';
+import { PwaSettingsCard } from './components/PwaSettingsCard';
 
 import {
   Check,
@@ -104,6 +106,24 @@ export default function App() {
   useEffect(() => {
     localStorage.setItem('language', language);
   }, [language]);
+
+  // Handle PWA shortcuts & deep links (e.g., ?tab=all-tasks&action=new-task)
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      const tabParam = params.get('tab') as AppTab | null;
+      const actionParam = params.get('action');
+
+      if (tabParam && ['dashboard', 'calendar', 'meetings', 'all-tasks', 'team', 'settings'].includes(tabParam)) {
+        setCurrentTab(tabParam);
+      }
+      if (actionParam === 'new-task') {
+        setIsAddTaskOpen(true);
+      } else if (actionParam === 'new-meeting') {
+        setIsNewMeetingOpen(true);
+      }
+    }
+  }, []);
 
   // ─── Handlers: Auth ───
   const handleLogin = async (username: string, password: string) => {
@@ -913,6 +933,9 @@ export default function App() {
                       </div>
                     </div>
                   </div>
+
+                  {/* PWA Application Settings */}
+                  <PwaSettingsCard />
                 </div>
               )}
             </>
@@ -1013,6 +1036,9 @@ export default function App() {
         onClose={() => setIsAddTaskOpen(false)}
         onAddTask={handleAddTaskToMeeting}
       />
+
+      {/* Progressive Web App (PWA) Install Prompt */}
+      <PwaInstallBanner />
     </div>
   );
 }
