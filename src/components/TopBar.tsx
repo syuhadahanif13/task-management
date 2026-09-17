@@ -226,61 +226,71 @@ export const TopBar: React.FC<TopBarProps> = ({
       </header>
 
       {/* ────────────────────────────────────────────────────────────
-          BURGER MENU SLIDE-OVER DRAWER (Right Side Drawer)
+          BURGER MENU SLIDE-OVER DRAWER (Glassmorphism + Neon Blur)
          ──────────────────────────────────────────────────────────── */}
       {isDrawerOpen && (
         <div className="lg:hidden fixed inset-0 z-50 flex justify-end">
           {/* Backdrop Overlay */}
           <div
             onClick={() => setIsDrawerOpen(false)}
-            className="fixed inset-0 bg-black/40 backdrop-blur-xs transition-opacity animate-in fade-in duration-200"
+            className="fixed inset-0 bg-black/40 backdrop-blur-sm transition-opacity animate-in fade-in duration-200"
           />
 
-          {/* Drawer Panel */}
-          <aside className="relative w-[82vw] max-w-xs bg-white dark:bg-[#16171d] text-gray-900 dark:text-zinc-100 h-full shadow-2xl z-10 flex flex-col justify-between p-5 overflow-y-auto animate-in slide-in-from-right duration-300">
-            <div>
+          {/* Glassmorphism Drawer Panel */}
+          <aside className="relative w-[84vw] max-w-xs bg-white/80 dark:bg-[#0e0f14]/85 backdrop-blur-3xl border-l border-white/60 dark:border-white/10 text-gray-900 dark:text-zinc-100 h-full shadow-[0_8px_32px_0_rgba(0,0,0,0.25)] dark:shadow-[0_8px_32px_0_rgba(0,0,0,0.6)] z-10 flex flex-col justify-between p-5 overflow-hidden animate-in slide-in-from-right duration-300">
+            {/* Neon Blur Ambient Orbs */}
+            <div className="absolute -top-10 -right-10 w-44 h-44 rounded-full bg-[#a3e635]/20 dark:bg-[#a3e635]/15 blur-[60px] pointer-events-none" />
+            <div className="absolute top-1/2 -left-12 w-48 h-48 rounded-full bg-[#38bdf8]/20 dark:bg-[#38bdf8]/15 blur-[70px] pointer-events-none" />
+            <div className="absolute -bottom-10 -right-10 w-40 h-40 rounded-full bg-[#a855f7]/20 dark:bg-[#818cf8]/15 blur-[60px] pointer-events-none" />
+
+            <div className="relative z-10 overflow-y-auto pr-0.5">
               {/* Drawer Header */}
-              <div className="flex items-center justify-between pb-4 border-b border-gray-100 dark:border-zinc-800/80">
+              <div className="flex items-center justify-between pb-3.5 border-b border-white/40 dark:border-white/10">
                 <div className="flex items-center gap-2">
-                  <div className="w-7 h-7 rounded-lg bg-[#18191d] flex items-center justify-center text-white font-black text-xs">
+                  <div className="w-7 h-7 rounded-lg bg-gray-950 dark:bg-white/10 border border-white/20 flex items-center justify-center text-[#a3e635] font-black text-xs shadow-[0_0_12px_rgba(163,230,53,0.4)]">
                     T
                   </div>
                   <span className="font-bold text-sm text-gray-900 dark:text-white">TaskManager</span>
                 </div>
                 <button
                   onClick={() => setIsDrawerOpen(false)}
-                  className="w-8 h-8 rounded-full flex items-center justify-center text-gray-400 hover:text-gray-700 dark:hover:text-zinc-200 hover:bg-gray-100 dark:hover:bg-zinc-800 transition-colors"
+                  className="w-8 h-8 rounded-full flex items-center justify-center text-gray-400 hover:text-gray-700 dark:hover:text-zinc-200 bg-white/40 dark:bg-white/5 border border-white/60 dark:border-white/10 transition-colors"
                   aria-label="Tutup Menu"
                 >
-                  <X className="w-5 h-5" />
+                  <X className="w-4 h-4" />
                 </button>
               </div>
 
-              {/* User Profile Snippet */}
-              <div className="my-4 p-3.5 rounded-2xl bg-gray-50 dark:bg-zinc-800/60 flex items-center gap-3 border border-gray-100 dark:border-zinc-800">
-                <div className="w-10 h-10 rounded-full bg-gradient-to-tr from-amber-400 to-indigo-500 flex items-center justify-center text-white font-bold text-sm shrink-0">
-                  {userName.charAt(0).toUpperCase()}
+              {/* User Profile Snippet (Glass Card) */}
+              <div className="my-3.5 p-3 rounded-2xl bg-white/50 dark:bg-white/5 flex items-center gap-3 border border-white/60 dark:border-white/10 shadow-xs">
+                <div className="w-10 h-10 rounded-full bg-gradient-to-tr from-amber-400 via-rose-400 to-indigo-500 p-[1.5px] shadow-xs shrink-0">
+                  <div className="w-full h-full rounded-full bg-white dark:bg-zinc-900 flex items-center justify-center text-xs font-bold text-gray-800 dark:text-zinc-100">
+                    {userName.charAt(0).toUpperCase()}
+                  </div>
                 </div>
                 <div className="min-w-0 flex-1">
                   <h4 className="text-xs font-bold text-gray-900 dark:text-white truncate leading-tight">
                     {userName}
                   </h4>
-                  <p className="text-[11px] text-gray-500 dark:text-zinc-400 capitalize truncate">
-                    {currentUser?.role || 'Member'}
-                  </p>
+                  <div className="flex items-center gap-1.5 mt-0.5">
+                    <span className="w-1.5 h-1.5 rounded-full bg-[#a3e635] shadow-[0_0_6px_#a3e635]" />
+                    <p className="text-[10px] text-gray-500 dark:text-zinc-400 capitalize truncate">
+                      {currentUser?.role || 'Member'}
+                    </p>
+                  </div>
                 </div>
               </div>
 
-              {/* Quick Actions */}
-              <div className="mb-4 space-y-2">
+              {/* Quick Actions (Neon Glowing Buttons) */}
+              <div className="mb-3.5 space-y-2">
                 <button
                   onClick={() => {
                     setIsDrawerOpen(false);
                     onOpenAiExtract();
                   }}
-                  className="w-full flex items-center gap-2.5 px-3.5 py-2.5 rounded-xl bg-indigo-50 dark:bg-indigo-950/40 text-ios-indigo border border-indigo-200/50 dark:border-indigo-800/50 font-semibold text-xs transition-colors active:scale-98"
+                  className="w-full flex items-center gap-2.5 px-3.5 py-2.5 rounded-xl bg-purple-500/10 hover:bg-purple-500/15 dark:bg-purple-500/15 text-purple-700 dark:text-purple-300 border border-purple-300/40 dark:border-purple-500/30 font-semibold text-xs transition-all duration-200 active:scale-98 shadow-[0_0_15px_rgba(168,85,247,0.15)]"
                 >
-                  <Sparkles className="w-4 h-4 text-indigo-500 shrink-0" />
+                  <Sparkles className="w-4 h-4 text-purple-500 drop-shadow-[0_0_6px_rgba(168,85,247,0.6)] shrink-0" />
                   <span>AI Extract Notula</span>
                 </button>
 
@@ -290,9 +300,9 @@ export const TopBar: React.FC<TopBarProps> = ({
                       setIsDrawerOpen(false);
                       onOpenAddTask?.();
                     }}
-                    className="flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl bg-gray-100 dark:bg-zinc-800 text-gray-800 dark:text-zinc-200 text-xs font-medium hover:bg-gray-200 dark:hover:bg-zinc-700 transition-colors"
+                    className="flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl bg-white/70 hover:bg-white/90 dark:bg-white/5 dark:hover:bg-white/10 text-gray-800 dark:text-zinc-200 text-xs font-medium border border-white/60 dark:border-white/10 hover:border-sky-400/50 hover:shadow-[0_0_15px_rgba(56,189,248,0.25)] transition-all"
                   >
-                    <Plus className="w-3.5 h-3.5" />
+                    <Plus className="w-3.5 h-3.5 text-sky-500" />
                     <span>Tugas Baru</span>
                   </button>
 
@@ -301,9 +311,9 @@ export const TopBar: React.FC<TopBarProps> = ({
                       setIsDrawerOpen(false);
                       onOpenNewMeeting();
                     }}
-                    className="flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl bg-[#18191d] text-white text-xs font-medium hover:bg-black transition-colors shadow-xs"
+                    className="flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl bg-gray-900/90 hover:bg-black dark:bg-white/10 dark:hover:bg-white/15 text-white text-xs font-medium border border-white/20 hover:shadow-[0_0_20px_rgba(163,230,53,0.3)] transition-all shadow-xs"
                   >
-                    <Plus className="w-3.5 h-3.5" />
+                    <Plus className="w-3.5 h-3.5 text-[#a3e635]" />
                     <span>Rapat Baru</span>
                   </button>
                 </div>
@@ -311,101 +321,63 @@ export const TopBar: React.FC<TopBarProps> = ({
 
               {/* Navigation Menu Links */}
               <nav className="space-y-1">
-                <p className="text-[10px] font-bold uppercase tracking-wider text-gray-400 dark:text-zinc-500 px-3 py-1">
+                <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400 dark:text-zinc-500 px-3 py-1">
                   Menu Utama
                 </p>
 
-                <button
-                  onClick={() => handleNavClick('dashboard')}
-                  className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-semibold transition-colors ${
-                    currentTab === 'dashboard'
-                      ? 'bg-[#18191d] text-white shadow-xs'
-                      : 'text-gray-700 dark:text-zinc-300 hover:bg-gray-100 dark:hover:bg-zinc-800'
-                  }`}
-                >
-                  <LayoutDashboard className="w-4 h-4" />
-                  <span>{t.nav.dashboard}</span>
-                </button>
-
-                <button
-                  onClick={() => handleNavClick('all-tasks')}
-                  className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-semibold transition-colors ${
-                    currentTab === 'all-tasks'
-                      ? 'bg-[#18191d] text-white shadow-xs'
-                      : 'text-gray-700 dark:text-zinc-300 hover:bg-gray-100 dark:hover:bg-zinc-800'
-                  }`}
-                >
-                  <CheckSquare className="w-4 h-4" />
-                  <span>{t.nav.tasks}</span>
-                </button>
-
-                <button
-                  onClick={() => handleNavClick('meetings')}
-                  className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-semibold transition-colors ${
-                    currentTab === 'meetings'
-                      ? 'bg-[#18191d] text-white shadow-xs'
-                      : 'text-gray-700 dark:text-zinc-300 hover:bg-gray-100 dark:hover:bg-zinc-800'
-                  }`}
-                >
-                  <BookOpen className="w-4 h-4" />
-                  <span>{t.nav.meetings}</span>
-                </button>
-
-                <button
-                  onClick={() => handleNavClick('calendar')}
-                  className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-semibold transition-colors ${
-                    currentTab === 'calendar'
-                      ? 'bg-[#18191d] text-white shadow-xs'
-                      : 'text-gray-700 dark:text-zinc-300 hover:bg-gray-100 dark:hover:bg-zinc-800'
-                  }`}
-                >
-                  <CalendarDays className="w-4 h-4" />
-                  <span>{t.nav.calendar}</span>
-                </button>
-
-                <button
-                  onClick={() => handleNavClick('team')}
-                  className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-semibold transition-colors ${
-                    currentTab === 'team'
-                      ? 'bg-[#18191d] text-white shadow-xs'
-                      : 'text-gray-700 dark:text-zinc-300 hover:bg-gray-100 dark:hover:bg-zinc-800'
-                  }`}
-                >
-                  <Users className="w-4 h-4" />
-                  <span>{t.nav.team}</span>
-                </button>
-
-                <button
-                  onClick={() => handleNavClick('settings')}
-                  className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-semibold transition-colors ${
-                    currentTab === 'settings'
-                      ? 'bg-[#18191d] text-white shadow-xs'
-                      : 'text-gray-700 dark:text-zinc-300 hover:bg-gray-100 dark:hover:bg-zinc-800'
-                  }`}
-                >
-                  <Settings className="w-4 h-4" />
-                  <span>{t.nav.settings}</span>
-                </button>
+                {[
+                  { tab: 'dashboard' as AppTab, label: t.nav.dashboard, icon: LayoutDashboard },
+                  { tab: 'all-tasks' as AppTab, label: t.nav.tasks, icon: CheckSquare },
+                  { tab: 'meetings' as AppTab, label: t.nav.meetings, icon: BookOpen },
+                  { tab: 'calendar' as AppTab, label: t.nav.calendar, icon: CalendarDays },
+                  { tab: 'team' as AppTab, label: t.nav.team, icon: Users },
+                  { tab: 'settings' as AppTab, label: t.nav.settings, icon: Settings },
+                ].map(({ tab, label, icon: Icon }) => {
+                  const active = currentTab === tab;
+                  return (
+                    <button
+                      key={tab}
+                      onClick={() => handleNavClick(tab)}
+                      className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-2xl text-xs font-semibold text-left transition-all duration-200 relative overflow-hidden ${
+                        active
+                          ? 'bg-white/95 dark:bg-white/10 text-gray-950 dark:text-white border border-white dark:border-white/20 shadow-[0_0_20px_rgba(163,230,53,0.3)]'
+                          : 'text-gray-600 dark:text-zinc-400 hover:text-gray-950 dark:hover:text-white hover:bg-white/40 dark:hover:bg-white/5 border border-transparent'
+                      }`}
+                    >
+                      {active && (
+                        <span className="absolute left-0 top-2 bottom-2 w-1.5 rounded-r-full bg-[#a3e635] shadow-[0_0_10px_#a3e635]" />
+                      )}
+                      <Icon
+                        className={`w-4 h-4 shrink-0 ${
+                          active
+                            ? 'text-lime-600 dark:text-[#a3e635] drop-shadow-[0_0_6px_rgba(163,230,53,0.7)]'
+                            : 'text-gray-400 dark:text-zinc-500'
+                        }`}
+                      />
+                      <span className="truncate">{label}</span>
+                    </button>
+                  );
+                })}
               </nav>
             </div>
 
             {/* Drawer Bottom Controls */}
-            <div className="pt-4 border-t border-gray-100 dark:border-zinc-800/80 space-y-2">
-              <div className="flex items-center justify-between px-1">
+            <div className="pt-3 border-t border-white/40 dark:border-white/10 space-y-2 relative z-10 bg-white/20 dark:bg-black/20 backdrop-blur-md rounded-2xl p-2.5">
+              <div className="flex items-center justify-between gap-2">
                 {/* Dark Mode Toggle */}
                 <button
                   onClick={onToggleDarkMode}
-                  className="flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-medium text-gray-700 dark:text-zinc-300 hover:bg-gray-100 dark:hover:bg-zinc-800 transition-colors"
+                  className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl bg-white/50 dark:bg-white/5 hover:bg-white/80 dark:hover:bg-white/10 text-gray-700 dark:text-zinc-300 text-xs font-semibold border border-white/60 dark:border-white/10 transition-all active:scale-95"
                 >
                   {isDarkMode ? (
                     <>
-                      <Sun className="w-4 h-4 text-amber-400" />
-                      <span>Mode Terang</span>
+                      <Sun className="w-3.5 h-3.5 text-amber-400 drop-shadow-[0_0_6px_rgba(251,191,36,0.6)]" />
+                      <span>Terang</span>
                     </>
                   ) : (
                     <>
-                      <Moon className="w-4 h-4 text-gray-600" />
-                      <span>Mode Gelap</span>
+                      <Moon className="w-3.5 h-3.5 text-indigo-500" />
+                      <span>Gelap</span>
                     </>
                   )}
                 </button>
@@ -413,7 +385,7 @@ export const TopBar: React.FC<TopBarProps> = ({
                 {/* Language Toggle */}
                 <button
                   onClick={onToggleLanguage}
-                  className="px-2.5 py-1.5 rounded-xl border border-gray-200 dark:border-zinc-700 text-[11px] font-bold text-gray-700 dark:text-zinc-300 hover:bg-gray-100 dark:hover:bg-zinc-800"
+                  className="px-3 py-2 rounded-xl bg-white/50 dark:bg-white/5 hover:bg-white/80 dark:hover:bg-white/10 border border-white/60 dark:border-white/10 text-[11px] font-bold text-gray-700 dark:text-zinc-300"
                 >
                   {language === 'id' ? '🇮🇩 ID' : '🇺🇸 EN'}
                 </button>
@@ -425,9 +397,9 @@ export const TopBar: React.FC<TopBarProps> = ({
                   setIsDrawerOpen(false);
                   onLogout();
                 }}
-                className="w-full flex items-center justify-center gap-2 px-3 py-2.5 rounded-xl text-xs font-semibold text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/30 transition-colors"
+                className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-600 dark:text-rose-400 text-xs font-semibold border border-rose-300/30 dark:border-rose-500/20 transition-all active:scale-95"
               >
-                <LogOut className="w-4 h-4" />
+                <LogOut className="w-3.5 h-3.5" />
                 <span>{t.auth.logout}</span>
               </button>
             </div>
