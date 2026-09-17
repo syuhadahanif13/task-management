@@ -472,9 +472,10 @@ export default function App() {
 
       {/* Main Content */}
       <div className="flex-1 flex flex-col min-w-0">
-        {/* Top Bar */}
+        {/* Top Bar / Mobile Header */}
         <TopBar
           currentTab={currentTab}
+          onTabChange={handleTabChange}
           onBack={() => {
             setSelectedMeetingId(null);
             setCurrentTab('meetings');
@@ -493,6 +494,8 @@ export default function App() {
             setIsAiExtractOpen(true);
           }}
           onOpenAddTask={() => setIsAddTaskOpen(true)}
+          currentUser={currentUser}
+          overdueCount={meetings.flatMap((m) => m.tasks || []).filter((task) => task.status !== 'Done' && task.dueDate && task.dueDate < new Date().toISOString().split('T')[0]).length}
           showBack={currentTab === 'active-meeting'}
         />
 
@@ -949,23 +952,6 @@ export default function App() {
           t={t}
         />
       </div>
-
-      {/* FAB — mobile only, shown on meetings/tasks/calendar/dashboard */}
-      {(currentTab === 'meetings' || currentTab === 'calendar' || currentTab === 'dashboard' || currentTab === 'all-tasks') && (
-        <button
-          onClick={() => {
-            if (currentTab === 'all-tasks') {
-              setIsAddTaskOpen(true);
-            } else {
-              setIsNewMeetingOpen(true);
-            }
-          }}
-          className="ios-fab lg:hidden"
-          aria-label={currentTab === 'all-tasks' ? t.tasks.addTask : t.meetings.newMeeting}
-        >
-          <Plus className="w-6 h-6 text-white" />
-        </button>
-      )}
 
       {/* Toast */}
       {toastMessage && (

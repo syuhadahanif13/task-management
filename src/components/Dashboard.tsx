@@ -13,6 +13,7 @@ import {
   BookOpen,
   Users,
   CheckSquare,
+  Search,
 } from 'lucide-react';
 
 interface DashboardProps {
@@ -34,6 +35,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
 }) => {
   const today = new Date().toISOString().split('T')[0];
   const [selectedStatusFilter, setSelectedStatusFilter] = useState<string>('all');
+  const [searchQuery, setSearchQuery] = useState<string>('');
   const [notificationOpen, setNotificationOpen] = useState(false);
 
   // Extract all tasks with parent meeting title
@@ -63,6 +65,14 @@ export const Dashboard: React.FC<DashboardProps> = ({
 
   // Filter tasks for Today's Tasks section
   const filteredTasks = allTasks.filter((task) => {
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase();
+      const match =
+        task.title.toLowerCase().includes(q) ||
+        (task.assignee && task.assignee.toLowerCase().includes(q)) ||
+        (task.meetingTitle && task.meetingTitle.toLowerCase().includes(q));
+      if (!match) return false;
+    }
     if (selectedStatusFilter === 'all') return true;
     if (selectedStatusFilter === 'todo') return task.status === 'To Do';
     if (selectedStatusFilter === 'in-progress') return task.status === 'In Progress';
@@ -122,8 +132,8 @@ export const Dashboard: React.FC<DashboardProps> = ({
 
   return (
     <div className="space-y-6 max-w-5xl mx-auto pb-10">
-      {/* ─── 1. TOP GREETING BAR ─── */}
-      <div className="flex items-center justify-between pt-1">
+      {/* ─── 1. TOP GREETING BAR (Desktop Only) ─── */}
+      <div className="hidden lg:flex items-center justify-between pt-1">
         <div className="flex items-center gap-3.5">
           {/* User Avatar */}
           <div className="relative">
@@ -182,6 +192,28 @@ export const Dashboard: React.FC<DashboardProps> = ({
               </div>
             )}
           </div>
+        </div>
+      </div>
+
+      {/* ─── MOBILE SEARCH BAR (Matches Screen 1 in design) ─── */}
+      <div className="lg:hidden pt-1">
+        <div className="relative">
+          <input
+            type="text"
+            placeholder="Search tasks, meetings, or assignees..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="w-full bg-white dark:bg-[#18191e] border border-gray-200/80 dark:border-zinc-800 rounded-2xl py-3 pl-11 pr-8 text-xs sm:text-sm font-medium text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-zinc-500 shadow-xs focus:outline-hidden focus:ring-2 focus:ring-[#a3e635] transition-all"
+          />
+          <Search className="w-4 h-4 text-gray-400 dark:text-zinc-500 absolute left-4 top-1/2 -translate-y-1/2" />
+          {searchQuery && (
+            <button
+              onClick={() => setSearchQuery('')}
+              className="absolute right-3.5 top-1/2 -translate-y-1/2 text-xs text-gray-400 hover:text-gray-600 dark:hover:text-zinc-300"
+            >
+              ✕
+            </button>
+          )}
         </div>
       </div>
 
