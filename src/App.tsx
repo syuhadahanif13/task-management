@@ -500,7 +500,7 @@ export default function App() {
   }
 
   return (
-    <div className="min-h-screen w-full max-w-full overflow-x-hidden bg-gradient-to-br from-[#faf6f2] via-[#f7f2fa] to-[#f4f7fd] dark:from-[#121316] dark:via-[#16171d] dark:to-[#111215] text-notion-text font-sans antialiased flex">
+    <div className="min-h-screen lg:h-screen lg:overflow-hidden w-full max-w-full overflow-x-hidden bg-gradient-to-br from-[#faf6f2] via-[#f7f2fa] to-[#f4f7fd] dark:from-[#121316] dark:via-[#16171d] dark:to-[#111215] text-notion-text font-sans antialiased flex flex-col lg:flex-row">
       {/* macOS Sidebar — desktop only */}
       <Sidebar
         currentTab={currentTab}
@@ -523,7 +523,7 @@ export default function App() {
       />
 
       {/* Main Content */}
-      <div className="flex-1 flex flex-col min-w-0">
+      <div className="flex-1 flex flex-col min-w-0 lg:h-screen lg:overflow-hidden">
         {/* Top Bar / Mobile Header */}
         <TopBar
           currentTab={currentTab}
@@ -553,7 +553,7 @@ export default function App() {
         />
 
         {/* Page content */}
-        <main className="flex-1 p-4 sm:p-5 lg:p-6 pb-safe overflow-y-auto">
+        <main className="flex-1 p-4 sm:p-5 lg:p-6 pb-safe lg:pb-8 overflow-y-auto min-h-0">
           {/* Error notification */}
           {errorMsg && (
             <div className="mb-5 p-4 bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-900 text-red-700 dark:text-red-400 rounded-2xl text-xs flex items-center justify-between">

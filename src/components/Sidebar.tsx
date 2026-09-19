@@ -68,14 +68,14 @@ export const Sidebar: React.FC<SidebarProps> = ({
   };
 
   return (
-    <aside className="hidden lg:flex flex-col w-64 shrink-0 min-h-screen sticky top-0 h-screen overflow-hidden z-20 select-none relative bg-white/60 dark:bg-[#0c0d12]/75 backdrop-blur-2xl border-r border-white/60 dark:border-white/10 shadow-[0_8px_32px_0_rgba(0,0,0,0.08)] dark:shadow-[0_8px_32px_0_rgba(0,0,0,0.5)] transition-all duration-300">
+    <aside className="hidden lg:flex flex-col w-64 shrink-0 h-full max-h-screen sticky top-0 overflow-hidden z-20 select-none relative bg-white/60 dark:bg-[#0c0d12]/75 backdrop-blur-2xl border-r border-white/60 dark:border-white/10 shadow-[0_8px_32px_0_rgba(0,0,0,0.08)] dark:shadow-[0_8px_32px_0_rgba(0,0,0,0.5)] transition-all duration-300">
       {/* ─── NEON BLUR AMBIENT ORBS (Floating behind glass) ─── */}
       <div className="absolute -top-12 -left-12 w-48 h-48 rounded-full bg-[#a3e635]/20 dark:bg-[#a3e635]/15 blur-[65px] pointer-events-none animate-pulse duration-[7000ms]" />
       <div className="absolute top-1/2 -right-16 w-52 h-52 rounded-full bg-[#38bdf8]/20 dark:bg-[#38bdf8]/15 blur-[75px] pointer-events-none" />
       <div className="absolute -bottom-12 -left-8 w-44 h-44 rounded-full bg-[#a855f7]/20 dark:bg-[#818cf8]/15 blur-[65px] pointer-events-none" />
 
       {/* ─── GLASS HEADER / BRAND ─── */}
-      <div className="p-4 border-b border-white/40 dark:border-white/10 relative z-10">
+      <div className="p-4 border-b border-white/40 dark:border-white/10 relative z-10 shrink-0">
         <div className="flex items-center gap-3 p-2 rounded-2xl bg-white/40 dark:bg-white/5 border border-white/60 dark:border-white/10 backdrop-blur-md shadow-xs">
           <div className="h-9 w-9 shrink-0 rounded-xl bg-gradient-to-tr from-gray-900 to-zinc-800 dark:from-zinc-800 dark:to-zinc-950 p-1 flex items-center justify-center shadow-[0_0_16px_rgba(163,230,53,0.3)] border border-lime-400/30">
             <img
@@ -94,7 +94,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
       </div>
 
       {/* ─── QUICK ACTIONS (Neon Glowing Glass Pills) ─── */}
-      <div className="p-3 border-b border-white/40 dark:border-white/10 space-y-2 relative z-10">
+      <div className="p-3 border-b border-white/40 dark:border-white/10 space-y-2 relative z-10 shrink-0">
         {/* New Meeting Button */}
         <button
           onClick={onOpenNewMeeting}
@@ -134,7 +134,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
       </div>
 
       {/* ─── NAVIGATION (Glass & Neon Highlight) ─── */}
-      <nav className="flex-1 p-3 space-y-1.5 overflow-y-auto relative z-10">
+      <nav className="flex-1 min-h-0 p-3 space-y-1.5 overflow-y-auto relative z-10">
         <p className="px-3 pt-1 text-[10px] font-bold uppercase tracking-widest text-gray-400 dark:text-zinc-500">
           Menu Navigasi
         </p>
@@ -205,7 +205,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
       </nav>
 
       {/* ─── BOTTOM CONTROLS (Glass Pills) ─── */}
-      <div className="p-3 border-t border-white/40 dark:border-white/10 space-y-1.5 relative z-10 bg-white/20 dark:bg-black/20 backdrop-blur-md">
+      <div className="p-3 border-t border-white/40 dark:border-white/10 space-y-1.5 relative z-10 bg-white/20 dark:bg-black/20 backdrop-blur-md shrink-0 mt-auto">
         <div className="grid grid-cols-2 gap-1.5">
           {/* Language Toggle */}
           <button

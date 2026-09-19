@@ -257,7 +257,7 @@ export const TopBar: React.FC<TopBarProps> = ({
             <div className="absolute top-1/2 -left-12 w-48 h-48 rounded-full bg-[#38bdf8]/20 dark:bg-[#38bdf8]/15 blur-[70px] pointer-events-none" />
             <div className="absolute -bottom-10 -right-10 w-40 h-40 rounded-full bg-[#a855f7]/20 dark:bg-[#818cf8]/15 blur-[60px] pointer-events-none" />
 
-            <div className="relative z-10 overflow-y-auto pr-0.5">
+            <div className="relative z-10 flex-1 min-h-0 overflow-y-auto pr-0.5">
               {/* Drawer Header */}
               <div className="flex items-center justify-between pb-3.5 border-b border-white/40 dark:border-white/10">
                 <div className="flex items-center gap-2">
@@ -389,7 +389,7 @@ export const TopBar: React.FC<TopBarProps> = ({
             </div>
 
             {/* Drawer Bottom Controls */}
-            <div className="pt-3 border-t border-white/40 dark:border-white/10 space-y-2 relative z-10 bg-white/20 dark:bg-black/20 backdrop-blur-md rounded-2xl p-2.5">
+            <div className="pt-3 border-t border-white/40 dark:border-white/10 space-y-2 relative z-10 bg-white/20 dark:bg-black/20 backdrop-blur-md rounded-2xl p-2.5 shrink-0 mt-3">
               <div className="flex items-center justify-between gap-2">
                 {/* Dark Mode Toggle */}
                 <button
