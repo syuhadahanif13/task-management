@@ -16,6 +16,7 @@ export interface Task {
   meetingId?: string;
   title: string;
   assignee: string;
+  assignees?: string[];
   dueDate: string;
   dueTime?: string;
   status: TaskStatus;
@@ -66,6 +67,7 @@ export interface CreateMeetingInput {
   tasks?: Array<{
     title: string;
     assignee: string;
+    assignees?: string[];
     dueDate: string;
     status: TaskStatus;
   }>;
@@ -74,6 +76,7 @@ export interface CreateMeetingInput {
 export interface CreateTaskInput {
   title: string;
   assignee: string;
+  assignees?: string[];
   dueDate: string;
   dueTime?: string;
   status: TaskStatus;

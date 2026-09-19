@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Meeting, TaskStatus, TaskPriority, Division, User, CreateTaskInput } from '../types';
 import { api } from '../api/client';
+import { MultiAssigneeSelector } from './MultiAssigneeSelector';
 import {
   X,
   Check,
@@ -24,7 +25,7 @@ export const AddTaskModal: React.FC<AddTaskModalProps> = ({ isOpen, onClose, onA
   const [selectedMeetingId, setSelectedMeetingId] = useState('');
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
-  const [assignee, setAssignee] = useState('');
+  const [assignees, setAssignees] = useState<string[]>([]);
   const [dueDate, setDueDate] = useState(
     new Date(Date.now() + 7 * 86400000).toISOString().split('T')[0]
   );
@@ -65,7 +66,8 @@ export const AddTaskModal: React.FC<AddTaskModalProps> = ({ isOpen, onClose, onA
     try {
       await onAddTask(selectedMeetingId || undefined, {
         title: title.trim(),
-        assignee: assignee.trim() || 'Unassigned',
+        assignee: assignees.length > 0 ? assignees.join(', ') : 'Unassigned',
+        assignees,
         dueDate,
         dueTime,
         status,
@@ -85,7 +87,7 @@ export const AddTaskModal: React.FC<AddTaskModalProps> = ({ isOpen, onClose, onA
     setSelectedMeetingId('');
     setTitle('');
     setDescription('');
-    setAssignee('');
+    setAssignees([]);
     setDueDate(new Date(Date.now() + 7 * 86400000).toISOString().split('T')[0]);
     setDueTime('10:00');
     setPriority('Medium');
@@ -268,41 +270,16 @@ export const AddTaskModal: React.FC<AddTaskModalProps> = ({ isOpen, onClose, onA
             </div>
           </div>
 
-          {/* ─── 6. PIC / Assignee ─── */}
+          {/* ─── 6. PIC / Assignees (Multi-PIC) ─── */}
           <div>
-            <label className="text-xs font-bold text-gray-700 dark:text-zinc-300 block mb-1.5">
-              PIC / Assignee
-            </label>
-            <div className="relative bg-white dark:bg-zinc-800/90 rounded-2xl px-4 py-3.5 border border-gray-200/80 dark:border-zinc-750 shadow-sm flex items-center gap-2">
-              <UserIcon className="w-4 h-4 text-gray-400 shrink-0" />
-              <input
-                type="text"
-                list="assignee-list"
-                value={assignee}
-                onChange={(e) => setAssignee(e.target.value)}
-                placeholder="Pilih atau ketik nama PIC..."
-                className="w-full bg-transparent text-sm font-semibold text-gray-800 dark:text-white placeholder:text-gray-400 focus:outline-none"
-              />
-              <datalist id="assignee-list">
-                {meetingParticipants.map((p, idx) => {
-                  const matched = users.find((u) => u.username === p);
-                  const div = matched ? divisions.find((d) => d.id === matched.divisionId)?.name : null;
-                  return (
-                    <option key={`p-${idx}`} value={p}>
-                      {div ? `${p} (${div})` : p}
-                    </option>
-                  );
-                })}
-                {users.map((u) => {
-                  const div = divisions.find((d) => d.id === u.divisionId)?.name;
-                  return (
-                    <option key={`u-${u.id}`} value={u.username}>
-                      {div ? `${u.username} (${div})` : u.username}
-                    </option>
-                  );
-                })}
-              </datalist>
-            </div>
+            <MultiAssigneeSelector
+              selectedAssignees={assignees}
+              onChange={setAssignees}
+              participants={meetingParticipants}
+              users={users}
+              divisions={divisions}
+              label="PIC / Assignees"
+            />
           </div>
 
           {/* ─── 7. Tags (Pill Badges) ─── */}

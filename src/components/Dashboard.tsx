@@ -430,22 +430,40 @@ export const Dashboard: React.FC<DashboardProps> = ({
                       </span>
                     </div>
 
-                    {/* Avatar Stack */}
+                    {/* Real Avatar Stack for PICs */}
                     <div className="flex items-center -space-x-2">
-                      <div
-                        className="w-7 h-7 rounded-full bg-gradient-to-tr from-indigo-500 to-purple-500 border-2 border-white dark:border-zinc-800 flex items-center justify-center text-white text-[10px] font-bold shadow-sm"
-                        title={task.assignee}
-                      >
-                        {task.assignee.charAt(0).toUpperCase()}
-                      </div>
-                      <div
-                        className="w-7 h-7 rounded-full bg-gradient-to-tr from-amber-400 to-rose-400 border-2 border-white dark:border-zinc-800 flex items-center justify-center text-white text-[10px] font-bold shadow-sm"
-                      >
-                        {task.assignee.length > 1 ? task.assignee.charAt(1).toUpperCase() : '+'}
-                      </div>
-                      <div className="w-7 h-7 rounded-full bg-black dark:bg-white text-white dark:text-black border-2 border-white dark:border-zinc-800 flex items-center justify-center text-[10px] font-extrabold shadow-sm">
-                        +2
-                      </div>
+                      {(() => {
+                        const assignees = (task.assignees && task.assignees.length > 0)
+                          ? task.assignees
+                          : (task.assignee ? task.assignee.split(',').map((s) => s.trim()).filter(Boolean) : ['User']);
+                        const colors = [
+                          'from-indigo-500 to-purple-500',
+                          'from-amber-400 to-rose-400',
+                          'from-emerald-400 to-teal-500',
+                          'from-blue-400 to-cyan-500',
+                        ];
+                        return (
+                          <>
+                            {assignees.slice(0, 3).map((name, i) => (
+                              <div
+                                key={i}
+                                className={`w-7 h-7 rounded-full bg-gradient-to-tr ${colors[i % colors.length]} border-2 border-white dark:border-zinc-800 flex items-center justify-center text-white text-[10px] font-bold shadow-sm`}
+                                title={name}
+                              >
+                                {name.charAt(0).toUpperCase()}
+                              </div>
+                            ))}
+                            {assignees.length > 3 && (
+                              <div
+                                className="w-7 h-7 rounded-full bg-black dark:bg-white text-white dark:text-black border-2 border-white dark:border-zinc-800 flex items-center justify-center text-[10px] font-extrabold shadow-sm"
+                                title={assignees.slice(3).join(', ')}
+                              >
+                                +{assignees.length - 3}
+                              </div>
+                            )}
+                          </>
+                        );
+                      })()}
                     </div>
                   </div>
                 </div>

@@ -210,10 +210,39 @@ export const TaskItem: React.FC<TaskItemProps> = ({
       {/* ─── 3. FOOTER ROW: Assignee, Due Date, and Status Selector ─── */}
       <div className="pt-2.5 border-t border-gray-100 dark:border-zinc-700/60 flex items-center justify-between gap-2">
         <div className="flex items-center gap-3 flex-wrap min-w-0 text-xs text-gray-500 dark:text-zinc-400">
-          <div className="flex items-center gap-1 shrink-0">
-            <User className="w-3.5 h-3.5 text-gray-400 dark:text-zinc-500 shrink-0" />
-            <span className="truncate max-w-[90px] font-medium">{task.assignee}</span>
-          </div>
+          {(() => {
+            const assigneesList = (task.assignees && task.assignees.length > 0)
+              ? task.assignees
+              : (task.assignee ? task.assignee.split(',').map((s) => s.trim()).filter(Boolean) : []);
+
+            if (assigneesList.length <= 1) {
+              return (
+                <div className="flex items-center gap-1 shrink-0" title={assigneesList[0] || 'Unassigned'}>
+                  <User className="w-3.5 h-3.5 text-gray-400 dark:text-zinc-500 shrink-0" />
+                  <span className="truncate max-w-[110px] font-medium">{assigneesList[0] || 'Unassigned'}</span>
+                </div>
+              );
+            }
+
+            return (
+              <div className="flex items-center gap-1.5 shrink-0" title={`PIC: ${assigneesList.join(', ')}`}>
+                <div className="flex items-center -space-x-1.5 overflow-hidden">
+                  {assigneesList.slice(0, 3).map((name, i) => (
+                    <div
+                      key={i}
+                      className="w-5 h-5 rounded-full bg-gradient-to-tr from-sky-500 to-indigo-500 border border-white dark:border-zinc-800 flex items-center justify-center text-[9px] font-bold text-white shadow-2xs"
+                      title={name}
+                    >
+                      {name.charAt(0).toUpperCase()}
+                    </div>
+                  ))}
+                </div>
+                <span className="truncate max-w-[120px] font-medium text-[11px] text-gray-700 dark:text-zinc-300">
+                  {assigneesList.slice(0, 2).join(', ')}{assigneesList.length > 2 ? ` +${assigneesList.length - 2}` : ''}
+                </span>
+              </div>
+            );
+          })()}
 
           <div className={`flex items-center gap-1 shrink-0 whitespace-nowrap font-mono text-[11px] ${isOverdue ? 'text-rose-600 dark:text-rose-400 font-semibold' : ''}`}>
             <Calendar className="w-3.5 h-3.5 shrink-0" />

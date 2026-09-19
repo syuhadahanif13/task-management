@@ -13,6 +13,7 @@ export interface Task {
   meetingId?: string;
   title: string;
   assignee: string;
+  assignees?: string[];
   dueDate: string;
   dueTime?: string;
   status: TaskStatus;
@@ -156,6 +157,7 @@ async function syncMeetingsFromSupabase(): Promise<Meeting[]> {
           meetingId: t.meeting_id,
           title: t.title,
           assignee: t.assignee,
+          assignees: t.assignees || (t.assignee ? String(t.assignee).split(',').map((s: string) => s.trim()).filter(Boolean) : []),
           dueDate: t.due_date,
           dueTime: t.due_time,
           status: t.status,
@@ -199,16 +201,27 @@ router.post('/meetings', async (req, res) => {
   const meetingId = generateId('meet');
   const now = new Date().toISOString();
   const parsedTasks: Task[] = Array.isArray(initialTasks)
-    ? initialTasks.map((t: any, index: number) => ({
-        id: generateId(`task-${index + 1}`),
-        meetingId,
-        title: String(t.title || 'Untitled Action Item').trim(),
-        assignee: String(t.assignee || (participants[0] || 'Unassigned')).trim(),
-        dueDate: String(t.dueDate || new Date(Date.now() + 7 * 86400000).toISOString().split('T')[0]),
-        status: (['To Do', 'In Progress', 'Done', 'Pending Approval'].includes(t.status) ? t.status : 'To Do') as TaskStatus,
-        createdAt: now,
-        updatedAt: now
-      }))
+    ? initialTasks.map((t: any, index: number) => {
+        const rawAssignees = Array.isArray(t.assignees)
+          ? t.assignees
+          : (t.assignee ? String(t.assignee).split(',').map((s: string) => s.trim()).filter(Boolean) : []);
+        const resolvedAssignee = rawAssignees.length > 0
+          ? rawAssignees.join(', ')
+          : String(t.assignee || (participants[0] || 'Unassigned')).trim();
+        const resolvedAssignees = rawAssignees.length > 0 ? rawAssignees : [resolvedAssignee];
+
+        return {
+          id: generateId(`task-${index + 1}`),
+          meetingId,
+          title: String(t.title || 'Untitled Action Item').trim(),
+          assignee: resolvedAssignee,
+          assignees: resolvedAssignees,
+          dueDate: String(t.dueDate || new Date(Date.now() + 7 * 86400000).toISOString().split('T')[0]),
+          status: (['To Do', 'In Progress', 'Done', 'Pending Approval'].includes(t.status) ? t.status : 'To Do') as TaskStatus,
+          createdAt: now,
+          updatedAt: now
+        };
+      })
     : [];
 
   const newMeeting: Meeting = {
@@ -356,6 +369,7 @@ router.get('/tasks', async (req, res) => {
           meetingId: t.meeting_id,
           title: t.title,
           assignee: t.assignee,
+          assignees: t.assignees || (t.assignee ? String(t.assignee).split(',').map((s: string) => s.trim()).filter(Boolean) : []),
           dueDate: t.due_date,
           status: t.status,
           createdAt: t.created_at,
@@ -382,10 +396,20 @@ router.get('/tasks', async (req, res) => {
   }
   if (meetingId) allTasks = allTasks.filter(t => t.meetingId === String(meetingId));
   if (status) allTasks = allTasks.filter(t => t.status === String(status));
-  if (assignee) allTasks = allTasks.filter(t => t.assignee.toLowerCase().includes(String(assignee).toLowerCase()));
+  if (assignee) {
+    const targetAssignee = String(assignee).toLowerCase();
+    allTasks = allTasks.filter(t =>
+      (t.assignee && t.assignee.toLowerCase().includes(targetAssignee)) ||
+      (Array.isArray(t.assignees) && t.assignees.some(a => a.toLowerCase().includes(targetAssignee)))
+    );
+  }
   if (search) {
     const s = String(search).toLowerCase();
-    allTasks = allTasks.filter(t => t.title.toLowerCase().includes(s) || t.assignee.toLowerCase().includes(s));
+    allTasks = allTasks.filter(t =>
+      t.title.toLowerCase().includes(s) ||
+      (t.assignee && t.assignee.toLowerCase().includes(s)) ||
+      (Array.isArray(t.assignees) && t.assignees.some(a => a.toLowerCase().includes(s)))
+    );
   }
   allTasks.sort((a, b) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime());
   res.json(allTasks);
@@ -446,12 +470,21 @@ router.post('/tasks', async (req, res) => {
     targetMeeting = await ensureGeneralMeeting();
   }
 
+  const rawAssignees = Array.isArray(req.body.assignees)
+    ? req.body.assignees
+    : (assignee ? String(assignee).split(',').map((s: string) => s.trim()).filter(Boolean) : []);
+  const resolvedAssignee = rawAssignees.length > 0
+    ? rawAssignees.join(', ')
+    : String(assignee || (targetMeeting.participants[0] || 'Unassigned')).trim();
+  const resolvedAssignees = rawAssignees.length > 0 ? rawAssignees : [resolvedAssignee];
+
   const now = new Date().toISOString();
   const newTask: Task = {
     id: generateId('task'),
     meetingId: targetMeeting.id,
     title: String(title).trim(),
-    assignee: String(assignee || (targetMeeting.participants[0] || 'Unassigned')).trim(),
+    assignee: resolvedAssignee,
+    assignees: resolvedAssignees,
     dueDate: String(dueDate).trim(),
     dueTime: req.body.dueTime ? String(req.body.dueTime).trim() : undefined,
     status: (['To Do', 'In Progress', 'Done', 'Pending Approval'].includes(status) ? status : 'To Do') as TaskStatus,
@@ -495,12 +528,22 @@ router.post('/meetings/:meetingId/tasks', async (req, res) => {
   if (!meeting) return res.status(404).json({ error: 'Parent meeting not found' });
   const { title, assignee, dueDate, status } = req.body;
   if (!title || !dueDate) return res.status(400).json({ error: 'Title and due date are required.' });
+
+  const rawAssignees = Array.isArray(req.body.assignees)
+    ? req.body.assignees
+    : (assignee ? String(assignee).split(',').map((s: string) => s.trim()).filter(Boolean) : []);
+  const resolvedAssignee = rawAssignees.length > 0
+    ? rawAssignees.join(', ')
+    : String(assignee || (meeting.participants[0] || 'Unassigned')).trim();
+  const resolvedAssignees = rawAssignees.length > 0 ? rawAssignees : [resolvedAssignee];
+
   const now = new Date().toISOString();
   const newTask: Task = {
     id: generateId('task'),
     meetingId: meeting.id,
     title: String(title).trim(),
-    assignee: String(assignee || (meeting.participants[0] || 'Unassigned')).trim(),
+    assignee: resolvedAssignee,
+    assignees: resolvedAssignees,
     dueDate: String(dueDate).trim(),
     dueTime: req.body.dueTime ? String(req.body.dueTime).trim() : undefined,
     status: (['To Do', 'In Progress', 'Done', 'Pending Approval'].includes(status) ? status : 'To Do') as TaskStatus,
@@ -736,6 +779,7 @@ router.put('/tasks/:id', async (req, res) => {
           meetingId: dbTask.meeting_id,
           title: dbTask.title,
           assignee: dbTask.assignee,
+          assignees: dbTask.assignees || (dbTask.assignee ? String(dbTask.assignee).split(',').map((s: string) => s.trim()).filter(Boolean) : []),
           dueDate: dbTask.due_date,
           dueTime: dbTask.due_time,
           status: dbTask.status,
@@ -763,7 +807,15 @@ router.put('/tasks/:id', async (req, res) => {
 
   // 4. Update data task
   if (title !== undefined) targetTask.title = String(title).trim();
-  if (assignee !== undefined) targetTask.assignee = String(assignee).trim();
+  if (assignee !== undefined || req.body.assignees !== undefined) {
+    if (Array.isArray(req.body.assignees)) {
+      targetTask.assignees = req.body.assignees;
+      targetTask.assignee = req.body.assignees.join(', ');
+    } else {
+      targetTask.assignee = String(assignee).trim();
+      targetTask.assignees = targetTask.assignee.split(',').map((s: string) => s.trim()).filter(Boolean);
+    }
+  }
   if (dueDate !== undefined) targetTask.dueDate = String(dueDate).trim();
   if (dueTime !== undefined) targetTask.dueTime = String(dueTime).trim();
   if (status !== undefined) {

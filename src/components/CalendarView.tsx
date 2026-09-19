@@ -151,7 +151,9 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
             type: 'task',
             task: t,
             status: t.status,
-            participants: [t.assignee],
+            participants: t.assignees && t.assignees.length > 0
+              ? t.assignees
+              : (t.assignee ? t.assignee.split(',').map((s) => s.trim()).filter(Boolean) : []),
             category: t.tags?.includes('Personal') ? 'personal' : 'work',
           });
         }

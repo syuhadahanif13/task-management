@@ -44,11 +44,24 @@ export const AllTasksKanban: React.FC<AllTasksKanbanProps> = ({
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [selectedStatusFilter, setSelectedStatusFilter] = useState<string>('all');
 
-  const assignees = Array.from(new Set(tasks.map((t) => t.assignee).filter(Boolean)));
+  const assignees = Array.from(
+    new Set(
+      tasks.flatMap((t) =>
+        t.assignees && t.assignees.length > 0
+          ? t.assignees
+          : (t.assignee ? t.assignee.split(',').map((s) => s.trim()).filter(Boolean) : [])
+      )
+    )
+  ).sort();
   const today = new Date().toISOString().split('T')[0];
 
   const filtered = tasks.filter((t) => {
-    if (filterAssignee !== 'all' && t.assignee !== filterAssignee) return false;
+    if (filterAssignee !== 'all') {
+      const taskAssignees = t.assignees && t.assignees.length > 0
+        ? t.assignees
+        : (t.assignee ? t.assignee.split(',').map((s) => s.trim()).filter(Boolean) : []);
+      if (!taskAssignees.includes(filterAssignee)) return false;
+    }
     if (selectedStatusFilter !== 'all' && t.status !== selectedStatusFilter) return false;
     if (searchQuery) {
       const q = searchQuery.toLowerCase();
@@ -110,20 +123,18 @@ export const AllTasksKanban: React.FC<AllTasksKanbanProps> = ({
     <div className="space-y-6 max-w-6xl mx-auto pb-12">
       {/* ─── 1. TOP HEADER & METRICS ─── */}
       <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 pt-1">
-        <div>
-          <div className="flex items-center gap-2 mb-1">
-            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-[#c5e848] text-gray-950 shadow-sm">
-              <CheckSquare className="w-3.5 h-3.5" />
-              <span>Task Board</span>
-            </span>
-            <span className="text-xs font-bold text-gray-400 dark:text-zinc-500">
-              {totalCount} Total Tugas
-            </span>
-          </div>
-          <h1 className="text-3xl sm:text-4xl font-black tracking-tight text-gray-950 dark:text-white leading-tight">
-            Semua Tugas
-          </h1>
+
+        <div className="flex items-center gap-2 mb-1">
+          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-[#c5e848] text-gray-950 shadow-sm">
+            <CheckSquare className="w-3.5 h-3.5" />
+            <span>Task Board</span>
+          </span>
+          <span className="text-xs font-bold text-gray-400 dark:text-zinc-500">
+            {totalCount} Total Tugas
+          </span>
         </div>
+
+
 
         <div className="flex flex-wrap items-center gap-2.5">
           {/* Segmented Switcher: Rapat vs Tugas */}

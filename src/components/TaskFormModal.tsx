@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { Task, TaskStatus } from '../types';
-import { X, CheckSquare, Calendar, User } from 'lucide-react';
+import { Task, TaskStatus, User as UserType, Division } from '../types';
+import { X, CheckSquare, Calendar } from 'lucide-react';
+import { MultiAssigneeSelector } from './MultiAssigneeSelector';
+import { api } from '../api/client';
 
 interface TaskFormModalProps {
   isOpen: boolean;
@@ -20,18 +22,34 @@ export const TaskFormModal: React.FC<TaskFormModalProps> = ({
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [priority, setPriority] = useState<string>('Medium');
-  const [assignee, setAssignee] = useState('');
+  const [assignees, setAssignees] = useState<string[]>([]);
   const [dueDate, setDueDate] = useState('');
   const [status, setStatus] = useState<TaskStatus>('To Do');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
+  const [users, setUsers] = useState<Omit<UserType, 'password'>[]>([]);
+  const [divisions, setDivisions] = useState<Division[]>([]);
+
+  useEffect(() => {
+    if (isOpen) {
+      Promise.all([api.getUsers(), api.getDivisions()])
+        .then(([u, d]) => {
+          setUsers(u);
+          setDivisions(d);
+        })
+        .catch(() => {});
+    }
+  }, [isOpen]);
 
   useEffect(() => {
     if (task) {
       setTitle(task.title);
       setDescription(task.description || '');
       setPriority(task.priority || 'Medium');
-      setAssignee(task.assignee);
+      const initial = task.assignees && task.assignees.length > 0
+        ? task.assignees
+        : (task.assignee ? task.assignee.split(',').map((s) => s.trim()).filter(Boolean) : []);
+      setAssignees(initial);
       setDueDate(task.dueDate);
       setStatus(task.status);
     }
@@ -52,8 +70,9 @@ export const TaskFormModal: React.FC<TaskFormModalProps> = ({
       await onSave(task.id, {
         title: title.trim(),
         description: description.trim(),
-        priority,
-        assignee: assignee.trim() || 'Unassigned',
+        priority: priority as any,
+        assignee: assignees.length > 0 ? assignees.join(', ') : 'Unassigned',
+        assignees,
         dueDate: dueDate.trim(),
         status,
       });
@@ -140,37 +159,15 @@ export const TaskFormModal: React.FC<TaskFormModalProps> = ({
             </div>
           </div>
 
-          {/* Assignee */}
-          <div>
-            <label className="text-xs font-semibold text-zinc-800 dark:text-zinc-200 flex items-center gap-1 mb-1">
-              <User className="w-3.5 h-3.5 text-zinc-500 dark:text-zinc-400" />
-              <span>Penanggung Jawab (Assignee) *</span>
-            </label>
-            <div className="space-y-1.5">
-              <input
-                type="text"
-                value={assignee}
-                onChange={(e) => setAssignee(e.target.value)}
-                placeholder="Nama PIC"
-                className="notion-input text-xs py-2 px-3"
-              />
-              {participants.length > 0 && (
-                <div className="flex flex-wrap gap-1">
-                  <span className="text-[10px] text-zinc-400 dark:text-zinc-500 py-0.5">Pilih dari peserta:</span>
-                  {participants.map((p, idx) => (
-                    <button
-                      key={idx}
-                      type="button"
-                      onClick={() => setAssignee(p)}
-                      className="text-[10px] px-2 py-0.5 bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-700 text-zinc-700 dark:text-zinc-300 rounded border border-zinc-200 dark:border-zinc-700 transition-colors"
-                    >
-                      {p}
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-          </div>
+          {/* Assignee Multi-PIC Selector */}
+          <MultiAssigneeSelector
+            selectedAssignees={assignees}
+            onChange={setAssignees}
+            participants={participants}
+            users={users}
+            divisions={divisions}
+            label="Penanggung Jawab (PIC / Assignees) *"
+          />
 
           <div className="grid grid-cols-2 gap-3">
             {/* Due Date */}

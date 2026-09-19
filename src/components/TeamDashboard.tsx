@@ -176,36 +176,42 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({
 
     // Aggregate tasks
     for (const task of allTasks) {
-      const rawName = task.assignee || 'Tidak Diketahui';
-      const nameKey = rawName.trim();
+      const names = (task.assignees && task.assignees.length > 0)
+        ? task.assignees
+        : (task.assignee ? task.assignee.split(',').map((s) => s.trim()).filter(Boolean) : ['Tidak Diketahui']);
 
-      if (!map.has(nameKey)) {
-        // Try finding registered user case-insensitively
-        const matched = userDivisionMap.get(nameKey.toLowerCase());
-        map.set(nameKey, {
-          name: nameKey,
-          divisionId: matched?.id,
-          divisionName: matched?.name || 'Eksternal / Tamu',
-          totalTasks: 0,
-          doneTasks: 0,
-          inProgressTasks: 0,
-          overdueTasks: 0,
-          pendingApprovalTasks: 0,
-          completionRate: 0,
-          tasks: [],
-        });
-      }
+      for (const rawName of names) {
+        const nameKey = rawName.trim();
+        if (!nameKey) continue;
 
-      const stats = map.get(nameKey)!;
-      stats.totalTasks++;
-      stats.tasks.push(task);
+        if (!map.has(nameKey)) {
+          // Try finding registered user case-insensitively
+          const matched = userDivisionMap.get(nameKey.toLowerCase());
+          map.set(nameKey, {
+            name: nameKey,
+            divisionId: matched?.id,
+            divisionName: matched?.name || 'Eksternal / Tamu',
+            totalTasks: 0,
+            doneTasks: 0,
+            inProgressTasks: 0,
+            overdueTasks: 0,
+            pendingApprovalTasks: 0,
+            completionRate: 0,
+            tasks: [],
+          });
+        }
 
-      if (task.status === 'Done') stats.doneTasks++;
-      else if (task.status === 'In Progress') stats.inProgressTasks++;
-      else if (task.status === 'Pending Approval') stats.pendingApprovalTasks++;
+        const stats = map.get(nameKey)!;
+        stats.totalTasks++;
+        stats.tasks.push(task);
 
-      if (task.status !== 'Done' && task.dueDate && task.dueDate < today) {
-        stats.overdueTasks++;
+        if (task.status === 'Done') stats.doneTasks++;
+        else if (task.status === 'In Progress') stats.inProgressTasks++;
+        else if (task.status === 'Pending Approval') stats.pendingApprovalTasks++;
+
+        if (task.status !== 'Done' && task.dueDate && task.dueDate < today) {
+          stats.overdueTasks++;
+        }
       }
     }
 

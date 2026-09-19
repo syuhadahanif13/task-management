@@ -4,6 +4,7 @@ import { api } from '../api/client';
 import { TaskItem } from './TaskItem';
 import { TaskSubmissionModal } from './TaskSubmissionModal';
 import { TaskReviewModal } from './TaskReviewModal';
+import { MultiAssigneeSelector } from './MultiAssigneeSelector';
 import {
   ArrowLeft,
   Trash2,
@@ -23,16 +24,16 @@ import {
 interface MeetingDetailViewProps {
   meeting: Meeting;
   onBack: () => void;
-  onUpdateMeeting: (meetingId: string, updates: Partial<Meeting>) => Promise<void>;
-  onDeleteMeeting: (meetingId: string) => Promise<void>;
+  onUpdateMeeting: (id: string, updates: Partial<Meeting>) => Promise<void>;
+  onDeleteMeeting: (id: string) => Promise<void>;
   onAddTask: (meetingId: string, taskInput: CreateTaskInput) => Promise<void>;
   onUpdateTaskStatus: (taskId: string, status: TaskStatus) => Promise<void>;
   onEditTask: (task: Task) => void;
   onDeleteTask: (taskId: string) => Promise<void>;
-  onAiExtractNotes: (meetingNotes: string, meetingDate: string) => void;
-  onSubmitTask: (taskId: string, input: { notes: string; attachments: TaskSubmission['attachments'] }) => Promise<TaskSubmission>;
-  onApproveSubmission: (taskId: string, submissionId: string, reviewNote?: string) => Promise<Task>;
-  onRejectSubmission: (taskId: string, submissionId: string, reviewNote: string) => Promise<Task>;
+  onAiExtractNotes?: (notes: string, date: string) => void;
+  onSubmitTask?: (taskId: string, input: { notes: string; attachments: TaskSubmission['attachments'] }) => Promise<void>;
+  onApproveSubmission?: (taskId: string, submissionId: string, reviewNote?: string) => Promise<void>;
+  onRejectSubmission?: (taskId: string, submissionId: string, reviewNote: string) => Promise<void>;
   currentUserRole?: 'admin' | 'user';
 }
 
@@ -80,7 +81,7 @@ export const MeetingDetailView: React.FC<MeetingDetailViewProps> = ({
 
   const [isAddingTask, setIsAddingTask] = useState(false);
   const [taskTitle, setTaskTitle] = useState('');
-  const [taskAssignee, setTaskAssignee] = useState(meeting.participants[0] || '');
+  const [taskAssignees, setTaskAssignees] = useState<string[]>([]);
   const [taskDueDate, setTaskDueDate] = useState(
     new Date(Date.now() + 7 * 86400000).toISOString().split('T')[0]
   );
@@ -166,11 +167,13 @@ export const MeetingDetailView: React.FC<MeetingDetailViewProps> = ({
     try {
       await onAddTask(meeting.id, {
         title: taskTitle.trim(),
-        assignee: taskAssignee || meeting.participants[0] || 'Unassigned',
+        assignee: taskAssignees.length > 0 ? taskAssignees.join(', ') : (meeting.participants[0] || 'Unassigned'),
+        assignees: taskAssignees,
         dueDate: taskDueDate,
         status: taskStatus,
       });
       setTaskTitle('');
+      setTaskAssignees([]);
       setIsAddingTask(false);
     } finally {
       setIsSubmittingTask(false);
@@ -528,39 +531,17 @@ export const MeetingDetailView: React.FC<MeetingDetailViewProps> = ({
                   />
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
-                  <div>
-                    <label className="text-[11px] font-medium text-notion-text-secondary block mb-1">
-                      PIC *
-                    </label>
-                    <select
-                      value={taskAssignee}
-                      onChange={(e) => setTaskAssignee(e.target.value)}
-                      className="notion-input"
-                    >
-                      <optgroup label="Peserta Rapat">
-                        {meeting.participants.map((p, idx) => {
-                          const matchedUser = users.find((u) => u.username === p);
-                          const label = matchedUser
-                            ? `${p} (${getDivisionName(matchedUser.divisionId)})`
-                            : p;
-                          return <option key={idx} value={p}>{label}</option>;
-                        })}
-                      </optgroup>
-                      {users.filter((u) => !meeting.participants.includes(u.username)).length > 0 && (
-                        <optgroup label="Pengguna Lainnya">
-                          {users
-                            .filter((u) => !meeting.participants.includes(u.username))
-                            .map((u) => (
-                              <option key={u.id} value={u.username}>
-                                {u.username} ({getDivisionName(u.divisionId)})
-                              </option>
-                            ))}
-                        </optgroup>
-                      )}
-                      <option value="Tim Gabungan">Tim Gabungan</option>
-                    </select>
-                  </div>
+                {/* Multi-PIC Selector */}
+                <MultiAssigneeSelector
+                  selectedAssignees={taskAssignees}
+                  onChange={setTaskAssignees}
+                  participants={meeting.participants}
+                  users={users}
+                  divisions={divisions}
+                  label="PIC / Penanggung Jawab *"
+                />
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
 
                   <div>
                     <label className="text-[11px] font-medium text-notion-text-secondary block mb-1">
