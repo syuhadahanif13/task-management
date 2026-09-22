@@ -22,6 +22,7 @@ interface AllTasksKanbanProps {
   onSelectMeeting: (meetingId: string) => void;
   onOpenSubmit?: (task: Task) => void;
   onOpenReview?: (task: Task) => void;
+  onViewProof?: (task: Task) => void;
   onOpenAddTask?: () => void;
   onOpenMeetings?: () => void;
   currentUserRole?: 'admin' | 'user';
@@ -36,6 +37,7 @@ export const AllTasksKanban: React.FC<AllTasksKanbanProps> = ({
   onSelectMeeting,
   onOpenSubmit,
   onOpenReview,
+  onViewProof,
   onOpenAddTask,
   onOpenMeetings,
   currentUserRole = 'admin',
@@ -293,6 +295,7 @@ export const AllTasksKanban: React.FC<AllTasksKanbanProps> = ({
                         onDelete={onDeleteTask}
                         onOpenSubmit={currentUserRole === 'user' ? onOpenSubmit : undefined}
                         onOpenReview={currentUserRole === 'admin' ? onOpenReview : undefined}
+                        onViewProof={onViewProof}
                         showMeetingOrigin={true}
                         meetingTitle={task.meetingTitle}
                         meetingDate={task.meetingDate}
@@ -326,6 +329,7 @@ export const AllTasksKanban: React.FC<AllTasksKanbanProps> = ({
                 onDelete={onDeleteTask}
                 onOpenSubmit={currentUserRole === 'user' ? onOpenSubmit : undefined}
                 onOpenReview={currentUserRole === 'admin' ? onOpenReview : undefined}
+                onViewProof={onViewProof}
                 showMeetingOrigin={true}
                 meetingTitle={task.meetingTitle}
                 meetingDate={task.meetingDate}

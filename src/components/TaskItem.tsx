@@ -1,6 +1,6 @@
 import React from 'react';
 import { Task, TaskStatus } from '../types';
-import { CheckCircle2, Circle, Trash2, Edit2, User, Calendar, Send, FileText, ChevronDown } from 'lucide-react';
+import { CheckCircle2, Circle, Trash2, Edit2, User, Calendar, Send, FileText, ChevronDown, Paperclip } from 'lucide-react';
 
 interface TaskItemProps {
   task: Task;
@@ -9,6 +9,7 @@ interface TaskItemProps {
   onDelete?: (taskId: string) => void;
   onOpenSubmit?: (task: Task) => void;
   onOpenReview?: (task: Task) => void;
+  onViewProof?: (task: Task) => void;
   showMeetingOrigin?: boolean;
   meetingTitle?: string;
   meetingDate?: string;
@@ -22,6 +23,7 @@ export const TaskItem: React.FC<TaskItemProps> = ({
   onDelete,
   onOpenSubmit,
   onOpenReview,
+  onViewProof,
   showMeetingOrigin = false,
   meetingTitle,
   meetingDate,
@@ -128,6 +130,19 @@ export const TaskItem: React.FC<TaskItemProps> = ({
 
         {/* Action Buttons */}
         <div className="flex items-center gap-1 shrink-0">
+          {onViewProof && (isPendingApproval || isDone) && (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                onViewProof(task);
+              }}
+              className="w-7 h-7 rounded-lg flex items-center justify-center text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 bg-indigo-50/70 dark:bg-indigo-950/50 hover:bg-indigo-100 dark:hover:bg-indigo-900/60 transition-colors"
+              title="Lihat Bukti Kerja / Lampiran"
+            >
+              <Paperclip className="w-3.5 h-3.5" />
+            </button>
+          )}
           {onOpenSubmit && isInProgress && (
             <button
               type="button"

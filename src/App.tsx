@@ -23,6 +23,7 @@ import { AiExtractModal } from './components/AiExtractModal';
 import { TaskFormModal } from './components/TaskFormModal';
 import { TaskSubmissionModal } from './components/TaskSubmissionModal';
 import { TaskReviewModal } from './components/TaskReviewModal';
+import { TaskProofModal } from './components/TaskProofModal';
 import { DivisionManager } from './components/DivisionManager';
 import { UserManager } from './components/UserManager';
 import { AddTaskModal } from './components/AddTaskModal';
@@ -86,6 +87,7 @@ export default function App() {
   const [submittingTask, setSubmittingTask] = useState<Task | null>(null);
   const [reviewingTask, setReviewingTask] = useState<Task | null>(null);
   const [reviewSubmission, setReviewSubmission] = useState<TaskSubmission | null>(null);
+  const [viewingProofTask, setViewingProofTask] = useState<Task | null>(null);
   const [aiInitialNotes, setAiInitialNotes] = useState('');
   const [aiInitialDate, setAiInitialDate] = useState('');
   const [isDivisionManagerOpen, setIsDivisionManagerOpen] = useState(false);
@@ -594,6 +596,7 @@ export default function App() {
                   onSelectMeeting={handleSelectMeeting}
                   onTabChange={handleTabChange}
                   onOpenAddTask={() => setIsAddTaskOpen(true)}
+                  onViewProof={(task) => setViewingProofTask(task)}
                 />
               )}
 
@@ -857,6 +860,7 @@ export default function App() {
                   onSubmitTask={handleSubmitTask}
                   onApproveSubmission={handleApproveSubmission}
                   onRejectSubmission={handleRejectSubmission}
+                  onViewProof={(task) => setViewingProofTask(task)}
                   currentUserRole={currentUser?.role || 'admin'}
                   currentUser={currentUser}
                 />
@@ -879,6 +883,7 @@ export default function App() {
                   currentUser={currentUser}
                   onOpenSubmit={handleOpenSubmit}
                   onOpenReview={handleOpenReview}
+                  onViewProof={(task) => setViewingProofTask(task)}
                 />
               )}
 
@@ -1083,6 +1088,12 @@ export default function App() {
         submission={reviewSubmission}
         onApprove={handleApproveSubmission}
         onReject={handleRejectSubmission}
+      />
+
+      <TaskProofModal
+        isOpen={!!viewingProofTask}
+        onClose={() => setViewingProofTask(null)}
+        task={viewingProofTask}
       />
 
       <DivisionManager

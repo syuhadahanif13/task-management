@@ -15,6 +15,7 @@ import {
   Users,
   CheckSquare,
   Search,
+  Paperclip,
 } from 'lucide-react';
 
 interface DashboardProps {
@@ -24,6 +25,7 @@ interface DashboardProps {
   onSelectMeeting: (meeting: Meeting) => void;
   onTabChange: (tab: any) => void;
   onOpenAddTask?: () => void;
+  onViewProof?: (task: Task) => void;
 }
 
 export const Dashboard: React.FC<DashboardProps> = ({
@@ -33,6 +35,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
   onSelectMeeting,
   onTabChange,
   onOpenAddTask,
+  onViewProof,
 }) => {
   const today = new Date().toISOString().split('T')[0];
   const [selectedStatusFilter, setSelectedStatusFilter] = useState<string>('all');
@@ -398,12 +401,27 @@ export const Dashboard: React.FC<DashboardProps> = ({
                         {priorityInfo.label}
                       </span>
 
-                      <button
-                        className="w-8 h-8 rounded-full bg-gray-50 dark:bg-zinc-700/60 group-hover:bg-[#18191d] group-hover:text-white dark:group-hover:bg-white dark:group-hover:text-black flex items-center justify-center text-gray-400 transition-colors"
-                        title="View Task Details"
-                      >
-                        <ArrowUpRight className="w-4 h-4" />
-                      </button>
+                      <div className="flex items-center gap-1.5">
+                        {onViewProof && (task.status === 'Pending Approval' || task.status === 'Done') && (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              onViewProof(task);
+                            }}
+                            className="w-8 h-8 rounded-full bg-indigo-50 dark:bg-indigo-950/50 hover:bg-indigo-100 dark:hover:bg-indigo-900/60 text-indigo-600 dark:text-indigo-400 flex items-center justify-center transition-colors shadow-2xs"
+                            title="Lihat Bukti Kerja / Lampiran"
+                          >
+                            <Paperclip className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+                        <button
+                          className="w-8 h-8 rounded-full bg-gray-50 dark:bg-zinc-700/60 group-hover:bg-[#18191d] group-hover:text-white dark:group-hover:bg-white dark:group-hover:text-black flex items-center justify-center text-gray-400 transition-colors"
+                          title="View Task Details"
+                        >
+                          <ArrowUpRight className="w-4 h-4" />
+                        </button>
+                      </div>
                     </div>
 
                     {/* Task Title */}

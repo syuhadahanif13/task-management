@@ -4,6 +4,7 @@ import { api } from '../api/client';
 import { TaskItem } from './TaskItem';
 import { TaskSubmissionModal } from './TaskSubmissionModal';
 import { TaskReviewModal } from './TaskReviewModal';
+import { TaskProofModal } from './TaskProofModal';
 import { MultiAssigneeSelector } from './MultiAssigneeSelector';
 import { isTaskAssignedToUser } from '../utils/taskAccess';
 import {
@@ -36,6 +37,7 @@ interface MeetingDetailViewProps {
   onSubmitTask?: (taskId: string, input: { notes: string; attachments: TaskSubmission['attachments'] }) => Promise<void>;
   onApproveSubmission?: (taskId: string, submissionId: string, reviewNote?: string) => Promise<void>;
   onRejectSubmission?: (taskId: string, submissionId: string, reviewNote: string) => Promise<void>;
+  onViewProof?: (task: Task) => void;
   currentUserRole?: 'admin' | 'user';
   currentUser?: { username: string; role?: string; divisionId?: string } | null;
 }
@@ -53,11 +55,13 @@ export const MeetingDetailView: React.FC<MeetingDetailViewProps> = ({
   onSubmitTask,
   onApproveSubmission,
   onRejectSubmission,
+  onViewProof,
   currentUserRole = 'admin',
   currentUser,
 }) => {
   const [filterStatus, setFilterStatus] = useState<string>('all');
   const [isEditingMeeting, setIsEditingMeeting] = useState<boolean>(false);
+  const [viewingProofTask, setViewingProofTask] = useState<Task | null>(null);
   const [editTitle, setEditTitle] = useState(meeting.title || '');
   const [editDate, setEditDate] = useState(meeting.meetingDate);
   const [editNotes, setEditNotes] = useState(meeting.meetingNotes);
@@ -666,6 +670,7 @@ export const MeetingDetailView: React.FC<MeetingDetailViewProps> = ({
                       onDelete={currentUserRole === 'admin' || isMine ? onDeleteTask : undefined}
                       onOpenSubmit={currentUserRole === 'user' && isMine ? handleOpenSubmit : undefined}
                       onOpenReview={currentUserRole === 'admin' ? handleOpenReview : undefined}
+                      onViewProof={onViewProof || ((t) => setViewingProofTask(t))}
                     />
                   );
                 })
@@ -693,6 +698,12 @@ export const MeetingDetailView: React.FC<MeetingDetailViewProps> = ({
         submission={reviewSubmission}
         onApprove={onApproveSubmission}
         onReject={onRejectSubmission}
+      />
+
+      <TaskProofModal
+        isOpen={!!viewingProofTask}
+        onClose={() => setViewingProofTask(null)}
+        task={viewingProofTask}
       />
     </div>
   );
