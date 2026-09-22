@@ -227,54 +227,77 @@ export const api = {
 
   async getDivisions(): Promise<Division[]> {
     const sbClient = getSupabaseClient();
-    try {
-      const res = await apiFetch('/api/divisions');
-      if (res.ok) {
-        const data = await res.json();
-        if (Array.isArray(data) && data.length > 0) {
-          try { localStorage.setItem('cached_divisions', JSON.stringify(data)); } catch {}
-          return data;
-        }
-      }
-    } catch (fetchErr) {
-      console.warn('API fetch divisions failed, trying direct Supabase client:', fetchErr);
-    }
 
+    // 1. Load locally cached divisions first
+    let localDivisions: Division[] = [];
+    try {
+      const cached = localStorage.getItem('cached_divisions');
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        if (Array.isArray(parsed)) localDivisions = parsed;
+      }
+    } catch {}
+
+    let fetchedDivisions: Division[] = [];
+
+    // 2. Try direct Supabase client query
     if (sbClient) {
       try {
         const { data, error } = await sbClient.from('divisions').select('*').order('name', { ascending: true });
         if (!error && Array.isArray(data) && data.length > 0) {
-          const mapped: Division[] = data.map((d: any) => ({
+          fetchedDivisions = data.map((d: any) => ({
             id: d.id,
             name: d.name,
             createdAt: d.created_at,
             updatedAt: d.updated_at,
           }));
-          try { localStorage.setItem('cached_divisions', JSON.stringify(mapped)); } catch {}
-          return mapped;
         }
       } catch (sbErr) {
         console.warn('Direct Supabase getDivisions warning:', sbErr);
       }
     }
 
-    try {
-      const cached = localStorage.getItem('cached_divisions');
-      if (cached) {
-        const parsed = JSON.parse(cached);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+    // 3. If direct Supabase didn't return data, try API fetch
+    if (fetchedDivisions.length === 0) {
+      try {
+        const res = await apiFetch('/api/divisions');
+        if (res.ok) {
+          const data = await res.json();
+          if (Array.isArray(data) && data.length > 0) {
+            fetchedDivisions = data;
+          }
+        }
+      } catch (fetchErr) {
+        console.warn('API fetch divisions failed:', fetchErr);
       }
-    } catch {}
+    }
 
-    const defaultDivisions: Division[] = [
+    // 4. Fallback defaults if both empty
+    const baseList = fetchedDivisions.length > 0 ? fetchedDivisions : (localDivisions.length > 0 ? localDivisions : [
       { id: 'div-1', name: 'REI' },
       { id: 'div-2', name: 'LM' },
       { id: 'div-3', name: 'Sosmed' },
       { id: 'div-4', name: 'PH' },
       { id: 'div-5', name: 'Maps' },
-    ];
-    try { localStorage.setItem('cached_divisions', JSON.stringify(defaultDivisions)); } catch {}
-    return defaultDivisions;
+    ]);
+
+    // 5. CRITICAL MERGE: Ensure any custom division created locally is preserved and never dropped
+    const mergedMap = new Map<string, Division>();
+    for (const d of baseList) {
+      mergedMap.set(d.id, d);
+    }
+    for (const d of localDivisions) {
+      const exists = Array.from(mergedMap.values()).some(
+        existing => existing.id === d.id || existing.name.toLowerCase() === d.name.toLowerCase()
+      );
+      if (!exists) {
+        mergedMap.set(d.id, d);
+      }
+    }
+
+    const result = Array.from(mergedMap.values());
+    try { localStorage.setItem('cached_divisions', JSON.stringify(result)); } catch {}
+    return result;
   },
 
   async createDivision(input: CreateDivisionInput): Promise<Division> {
@@ -348,6 +371,11 @@ export const api = {
       localStorage.setItem('cached_divisions', JSON.stringify(list));
     } catch {}
 
+    // Dispatch global event for other components to re-read divisions immediately
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('divisionsUpdated', { detail: createdDivision }));
+    }
+
     return createdDivision;
   },
 
@@ -411,6 +439,10 @@ export const api = {
       }
     } catch {}
 
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('divisionsUpdated', { detail: updatedDivision }));
+    }
+
     return updatedDivision;
   },
 
@@ -439,29 +471,35 @@ export const api = {
       }
     } catch {}
 
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('divisionsUpdated', { detail: { id } }));
+    }
+
     return { message: 'Division deleted', id };
   },
 
   async getUsers(): Promise<Omit<User, 'password'>[]> {
     const sbClient = getSupabaseClient();
+
+    let localUsers: Omit<User, 'password'>[] = [];
     try {
-      const res = await apiFetch('/api/users');
-      if (res.ok) {
-        const data = await res.json();
-        if (Array.isArray(data) && data.length > 0) {
-          try { localStorage.setItem('cached_users', JSON.stringify(data)); } catch {}
-          return data;
-        }
+      const cached = localStorage.getItem('cached_users');
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        if (Array.isArray(parsed)) localUsers = parsed;
       }
-    } catch (err) {
-      console.warn('API getUsers failed, trying direct Supabase client:', err);
-    }
+    } catch {}
+
+    let fetchedUsers: Omit<User, 'password'>[] = [];
 
     if (sbClient) {
       try {
-        const { data, error } = await sbClient.from('users').select('id, username, division_id, role, created_at, updated_at').order('username', { ascending: true });
+        const { data, error } = await sbClient
+          .from('users')
+          .select('id, username, division_id, role, created_at, updated_at')
+          .order('username', { ascending: true });
         if (!error && Array.isArray(data) && data.length > 0) {
-          const mapped = data.map((u: any) => ({
+          fetchedUsers = data.map((u: any) => ({
             id: u.id,
             username: u.username,
             divisionId: u.division_id || '',
@@ -469,21 +507,25 @@ export const api = {
             createdAt: u.created_at,
             updatedAt: u.updated_at,
           }));
-          try { localStorage.setItem('cached_users', JSON.stringify(mapped)); } catch {}
-          return mapped;
         }
       } catch (sbErr) {
         console.warn('Direct Supabase getUsers warning:', sbErr);
       }
     }
 
-    try {
-      const cached = localStorage.getItem('cached_users');
-      if (cached) {
-        const parsed = JSON.parse(cached);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+    if (fetchedUsers.length === 0) {
+      try {
+        const res = await apiFetch('/api/users');
+        if (res.ok) {
+          const data = await res.json();
+          if (Array.isArray(data) && data.length > 0) {
+            fetchedUsers = data;
+          }
+        }
+      } catch (err) {
+        console.warn('API getUsers failed:', err);
       }
-    } catch {}
+    }
 
     const defaultUsers = [
       { id: 'user-1', username: 'rizki', divisionId: 'div-1', role: 'user' as const },
@@ -495,7 +537,26 @@ export const api = {
       { id: 'user-7', username: 'Sonia', divisionId: 'div-1', role: 'user' as const },
       { id: 'user-8', username: 'Azka', divisionId: 'div-4', role: 'user' as const },
     ];
-    return defaultUsers;
+
+    const baseList = fetchedUsers.length > 0 ? fetchedUsers : (localUsers.length > 0 ? localUsers : defaultUsers);
+
+    // Merge logic
+    const mergedMap = new Map<string, Omit<User, 'password'>>();
+    for (const u of baseList) {
+      mergedMap.set(u.id, u);
+    }
+    for (const u of localUsers) {
+      const exists = Array.from(mergedMap.values()).some(
+        existing => existing.id === u.id || existing.username.toLowerCase() === u.username.toLowerCase()
+      );
+      if (!exists) {
+        mergedMap.set(u.id, u);
+      }
+    }
+
+    const result = Array.from(mergedMap.values());
+    try { localStorage.setItem('cached_users', JSON.stringify(result)); } catch {}
+    return result;
   },
 
   async createUser(input: CreateUserInput): Promise<Omit<User, 'password'>> {
@@ -566,6 +627,10 @@ export const api = {
       list.push(createdUser);
       localStorage.setItem('cached_users', JSON.stringify(list));
     } catch {}
+
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('usersUpdated', { detail: createdUser }));
+    }
 
     return createdUser;
   },
@@ -640,6 +705,10 @@ export const api = {
       }
     } catch {}
 
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('usersUpdated', { detail: updatedUser }));
+    }
+
     return updatedUser;
   },
 
@@ -667,6 +736,10 @@ export const api = {
         localStorage.setItem('cached_users', JSON.stringify(filtered));
       }
     } catch {}
+
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('usersUpdated', { detail: { id } }));
+    }
 
     return { message: 'User deleted', id };
   },

@@ -39,13 +39,24 @@ export const UserManager: React.FC<UserManagerProps> = ({ isOpen, onClose, onSim
     if (isOpen) {
       loadData();
     }
+
+    const handleDivisionsUpdate = () => {
+      api.getDivisions().then(setDivisions).catch(() => {});
+    };
+    window.addEventListener('divisionsUpdated', handleDivisionsUpdate);
+    return () => window.removeEventListener('divisionsUpdated', handleDivisionsUpdate);
   }, [isOpen]);
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!form.username.trim() || !form.password.trim() || !form.divisionId) return;
+    setErrorMsg('');
     try {
-      await api.createUser(form);
+      const newUser = await api.createUser(form);
+      setUsers(prev => {
+        const exists = prev.some(u => u.id === newUser.id || u.username.toLowerCase() === newUser.username.toLowerCase());
+        return exists ? prev : [...prev, newUser];
+      });
       setForm({ username: '', password: '', divisionId: '', role: 'user' });
       setIsCreating(false);
       await loadData();
@@ -56,8 +67,10 @@ export const UserManager: React.FC<UserManagerProps> = ({ isOpen, onClose, onSim
 
   const handleUpdate = async (id: string) => {
     if (!editForm.username.trim()) return;
+    setErrorMsg('');
     try {
-      await api.updateUser(id, editForm);
+      const updated = await api.updateUser(id, editForm);
+      setUsers(prev => prev.map(u => (u.id === id ? { ...u, ...updated } : u)));
       setEditingId(null);
       await loadData();
     } catch (err: any) {
@@ -67,11 +80,14 @@ export const UserManager: React.FC<UserManagerProps> = ({ isOpen, onClose, onSim
 
   const handleDelete = async (id: string) => {
     if (!confirm('Hapus user ini?')) return;
+    setErrorMsg('');
     try {
+      setUsers(prev => prev.filter(u => u.id !== id));
       await api.deleteUser(id);
       await loadData();
     } catch (err: any) {
       setErrorMsg(err.message || 'Gagal menghapus user.');
+      await loadData();
     }
   };
 
@@ -100,7 +116,10 @@ export const UserManager: React.FC<UserManagerProps> = ({ isOpen, onClose, onSim
 
           {!isCreating ? (
             <button
-              onClick={() => setIsCreating(true)}
+              onClick={() => {
+                setIsCreating(true);
+                api.getDivisions().then(setDivisions).catch(() => {});
+              }}
               className="notion-btn notion-btn-primary text-xs"
             >
               <Plus className="h-3.5 w-3.5" />
