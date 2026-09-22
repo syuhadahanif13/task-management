@@ -633,7 +633,35 @@ router.post('/tasks/:taskId/submit', async (req, res) => {
 });
 
 router.get('/tasks/:taskId/submissions', async (req, res) => {
-  const taskSubmissions = submissions.filter(s => s.taskId === req.params.taskId);
+  const { taskId } = req.params;
+  if (supabase) {
+    try {
+      const { data, error } = await supabase
+        .from('task_submissions')
+        .select('*')
+        .eq('task_id', taskId)
+        .order('submitted_at', { ascending: false });
+
+      if (!error && Array.isArray(data) && data.length > 0) {
+        const mapped: TaskSubmission[] = data.map((s: any) => ({
+          id: s.id,
+          taskId: s.task_id,
+          assignee: s.assignee,
+          notes: s.notes || '',
+          attachments: s.attachments || [],
+          status: s.status || 'pending',
+          submittedAt: s.submitted_at,
+          reviewedBy: s.reviewed_by,
+          reviewedAt: s.reviewed_at,
+          reviewNote: s.review_note
+        }));
+        return res.json(mapped);
+      }
+    } catch (err: any) {
+      console.warn('Supabase read task_submissions warning:', err?.message);
+    }
+  }
+  const taskSubmissions = submissions.filter(s => s.taskId === taskId);
   res.json(taskSubmissions.sort((a, b) => new Date(b.submittedAt).getTime() - new Date(a.submittedAt).getTime()));
 });
 
@@ -972,53 +1000,181 @@ function parseHeuristicMeeting(text: string, defaultDate: string) {
   return { title, meetingDate: defaultDate, participants, meetingNotes: text, tasks };
 }
 
+// Division Supabase Sync
+async function syncDivisionsFromSupabase(): Promise<Division[]> {
+  if (!supabase) return divisions;
+  try {
+    const { data: dbDivisions, error } = await supabase
+      .from('divisions')
+      .select('*')
+      .order('name', { ascending: true });
+
+    if (!error && Array.isArray(dbDivisions)) {
+      if (dbDivisions.length > 0) {
+        divisions = dbDivisions.map((d: any) => ({
+          id: d.id,
+          name: d.name,
+          createdAt: d.created_at,
+          updatedAt: d.updated_at,
+        }));
+        return divisions;
+      } else if (divisions.length > 0) {
+        // Table exists in Supabase but is empty: seed in-memory initial divisions to Supabase
+        const now = new Date().toISOString();
+        const records = divisions.map(d => ({
+          id: d.id,
+          name: d.name,
+          created_at: d.createdAt || now,
+          updated_at: d.updatedAt || now,
+        }));
+        await supabase.from('divisions').insert(records);
+      }
+    }
+  } catch (err: any) {
+    console.warn('Supabase divisions sync warning:', err?.message);
+  }
+  return divisions;
+}
+
 // Division CRUD
-router.get('/divisions', (req, res) => {
-  res.json(divisions);
+router.get('/divisions', async (req, res) => {
+  const data = await syncDivisionsFromSupabase();
+  res.json(data);
 });
 
-router.post('/divisions', (req, res) => {
+router.post('/divisions', async (req, res) => {
   const { name } = req.body;
   if (!name || !String(name).trim()) return res.status(400).json({ error: 'Division name is required' });
+  const trimmedName = String(name).trim();
   const now = new Date().toISOString();
   const division: Division = {
     id: generateId('div'),
-    name: String(name).trim(),
+    name: trimmedName,
     createdAt: now,
     updatedAt: now,
   };
   divisions.push(division);
+
+  if (supabase) {
+    try {
+      const { data, error } = await supabase
+        .from('divisions')
+        .insert([{
+          id: division.id,
+          name: division.name,
+          created_at: division.createdAt,
+          updated_at: division.updatedAt
+        }])
+        .select()
+        .maybeSingle();
+
+      if (error) {
+        console.warn('Supabase insert division warning:', error.message);
+      } else if (data) {
+        division.id = data.id || division.id;
+      }
+    } catch (err: any) {
+      console.warn('Supabase insert division error:', err?.message);
+    }
+  }
+
   res.status(201).json(division);
 });
 
-router.put('/divisions/:id', (req, res) => {
+router.put('/divisions/:id', async (req, res) => {
   const idx = divisions.findIndex(d => d.id === req.params.id);
-  if (idx === -1) return res.status(404).json({ error: 'Division not found' });
   const { name } = req.body;
-  if (name !== undefined) divisions[idx].name = String(name).trim();
-  divisions[idx].updatedAt = new Date().toISOString();
+  const now = new Date().toISOString();
+  if (idx !== -1 && name !== undefined) {
+    divisions[idx].name = String(name).trim();
+    divisions[idx].updatedAt = now;
+  }
+
+  if (supabase) {
+    try {
+      await supabase.from('divisions').update({
+        name: String(name).trim(),
+        updated_at: now
+      }).eq('id', req.params.id);
+    } catch (err: any) {
+      console.warn('Supabase update division warning:', err?.message);
+    }
+  }
+
+  if (idx === -1) return res.status(404).json({ error: 'Division not found' });
   res.json(divisions[idx]);
 });
 
-router.delete('/divisions/:id', (req, res) => {
+router.delete('/divisions/:id', async (req, res) => {
   const idx = divisions.findIndex(d => d.id === req.params.id);
-  if (idx === -1) return res.status(404).json({ error: 'Division not found' });
-  divisions.splice(idx, 1);
+  if (idx !== -1) divisions.splice(idx, 1);
+
+  if (supabase) {
+    try {
+      await supabase.from('divisions').delete().eq('id', req.params.id);
+    } catch (err: any) {
+      console.warn('Supabase delete division warning:', err?.message);
+    }
+  }
+
   res.json({ message: 'Division deleted', id: req.params.id });
 });
 
+// User Supabase Sync
+async function syncUsersFromSupabase(): Promise<User[]> {
+  if (!supabase) return users;
+  try {
+    const { data: dbUsers, error } = await supabase
+      .from('users')
+      .select('*')
+      .order('username', { ascending: true });
+
+    if (!error && Array.isArray(dbUsers)) {
+      if (dbUsers.length > 0) {
+        users = dbUsers.map((u: any) => ({
+          id: u.id,
+          username: u.username,
+          password: u.password,
+          divisionId: u.division_id || u.divisionId || '',
+          role: u.role || 'user',
+          createdAt: u.created_at,
+          updatedAt: u.updated_at,
+        }));
+        return users;
+      } else if (users.length > 0) {
+        // Table exists in Supabase but is empty: seed in-memory initial users to Supabase
+        const now = new Date().toISOString();
+        const records = users.map(u => ({
+          id: u.id,
+          username: u.username,
+          password: u.password,
+          division_id: u.divisionId || null,
+          role: u.role,
+          created_at: u.createdAt || now,
+          updated_at: u.updatedAt || now,
+        }));
+        await supabase.from('users').insert(records);
+      }
+    }
+  } catch (err: any) {
+    console.warn('Supabase users sync warning:', err?.message);
+  }
+  return users;
+}
+
 // User CRUD
-router.get('/users', (req, res) => {
+router.get('/users', async (req, res) => {
+  await syncUsersFromSupabase();
   const safeUsers = users.map(({ password, ...u }) => ({ ...u }));
   res.json(safeUsers);
 });
 
-router.post('/users', (req, res) => {
+router.post('/users', async (req, res) => {
   const { username, password, divisionId, role } = req.body;
   if (!username || !password || !divisionId) {
     return res.status(400).json({ error: 'Username, password, and division are required' });
   }
-  if (users.some(u => u.username === String(username).trim())) {
+  if (users.some(u => u.username.toLowerCase() === String(username).trim().toLowerCase())) {
     return res.status(400).json({ error: 'Username already exists' });
   }
   const now = new Date().toISOString();
@@ -1032,34 +1188,87 @@ router.post('/users', (req, res) => {
     updatedAt: now,
   };
   users.push(user);
+
+  if (supabase) {
+    try {
+      const { data, error } = await supabase
+        .from('users')
+        .insert([{
+          id: user.id,
+          username: user.username,
+          password: user.password,
+          division_id: user.divisionId,
+          role: user.role,
+          created_at: user.createdAt,
+          updated_at: user.updatedAt
+        }])
+        .select()
+        .maybeSingle();
+
+      if (error) {
+        console.warn('Supabase insert user warning:', error.message);
+      } else if (data) {
+        user.id = data.id || user.id;
+      }
+    } catch (err: any) {
+      console.warn('Supabase insert user error:', err?.message);
+    }
+  }
+
   const { password: _pwd, ...safeUser } = user;
   res.status(201).json(safeUser);
 });
 
-router.put('/users/:id', (req, res) => {
+router.put('/users/:id', async (req, res) => {
   const idx = users.findIndex(u => u.id === req.params.id);
-  if (idx === -1) return res.status(404).json({ error: 'User not found' });
   const { username, password, divisionId, role } = req.body;
-  if (username !== undefined) users[idx].username = String(username).trim();
-  if (password !== undefined) users[idx].password = String(password);
-  if (divisionId !== undefined) users[idx].divisionId = String(divisionId);
-  if (role !== undefined && ['admin', 'user'].includes(role)) users[idx].role = role;
-  users[idx].updatedAt = new Date().toISOString();
+  const now = new Date().toISOString();
+  if (idx !== -1) {
+    if (username !== undefined) users[idx].username = String(username).trim();
+    if (password !== undefined) users[idx].password = String(password);
+    if (divisionId !== undefined) users[idx].divisionId = String(divisionId);
+    if (role !== undefined && ['admin', 'user'].includes(role)) users[idx].role = role;
+    users[idx].updatedAt = now;
+  }
+
+  if (supabase) {
+    try {
+      const updates: any = { updated_at: now };
+      if (username !== undefined) updates.username = String(username).trim();
+      if (password !== undefined) updates.password = String(password);
+      if (divisionId !== undefined) updates.division_id = String(divisionId);
+      if (role !== undefined) updates.role = role;
+      await supabase.from('users').update(updates).eq('id', req.params.id);
+    } catch (err: any) {
+      console.warn('Supabase update user warning:', err?.message);
+    }
+  }
+
+  if (idx === -1) return res.status(404).json({ error: 'User not found' });
   const { password: _pwd, ...safeUser } = users[idx];
   res.json(safeUser);
 });
 
-router.delete('/users/:id', (req, res) => {
+router.delete('/users/:id', async (req, res) => {
   const idx = users.findIndex(u => u.id === req.params.id);
-  if (idx === -1) return res.status(404).json({ error: 'User not found' });
-  users.splice(idx, 1);
+  if (idx !== -1) users.splice(idx, 1);
+
+  if (supabase) {
+    try {
+      await supabase.from('users').delete().eq('id', req.params.id);
+    } catch (err: any) {
+      console.warn('Supabase delete user warning:', err?.message);
+    }
+  }
+
   res.json({ message: 'User deleted', id: req.params.id });
 });
 
 // Auth
-router.post('/auth/login', (req, res) => {
+router.post('/auth/login', async (req, res) => {
   const { username, password } = req.body;
-  const user = users.find(u => u.username === String(username).trim() && u.password === String(password));
+  await syncUsersFromSupabase();
+  const user = users.find(u => u.username.toLowerCase() === String(username).trim().toLowerCase() && u.password === String(password));
   if (!user) return res.status(401).json({ error: 'Invalid username or password' });
   const { password: _pwd, ...safeUser } = user;
   res.json({ user: safeUser, token: generateId('token') });

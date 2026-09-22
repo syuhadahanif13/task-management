@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Meeting } from '../types';
+import { SUPABASE_SQL_MIGRATION } from '../lib/supabase';
 import { Database, X, Code, CheckCircle, ArrowDown, Copy, Download, Layers } from 'lucide-react';
 
 interface SchemaInspectorModalProps {
@@ -20,39 +21,7 @@ export const SchemaInspectorModal: React.FC<SchemaInspectorModalProps> = ({
 
   const totalTasks = meetings.reduce((acc, m) => acc + (m.tasks?.length || 0), 0);
 
-  const sqlSchema = `-- Relational Schema adhering strictly to the 4 Core Fields
--- 1. Meeting Date (Tanggal Rapat)
--- 2. Participants (Peserta)
--- 3. Meeting Notes/Minutes (Catatan)
--- 4. Tasks (Action items: title, assignee, due date, status)
-
-CREATE TABLE meetings (
-    id VARCHAR(64) PRIMARY KEY,
-    title VARCHAR(255) NOT NULL,
-    meeting_date DATE NOT NULL,              -- 1. Meeting Date (Tanggal Rapat)
-    participants TEXT[] NOT NULL,            -- 2. Participants (Peserta)
-    meeting_notes TEXT NOT NULL,             -- 3. Meeting Notes/Minutes (Catatan)
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
-);
-
-CREATE TABLE tasks (
-    id VARCHAR(64) PRIMARY KEY,
-    meeting_id VARCHAR(64) NOT NULL          -- One-to-Many Foreign Key
-        REFERENCES meetings(id) ON DELETE CASCADE,
-    title VARCHAR(255) NOT NULL,             -- 4a. Action Item Title
-    assignee VARCHAR(128) NOT NULL,          -- 4b. Assignee (Penanggung Jawab)
-    due_date DATE NOT NULL,                  -- 4c. Due Date (Tenggat Waktu)
-    status VARCHAR(32) NOT NULL              -- 4d. Status
-        CHECK (status IN ('To Do', 'In Progress', 'Done', 'Pending Approval')),
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
-);
-
-CREATE INDEX idx_tasks_meeting_id ON tasks(meeting_id);
-CREATE INDEX idx_tasks_status ON tasks(status);
-CREATE INDEX idx_meetings_date ON meetings(meeting_date);
-`;
+  const sqlSchema = SUPABASE_SQL_MIGRATION;
 
   const copyToClipboard = (text: string) => {
     navigator.clipboard.writeText(text);
