@@ -25,6 +25,7 @@ interface AllTasksKanbanProps {
   onOpenAddTask?: () => void;
   onOpenMeetings?: () => void;
   currentUserRole?: 'admin' | 'user';
+  currentUser?: { username: string; role?: string; divisionId?: string } | null;
 }
 
 export const AllTasksKanban: React.FC<AllTasksKanbanProps> = ({
@@ -38,6 +39,7 @@ export const AllTasksKanban: React.FC<AllTasksKanbanProps> = ({
   onOpenAddTask,
   onOpenMeetings,
   currentUserRole = 'admin',
+  currentUser,
 }) => {
   const [viewMode, setViewMode] = useState<'kanban' | 'list'>('kanban');
   const [filterAssignee, setFilterAssignee] = useState<string>('all');
@@ -132,6 +134,12 @@ export const AllTasksKanban: React.FC<AllTasksKanbanProps> = ({
           <span className="text-xs font-bold text-gray-400 dark:text-zinc-500">
             {totalCount} Total Tugas
           </span>
+          {currentUserRole === 'user' && currentUser?.username && (
+            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-lime-500/15 dark:bg-lime-500/20 text-lime-800 dark:text-lime-300 text-xs font-bold border border-lime-500/30">
+              <User className="w-3.5 h-3.5" />
+              <span>Tugas {currentUser.username}</span>
+            </span>
+          )}
         </div>
 
 
@@ -193,21 +201,30 @@ export const AllTasksKanban: React.FC<AllTasksKanbanProps> = ({
 
         {/* Assignee Filter & View Mode */}
         <div className="flex items-center gap-2.5 w-full md:w-auto justify-between md:justify-end">
-          <div className="flex items-center gap-2 bg-gray-50 dark:bg-zinc-750/70 px-3.5 py-2 rounded-full border border-gray-200/50 dark:border-zinc-700">
-            <User className="w-3.5 h-3.5 text-gray-400" />
-            <select
-              value={filterAssignee}
-              onChange={(e) => setFilterAssignee(e.target.value)}
-              className="bg-transparent text-xs font-bold text-gray-800 dark:text-white focus:outline-none cursor-pointer"
-            >
-              <option value="all">Semua PIC</option>
-              {assignees.map((a, idx) => (
-                <option key={idx} value={a}>
-                  {a}
-                </option>
-              ))}
-            </select>
-          </div>
+          {currentUserRole === 'user' ? (
+            <div className="flex items-center gap-2 bg-lime-50 dark:bg-lime-950/30 px-3.5 py-2 rounded-full border border-lime-200 dark:border-lime-800/50">
+              <User className="w-3.5 h-3.5 text-lime-600 dark:text-lime-400" />
+              <span className="text-xs font-bold text-lime-800 dark:text-lime-300">
+                PIC: {currentUser?.username || 'Saya'}
+              </span>
+            </div>
+          ) : (
+            <div className="flex items-center gap-2 bg-gray-50 dark:bg-zinc-750/70 px-3.5 py-2 rounded-full border border-gray-200/50 dark:border-zinc-700">
+              <User className="w-3.5 h-3.5 text-gray-400" />
+              <select
+                value={filterAssignee}
+                onChange={(e) => setFilterAssignee(e.target.value)}
+                className="bg-transparent text-xs font-bold text-gray-800 dark:text-white focus:outline-none cursor-pointer"
+              >
+                <option value="all">Semua PIC</option>
+                {assignees.map((a, idx) => (
+                  <option key={idx} value={a}>
+                    {a}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
 
           {/* View Toggle */}
           <div className="flex items-center gap-1 bg-gray-100 dark:bg-zinc-700/70 p-1 rounded-full">

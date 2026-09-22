@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Meeting, Task, TaskStatus } from '../types';
 import { Translations } from '../i18n';
+import { filterTasksForUser } from '../utils/taskAccess';
 import {
   Plus,
   Bell,
@@ -40,16 +41,19 @@ export const Dashboard: React.FC<DashboardProps> = ({
 
   // Extract all tasks with parent meeting title
   const realMeetings = meetings.filter((m) => m.id !== 'general-tasks');
-  const allTasks: Array<Task & { meetingTitle: string }> = [];
+  const rawTasks: Array<Task & { meetingTitle: string }> = [];
   for (const m of meetings) {
     for (const task of m.tasks || []) {
       const isStandalone = m.id === 'general-tasks' || !task.meetingId || task.meetingId === 'general-tasks';
-      allTasks.push({
+      rawTasks.push({
         ...task,
         meetingTitle: isStandalone ? 'Tugas Mandiri' : (m.title || `Rapat ${m.meetingDate}`),
       });
     }
   }
+
+  // Scope tasks according to user role: Admin gets all tasks, regular user gets only their assigned tasks
+  const allTasks = filterTasksForUser(rawTasks, currentUser);
 
   const totalTasks = allTasks.length;
   const doneTasks = allTasks.filter((t) => t.status === 'Done').length;

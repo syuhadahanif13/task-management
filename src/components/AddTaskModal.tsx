@@ -16,9 +16,10 @@ interface AddTaskModalProps {
   isOpen: boolean;
   onClose: () => void;
   onAddTask: (meetingId: string | undefined, taskInput: CreateTaskInput) => Promise<any>;
+  currentUser?: { username: string; role?: string; divisionId?: string } | null;
 }
 
-export const AddTaskModal: React.FC<AddTaskModalProps> = ({ isOpen, onClose, onAddTask }) => {
+export const AddTaskModal: React.FC<AddTaskModalProps> = ({ isOpen, onClose, onAddTask, currentUser }) => {
   const [meetings, setMeetings] = useState<Meeting[]>([]);
   const [divisions, setDivisions] = useState<Division[]>([]);
   const [users, setUsers] = useState<Omit<User, 'password'>[]>([]);
@@ -40,6 +41,11 @@ export const AddTaskModal: React.FC<AddTaskModalProps> = ({ isOpen, onClose, onA
 
   useEffect(() => {
     if (isOpen) {
+      if (currentUser?.role === 'user' && currentUser?.username) {
+        setAssignees([currentUser.username]);
+      } else {
+        setAssignees([]);
+      }
       Promise.all([
         api.getMeetings(),
         api.getDivisions(),
@@ -53,7 +59,7 @@ export const AddTaskModal: React.FC<AddTaskModalProps> = ({ isOpen, onClose, onA
         setErrorMsg(err.message || 'Gagal memuat data.');
       });
     }
-  }, [isOpen]);
+  }, [isOpen, currentUser]);
 
   const handleSubmit = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
@@ -87,7 +93,11 @@ export const AddTaskModal: React.FC<AddTaskModalProps> = ({ isOpen, onClose, onA
     setSelectedMeetingId('');
     setTitle('');
     setDescription('');
-    setAssignees([]);
+    setAssignees(
+      currentUser?.role === 'user' && currentUser?.username
+        ? [currentUser.username]
+        : []
+    );
     setDueDate(new Date(Date.now() + 7 * 86400000).toISOString().split('T')[0]);
     setDueTime('10:00');
     setPriority('Medium');

@@ -17,9 +17,12 @@ import {
   ArrowLeft,
 } from 'lucide-react';
 
+import { isTaskAssignedToUser } from '../utils/taskAccess';
+
 interface CalendarViewProps {
   meetings: Meeting[];
   t: Translations;
+  currentUser?: { username: string; role?: string; divisionId?: string } | null;
   onSelectMeeting: (meeting: Meeting) => void;
   onOpenNewMeeting: () => void;
   onOpenNewMeetingOnDate?: (date: string) => void;
@@ -38,6 +41,7 @@ const STATUS_COLORS: Record<string, string> = {
 export const CalendarView: React.FC<CalendarViewProps> = ({
   meetings,
   t,
+  currentUser,
   onSelectMeeting,
   onOpenNewMeeting,
   onOpenNewMeetingOnDate,
@@ -75,6 +79,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
 
       for (const task of m.tasks || []) {
         if (!task.dueDate) continue;
+        if (!isTaskAssignedToUser(task, currentUser)) continue;
         const isOverdue = task.status !== 'Done' && task.dueDate < today;
         addEvent(task.dueDate, {
           id: `t-${task.id}`,
@@ -89,7 +94,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
     }
 
     return map;
-  }, [meetings, today]);
+  }, [meetings, today, currentUser]);
 
   // Weekly Date Strip (7 days around currentDate)
   const weekDays = useMemo(() => {
@@ -142,7 +147,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
 
       // Tasks on selected date
       for (const t of m.tasks || []) {
-        if (t.dueDate === selectedDate) {
+        if (t.dueDate === selectedDate && isTaskAssignedToUser(t, currentUser)) {
           items.push({
             id: `t-${t.id}`,
             title: t.title,
@@ -163,7 +168,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
     if (activeCategory === 'work') return items.filter((i) => i.category !== 'personal');
     if (activeCategory === 'personal') return items.filter((i) => i.category === 'personal');
     return items;
-  }, [meetings, selectedDate, activeCategory]);
+  }, [meetings, selectedDate, activeCategory, currentUser]);
 
   const selectedDateFormatted = useMemo(() => {
     try {

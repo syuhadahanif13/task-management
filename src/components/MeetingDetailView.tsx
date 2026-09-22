@@ -5,6 +5,7 @@ import { TaskItem } from './TaskItem';
 import { TaskSubmissionModal } from './TaskSubmissionModal';
 import { TaskReviewModal } from './TaskReviewModal';
 import { MultiAssigneeSelector } from './MultiAssigneeSelector';
+import { isTaskAssignedToUser } from '../utils/taskAccess';
 import {
   ArrowLeft,
   Trash2,
@@ -18,7 +19,8 @@ import {
   Users,
   FileText,
   CheckSquare,
-  Filter
+  Filter,
+  User as UserIcon
 } from 'lucide-react';
 
 interface MeetingDetailViewProps {
@@ -35,6 +37,7 @@ interface MeetingDetailViewProps {
   onApproveSubmission?: (taskId: string, submissionId: string, reviewNote?: string) => Promise<void>;
   onRejectSubmission?: (taskId: string, submissionId: string, reviewNote: string) => Promise<void>;
   currentUserRole?: 'admin' | 'user';
+  currentUser?: { username: string; role?: string; divisionId?: string } | null;
 }
 
 export const MeetingDetailView: React.FC<MeetingDetailViewProps> = ({
@@ -51,6 +54,7 @@ export const MeetingDetailView: React.FC<MeetingDetailViewProps> = ({
   onApproveSubmission,
   onRejectSubmission,
   currentUserRole = 'admin',
+  currentUser,
 }) => {
   const [filterStatus, setFilterStatus] = useState<string>('all');
   const [isEditingMeeting, setIsEditingMeeting] = useState<boolean>(false);
@@ -81,28 +85,40 @@ export const MeetingDetailView: React.FC<MeetingDetailViewProps> = ({
 
   const [isAddingTask, setIsAddingTask] = useState(false);
   const [taskTitle, setTaskTitle] = useState('');
-  const [taskAssignees, setTaskAssignees] = useState<string[]>([]);
+  const [taskAssignees, setTaskAssignees] = useState<string[]>(() =>
+    currentUserRole === 'user' && currentUser?.username ? [currentUser.username] : []
+  );
   const [taskDueDate, setTaskDueDate] = useState(
     new Date(Date.now() + 7 * 86400000).toISOString().split('T')[0]
   );
   const [taskStatus, setTaskStatus] = useState<TaskStatus>('To Do');
   const [isSubmittingTask, setIsSubmittingTask] = useState(false);
+  const [scopeView, setScopeView] = useState<'my' | 'all'>(currentUserRole === 'user' ? 'my' : 'all');
 
   const [submittingTask, setSubmittingTask] = useState<Task | null>(null);
   const [reviewingTask, setReviewingTask] = useState<Task | null>(null);
   const [reviewSubmission, setReviewSubmission] = useState<TaskSubmission | null>(null);
 
   const tasks = meeting.tasks || [];
-  const filteredTasks = tasks.filter((t) => {
+  const myTasksCount = tasks.filter((t) => isTaskAssignedToUser(t, currentUser)).length;
+
+  const scopedTasks = tasks.filter((t) => {
+    if (currentUserRole === 'user' && scopeView === 'my') {
+      return isTaskAssignedToUser(t, currentUser);
+    }
+    return true;
+  });
+
+  const filteredTasks = scopedTasks.filter((t) => {
     if (filterStatus === 'all') return true;
     return t.status === filterStatus;
   });
 
-  const doneCount = tasks.filter((t) => t.status === 'Done').length;
-  const inProgressCount = tasks.filter((t) => t.status === 'In Progress').length;
-  const todoCount = tasks.filter((t) => t.status === 'To Do').length;
-  const pendingApprovalCount = tasks.filter((t) => t.status === 'Pending Approval').length;
-  const completionRate = tasks.length > 0 ? Math.round((doneCount / tasks.length) * 100) : 0;
+  const doneCount = scopedTasks.filter((t) => t.status === 'Done').length;
+  const inProgressCount = scopedTasks.filter((t) => t.status === 'In Progress').length;
+  const todoCount = scopedTasks.filter((t) => t.status === 'To Do').length;
+  const pendingApprovalCount = scopedTasks.filter((t) => t.status === 'Pending Approval').length;
+  const completionRate = scopedTasks.length > 0 ? Math.round((doneCount / scopedTasks.length) * 100) : 0;
 
   const handleOpenSubmit = (task: Task) => setSubmittingTask(task);
 
@@ -443,13 +459,42 @@ export const MeetingDetailView: React.FC<MeetingDetailViewProps> = ({
                   Action Items ({tasks.length})
                 </h3>
               </div>
-              <button
-                onClick={() => setIsAddingTask(true)}
-                className="inline-flex items-center gap-1.5 px-4 py-2 rounded-full bg-[#18191d] hover:bg-black text-white text-xs font-bold shadow-md transition active:scale-95"
-              >
-                <Plus className="h-3.5 w-3.5" />
-                Tambah Action Item
-              </button>
+
+              <div className="flex items-center gap-2">
+                {currentUserRole === 'user' && (
+                  <div className="flex items-center bg-gray-200/80 dark:bg-zinc-700/80 p-0.5 rounded-full text-xs font-bold">
+                    <button
+                      type="button"
+                      onClick={() => setScopeView('my')}
+                      className={`px-3 py-1 rounded-full transition-all ${
+                        scopeView === 'my'
+                          ? 'bg-white dark:bg-zinc-900 text-gray-900 dark:text-white shadow-xs'
+                          : 'text-gray-500 dark:text-zinc-400 hover:text-black dark:hover:text-white'
+                      }`}
+                    >
+                      Tugas Saya ({myTasksCount})
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setScopeView('all')}
+                      className={`px-3 py-1 rounded-full transition-all ${
+                        scopeView === 'all'
+                          ? 'bg-white dark:bg-zinc-900 text-gray-900 dark:text-white shadow-xs'
+                          : 'text-gray-500 dark:text-zinc-400 hover:text-black dark:hover:text-white'
+                      }`}
+                    >
+                      Semua ({tasks.length})
+                    </button>
+                  </div>
+                )}
+                <button
+                  onClick={() => setIsAddingTask(true)}
+                  className="inline-flex items-center gap-1.5 px-4 py-2 rounded-full bg-[#18191d] hover:bg-black text-white text-xs font-bold shadow-md transition active:scale-95"
+                >
+                  <Plus className="h-3.5 w-3.5" />
+                  Tambah Action Item
+                </button>
+              </div>
             </div>
 
             {/* Progress */}
@@ -610,17 +655,20 @@ export const MeetingDetailView: React.FC<MeetingDetailViewProps> = ({
                   </button>
                 </div>
               ) : (
-                filteredTasks.map((task) => (
-                  <TaskItem
-                    key={task.id}
-                    task={task}
-                    onStatusChange={onUpdateTaskStatus}
-                    onEdit={onEditTask}
-                    onDelete={onDeleteTask}
-                    onOpenSubmit={currentUserRole === 'user' ? handleOpenSubmit : undefined}
-                    onOpenReview={currentUserRole === 'admin' ? handleOpenReview : undefined}
-                  />
-                ))
+                filteredTasks.map((task) => {
+                  const isMine = isTaskAssignedToUser(task, currentUser);
+                  return (
+                    <TaskItem
+                      key={task.id}
+                      task={task}
+                      onStatusChange={onUpdateTaskStatus}
+                      onEdit={currentUserRole === 'admin' || isMine ? onEditTask : undefined}
+                      onDelete={currentUserRole === 'admin' || isMine ? onDeleteTask : undefined}
+                      onOpenSubmit={currentUserRole === 'user' && isMine ? handleOpenSubmit : undefined}
+                      onOpenReview={currentUserRole === 'admin' ? handleOpenReview : undefined}
+                    />
+                  );
+                })
               )}
             </div>
           </div>

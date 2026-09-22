@@ -3,6 +3,7 @@ import { Meeting, Task, TaskStatus, CreateMeetingInput, CreateTaskInput, TaskSub
 import { Language, getT } from './i18n';
 import { api } from './api/client';
 import { getSupabaseClient } from './lib/supabase';
+import { filterTasksForUser } from './utils/taskAccess';
 
 // Layout
 import { Sidebar } from './components/Sidebar';
@@ -456,9 +457,15 @@ export default function App() {
     })
   );
 
+  // Scoped tasks based on user role (Admin gets all tasks, regular user gets only their assigned tasks)
+  const scopedTasksWithOrigin = filterTasksForUser(allTasksWithOrigin, currentUser);
+
   const selectedMeeting = meetings.find((m) => m.id === selectedMeetingId);
   const totalMeetings = meetings.filter((m) => m.id !== 'general-tasks').length;
-  const totalTasks = allTasksWithOrigin.length;
+  const totalTasks = scopedTasksWithOrigin.length;
+  const userOverdueCount = scopedTasksWithOrigin.filter(
+    (task) => task.status !== 'Done' && task.dueDate && task.dueDate < new Date().toISOString().split('T')[0]
+  ).length;
 
   // Tab navigation handler
   const handleTabChange = (tab: AppTab) => {
@@ -547,7 +554,7 @@ export default function App() {
           }}
           onOpenAddTask={() => setIsAddTaskOpen(true)}
           currentUser={currentUser}
-          overdueCount={meetings.flatMap((m) => m.tasks || []).filter((task) => task.status !== 'Done' && task.dueDate && task.dueDate < new Date().toISOString().split('T')[0]).length}
+          overdueCount={userOverdueCount}
           showBack={currentTab === 'active-meeting'}
           onSwitchToAdmin={handleSwitchToAdmin}
         />
@@ -595,6 +602,7 @@ export default function App() {
                 <CalendarView
                   meetings={meetings}
                   t={t}
+                  currentUser={currentUser}
                   onSelectMeeting={handleSelectMeeting}
                   onOpenNewMeeting={() => setIsNewMeetingOpen(true)}
                   onOpenNewMeetingOnDate={(date) => {
@@ -850,13 +858,14 @@ export default function App() {
                   onApproveSubmission={handleApproveSubmission}
                   onRejectSubmission={handleRejectSubmission}
                   currentUserRole={currentUser?.role || 'admin'}
+                  currentUser={currentUser}
                 />
               )}
 
               {/* TAB: ALL TASKS KANBAN */}
               {currentTab === 'all-tasks' && (
                 <AllTasksKanban
-                  tasks={allTasksWithOrigin}
+                  tasks={scopedTasksWithOrigin}
                   onUpdateStatus={handleUpdateTaskStatus}
                   onEditTask={(task) => setEditingTask(task)}
                   onDeleteTask={handleDeleteTask}
@@ -867,6 +876,7 @@ export default function App() {
                   onOpenAddTask={() => setIsAddTaskOpen(true)}
                   onOpenMeetings={() => setCurrentTab('meetings')}
                   currentUserRole={currentUser?.role || 'admin'}
+                  currentUser={currentUser}
                   onOpenSubmit={handleOpenSubmit}
                   onOpenReview={handleOpenReview}
                 />
@@ -1095,6 +1105,7 @@ export default function App() {
         isOpen={isAddTaskOpen}
         onClose={() => setIsAddTaskOpen(false)}
         onAddTask={handleAddTaskToMeeting}
+        currentUser={currentUser}
       />
 
       {/* Progressive Web App (PWA) Install Prompt */}
