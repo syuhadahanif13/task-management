@@ -63,21 +63,29 @@ export const TaskReviewModal: React.FC<TaskReviewModalProps> = ({
 
   if (!isOpen || !task || !submission) return null;
 
-  const formatDate = (dateStr: string) => {
-    return new Date(dateStr).toLocaleString('id-ID', {
-      day: 'numeric',
-      month: 'short',
-      year: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-    });
+  const formatDate = (dateStr?: string) => {
+    if (!dateStr) return 'Baru saja';
+    try {
+      return new Date(dateStr).toLocaleString('id-ID', {
+        day: 'numeric',
+        month: 'short',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+      });
+    } catch {
+      return dateStr;
+    }
   };
 
-  const formatSize = (bytes: number) => {
+  const formatSize = (bytes?: number) => {
+    if (!bytes && bytes !== 0) return '';
     if (bytes < 1024) return `${bytes} B`;
     if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
     return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
   };
+
+  const attachmentsList = Array.isArray(submission.attachments) ? submission.attachments : [];
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
@@ -132,47 +140,53 @@ export const TaskReviewModal: React.FC<TaskReviewModalProps> = ({
               Catatan dari Assignee
             </label>
             <div className="p-3.5 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-lg text-xs text-zinc-800 dark:text-zinc-200 whitespace-pre-wrap">
-              {submission.notes}
+              {submission.notes || 'Pekerjaan telah diajukan dan menunggu peninjauan.'}
             </div>
             <p className="text-[11px] text-zinc-500 dark:text-zinc-400">
-              Disubmit pada {formatDate(submission.submittedAt)} oleh {submission.assignee}
+              Disubmit pada {formatDate(submission.submittedAt)} oleh {submission.assignee || task.assignee || 'User'}
             </p>
           </div>
 
           {/* Attachments */}
           <div className="space-y-2">
             <label className="text-xs font-semibold text-zinc-800 dark:text-zinc-200">
-              Bukti / Attachment ({submission.attachments.length})
+              Bukti / Attachment ({attachmentsList.length})
             </label>
-            <div className="space-y-2">
-              {submission.attachments.map((file, idx) => (
-                <div
-                  key={idx}
-                  className="flex items-center gap-3 p-3 bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg"
-                >
-                  <FileText className="w-4 h-4 text-zinc-400 shrink-0" />
-                  <div className="flex-1 min-w-0">
-                    <p className="text-xs font-medium text-zinc-900 dark:text-zinc-100 truncate">
-                      {file.name}
-                    </p>
-                    <p className="text-[11px] text-zinc-500 dark:text-zinc-400">
-                      {formatSize(file.size)}
-                    </p>
+            {attachmentsList.length > 0 ? (
+              <div className="space-y-2">
+                {attachmentsList.map((file, idx) => (
+                  <div
+                    key={idx}
+                    className="flex items-center gap-3 p-3 bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg"
+                  >
+                    <FileText className="w-4 h-4 text-zinc-400 shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs font-medium text-zinc-900 dark:text-zinc-100 truncate">
+                        {file.name || `lampiran-${idx + 1}`}
+                      </p>
+                      <p className="text-[11px] text-zinc-500 dark:text-zinc-400">
+                        {formatSize(file.size)}
+                      </p>
+                    </div>
+                    {file.type && file.type.startsWith('image/') && file.data ? (
+                      <img
+                        src={file.data}
+                        alt={file.name || 'bukti'}
+                        className="w-10 h-10 rounded object-cover border border-zinc-200 dark:border-zinc-700"
+                      />
+                    ) : (
+                      <span className="text-[10px] px-2 py-0.5 rounded bg-zinc-200 dark:bg-zinc-700 text-zinc-600 dark:text-zinc-300 uppercase">
+                        {(file.type && file.type.split('/')[1]) || 'file'}
+                      </span>
+                    )}
                   </div>
-                  {file.type.startsWith('image/') && file.data ? (
-                    <img
-                      src={file.data}
-                      alt={file.name}
-                      className="w-10 h-10 rounded object-cover border border-zinc-200 dark:border-zinc-700"
-                    />
-                  ) : (
-                    <span className="text-[10px] px-2 py-0.5 rounded bg-zinc-200 dark:bg-zinc-700 text-zinc-600 dark:text-zinc-300 uppercase">
-                      {file.type.split('/')[1] || 'file'}
-                    </span>
-                  )}
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
+            ) : (
+              <p className="text-xs text-zinc-500 dark:text-zinc-400 italic bg-zinc-50 dark:bg-zinc-800/50 p-3 rounded-lg border border-zinc-200 dark:border-zinc-800">
+                Tidak ada file lampiran yang diunggah.
+              </p>
+            )}
           </div>
 
           {/* Review Note */}

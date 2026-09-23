@@ -474,15 +474,22 @@ export default function App() {
       }
 
       if (subs && subs.length > 0) {
-        setReviewSubmission(subs[0]);
+        const first = subs[0];
+        setReviewSubmission({
+          ...first,
+          assignee: first.assignee || task.assignee || 'User',
+          notes: first.notes || 'Pekerjaan telah diajukan dan menunggu peninjauan admin.',
+          attachments: Array.isArray(first.attachments) ? first.attachments : [],
+        });
       } else {
         setReviewSubmission({
           id: 'sub-fallback-' + task.id,
           taskId: task.id,
-          submittedBy: task.assignee || 'User',
+          assignee: task.assignee || 'User',
           submittedAt: task.updatedAt || new Date().toISOString(),
           status: 'pending',
           notes: 'Pekerjaan telah diajukan dan menunggu peninjauan admin.',
+          attachments: [],
         });
       }
       setReviewingTask(task);

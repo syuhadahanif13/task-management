@@ -137,15 +137,21 @@ export const MeetingDetailView: React.FC<MeetingDetailViewProps> = ({
 
       const latest = submissions[0];
       if (latest) {
-        setReviewSubmission(latest);
+        setReviewSubmission({
+          ...latest,
+          assignee: latest.assignee || task.assignee || 'User',
+          notes: latest.notes || 'Pekerjaan telah diajukan dan menunggu review.',
+          attachments: Array.isArray(latest.attachments) ? latest.attachments : [],
+        });
       } else {
         setReviewSubmission({
           id: 'sub-placeholder-' + task.id,
           taskId: task.id,
-          submittedBy: task.assignee || 'User',
+          assignee: task.assignee || 'User',
           submittedAt: task.updatedAt || new Date().toISOString(),
           status: 'pending',
           notes: 'Pekerjaan telah diajukan dan menunggu review.',
+          attachments: [],
         });
       }
       setReviewingTask(task);
