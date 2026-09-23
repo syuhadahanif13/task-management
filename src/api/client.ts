@@ -142,9 +142,15 @@ async function saveSubmissionToSupabaseSystemMeeting(sbClient: any, sub: TaskSub
         if (Array.isArray(parsed)) list = parsed;
       } catch {}
     }
-    const idx = list.findIndex(s => s.id === sub.id);
+    const idx = list.findIndex(s => s.id === sub.id || s.taskId === sub.taskId);
     if (idx >= 0) {
-      list[idx] = { ...list[idx], ...sub };
+      const existingAtt = Array.isArray(list[idx].attachments) ? list[idx].attachments : [];
+      const subAtt = Array.isArray(sub.attachments) ? sub.attachments : [];
+      list[idx] = {
+        ...list[idx],
+        ...sub,
+        attachments: subAtt.length > 0 ? subAtt : existingAtt,
+      };
     } else {
       list.push(sub);
     }
@@ -604,7 +610,7 @@ export const api = {
           }));
 
           for (const ds of directSubs) {
-            const idx = result.findIndex(r => r.id === ds.id);
+            const idx = result.findIndex(r => r.id === ds.id || r.taskId === ds.taskId);
             if (idx >= 0) {
               const resAtt = Array.isArray(result[idx].attachments) ? result[idx].attachments : [];
               const dsAtt = Array.isArray(ds.attachments) ? ds.attachments : [];
@@ -635,7 +641,7 @@ export const api = {
           if (Array.isArray(list)) {
             const matched = list.filter(s => s.taskId === taskId);
             for (const sm of matched) {
-              const idx = result.findIndex(r => r.id === sm.id);
+              const idx = result.findIndex(r => r.id === sm.id || r.taskId === sm.taskId);
               if (idx >= 0) {
                 const resAtt = Array.isArray(result[idx].attachments) ? result[idx].attachments : [];
                 const smAtt = Array.isArray(sm.attachments) ? sm.attachments : [];
@@ -657,9 +663,15 @@ export const api = {
 
     // 4. Merge with locally cached submissions (localStorage)
     const cached = getCachedTaskSubmissions(taskId);
+    let cachedHasAttachments = false;
+    let localSubWithAtt: TaskSubmission | null = null;
     if (Array.isArray(cached) && cached.length > 0) {
       for (const cs of cached) {
-        const idx = result.findIndex(r => r.id === cs.id);
+        if (Array.isArray(cs.attachments) && cs.attachments.length > 0) {
+          cachedHasAttachments = true;
+          localSubWithAtt = cs;
+        }
+        const idx = result.findIndex(r => r.id === cs.id || r.taskId === cs.taskId);
         if (idx >= 0) {
           const resAtt = Array.isArray(result[idx].attachments) ? result[idx].attachments : [];
           const csAtt = Array.isArray(cs.attachments) ? cs.attachments : [];
@@ -674,14 +686,46 @@ export const api = {
       }
     }
 
-    // 5. Update local cache with merged results so future queries keep attachments
-    for (const sub of result) {
+    // 5. Self-healing: if localStorage has attachments that weren't found on the server, push to server and Supabase!
+    const serverHasAttachments = result.some(r => Array.isArray(r.attachments) && r.attachments.length > 0);
+    if (cachedHasAttachments && localSubWithAtt && !serverHasAttachments) {
+      try {
+        apiFetch(`/api/tasks/${taskId}/sync-submission`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(localSubWithAtt),
+        }).catch(() => {});
+        if (sbClient) {
+          saveSubmissionToSupabaseSystemMeeting(sbClient, localSubWithAtt).catch(() => {});
+        }
+      } catch {}
+    }
+
+    // 6. Consolidate and deduplicate so multiple entries for same taskId don't mask each other
+    const consolidated: TaskSubmission[] = [];
+    for (const s of result) {
+      const existing = consolidated.find(c => c.id === s.id || c.taskId === s.taskId);
+      if (existing) {
+        const existAtt = Array.isArray(existing.attachments) ? existing.attachments : [];
+        const sAtt = Array.isArray(s.attachments) ? s.attachments : [];
+        if (sAtt.length > 0 && existAtt.length === 0) {
+          existing.attachments = sAtt;
+        }
+        if (!existing.notes && s.notes) existing.notes = s.notes;
+        if (existing.status !== 'approved' && s.status === 'approved') existing.status = 'approved';
+      } else {
+        consolidated.push({ ...s });
+      }
+    }
+
+    // 7. Update local cache with merged results so future queries keep attachments
+    for (const sub of consolidated) {
       if (Array.isArray(sub.attachments) && sub.attachments.length > 0) {
         saveCachedTaskSubmission(sub);
       }
     }
 
-    return result.sort((a, b) => new Date(b.submittedAt).getTime() - new Date(a.submittedAt).getTime());
+    return consolidated.sort((a, b) => new Date(b.submittedAt).getTime() - new Date(a.submittedAt).getTime());
   },
 
   async approveTaskSubmission(taskId: string, submissionId: string, reviewNote?: string): Promise<Task> {

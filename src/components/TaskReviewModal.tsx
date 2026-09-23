@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Task, TaskSubmission } from '../types';
-import { Check, X, FileText, User, Calendar, MessageSquare } from 'lucide-react';
+import { Check, X, FileText, User, Calendar, MessageSquare, Download } from 'lucide-react';
 
 interface TaskReviewModalProps {
   isOpen: boolean;
@@ -85,6 +85,17 @@ export const TaskReviewModal: React.FC<TaskReviewModalProps> = ({
     return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
   };
 
+  const handleDownload = (file: any) => {
+    const src = file.data || file.url || file.dataUrl;
+    if (!src) return;
+    const link = document.createElement('a');
+    link.href = src;
+    link.download = file.name || 'attachment';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
   const attachmentsList = Array.isArray(submission.attachments) ? submission.attachments : [];
 
   return (
@@ -154,33 +165,54 @@ export const TaskReviewModal: React.FC<TaskReviewModalProps> = ({
             </label>
             {attachmentsList.length > 0 ? (
               <div className="space-y-2">
-                {attachmentsList.map((file, idx) => (
-                  <div
-                    key={idx}
-                    className="flex items-center gap-3 p-3 bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg"
-                  >
-                    <FileText className="w-4 h-4 text-zinc-400 shrink-0" />
-                    <div className="flex-1 min-w-0">
-                      <p className="text-xs font-medium text-zinc-900 dark:text-zinc-100 truncate">
-                        {file.name || `lampiran-${idx + 1}`}
-                      </p>
-                      <p className="text-[11px] text-zinc-500 dark:text-zinc-400">
-                        {formatSize(file.size)}
-                      </p>
+                {attachmentsList.map((file, idx) => {
+                  const fileSrc = file.data || (file as any).url || (file as any).dataUrl;
+                  const isImage = file.type && file.type.startsWith('image/');
+                  return (
+                    <div
+                      key={idx}
+                      className="flex items-center gap-3 p-3 bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg"
+                    >
+                      <FileText className="w-4 h-4 text-zinc-400 shrink-0" />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs font-medium text-zinc-900 dark:text-zinc-100 truncate">
+                          {file.name || `lampiran-${idx + 1}`}
+                        </p>
+                        <p className="text-[11px] text-zinc-500 dark:text-zinc-400">
+                          {formatSize(file.size)}
+                        </p>
+                      </div>
+                      {isImage && fileSrc ? (
+                        <img
+                          src={fileSrc}
+                          alt={file.name || 'bukti'}
+                          className="w-10 h-10 rounded object-cover border border-zinc-200 dark:border-zinc-700 cursor-pointer hover:opacity-90 transition-opacity"
+                          onClick={() => {
+                            if (fileSrc) {
+                              const w = window.open('');
+                              w?.document.write(`<img src="${fileSrc}" style="max-width:100%;max-height:100vh;margin:auto;display:block;" />`);
+                            }
+                          }}
+                          title="Klik untuk melihat"
+                        />
+                      ) : (
+                        <span className="text-[10px] px-2 py-0.5 rounded bg-zinc-200 dark:bg-zinc-700 text-zinc-600 dark:text-zinc-300 uppercase">
+                          {(file.type && file.type.split('/')[1]) || 'file'}
+                        </span>
+                      )}
+                      {fileSrc && (
+                        <button
+                          type="button"
+                          onClick={() => handleDownload(file)}
+                          className="p-1.5 rounded-lg text-zinc-500 hover:text-indigo-600 hover:bg-zinc-200 dark:hover:bg-zinc-700 transition-colors"
+                          title="Unduh Lampiran"
+                        >
+                          <Download className="w-4 h-4" />
+                        </button>
+                      )}
                     </div>
-                    {file.type && file.type.startsWith('image/') && file.data ? (
-                      <img
-                        src={file.data}
-                        alt={file.name || 'bukti'}
-                        className="w-10 h-10 rounded object-cover border border-zinc-200 dark:border-zinc-700"
-                      />
-                    ) : (
-                      <span className="text-[10px] px-2 py-0.5 rounded bg-zinc-200 dark:bg-zinc-700 text-zinc-600 dark:text-zinc-300 uppercase">
-                        {(file.type && file.type.split('/')[1]) || 'file'}
-                      </span>
-                    )}
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             ) : (
               <p className="text-xs text-zinc-500 dark:text-zinc-400 italic bg-zinc-50 dark:bg-zinc-800/50 p-3 rounded-lg border border-zinc-200 dark:border-zinc-800">

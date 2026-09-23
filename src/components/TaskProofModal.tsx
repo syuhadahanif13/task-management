@@ -96,9 +96,10 @@ export const TaskProofModal: React.FC<TaskProofModalProps> = ({
   };
 
   const handleDownload = (file: TaskAttachment) => {
-    if (!file.data) return;
+    const src = file.data || (file as any).url || (file as any).dataUrl;
+    if (!src) return;
     const link = document.createElement('a');
-    link.href = file.data;
+    link.href = src;
     link.download = file.name || 'attachment';
     document.body.appendChild(link);
     link.click();
@@ -305,18 +306,19 @@ export const TaskProofModal: React.FC<TaskProofModalProps> = ({
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                           {sub.attachments.map((file, fIdx) => {
                             const isImg = file.type?.startsWith('image/') || /\.(png|jpe?g|gif|webp|svg)$/i.test(file.name);
+                            const fileSrc = file.data || (file as any).url || (file as any).dataUrl;
                             return (
                               <div
                                 key={fIdx}
                                 className="flex items-center gap-3 p-3 bg-zinc-50 dark:bg-zinc-900/70 border border-zinc-200/70 dark:border-zinc-700/60 rounded-xl group hover:border-indigo-400 dark:hover:border-indigo-500 transition-colors"
                               >
-                                {isImg && file.data ? (
+                                {isImg && fileSrc ? (
                                   <div
                                     onClick={() => setPreviewImage(file)}
                                     className="relative w-12 h-12 rounded-lg overflow-hidden shrink-0 border border-zinc-200 dark:border-zinc-700 cursor-pointer bg-zinc-100 dark:bg-zinc-800"
                                   >
                                     <img
-                                      src={file.data}
+                                      src={fileSrc}
                                       alt={file.name}
                                       className="w-full h-full object-cover group-hover:scale-105 transition-transform"
                                     />
@@ -340,7 +342,7 @@ export const TaskProofModal: React.FC<TaskProofModalProps> = ({
                                 </div>
 
                                 <div className="flex items-center gap-1 shrink-0">
-                                  {isImg && file.data && (
+                                  {isImg && fileSrc && (
                                     <button
                                       type="button"
                                       onClick={() => setPreviewImage(file)}
@@ -350,7 +352,7 @@ export const TaskProofModal: React.FC<TaskProofModalProps> = ({
                                       <ZoomIn className="w-3.5 h-3.5" />
                                     </button>
                                   )}
-                                  {file.data && (
+                                  {fileSrc && (
                                     <button
                                       type="button"
                                       onClick={() => handleDownload(file)}
@@ -424,7 +426,7 @@ export const TaskProofModal: React.FC<TaskProofModalProps> = ({
             {/* Lightbox Image */}
             <div className="rounded-2xl overflow-hidden shadow-2xl bg-black border border-white/10 flex items-center justify-center max-h-[80vh]">
               <img
-                src={previewImage.data}
+                src={previewImage.data || (previewImage as any).url || (previewImage as any).dataUrl}
                 alt={previewImage.name}
                 className="max-h-[80vh] max-w-full object-contain"
               />

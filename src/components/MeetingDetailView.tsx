@@ -135,7 +135,8 @@ export const MeetingDetailView: React.FC<MeetingDetailViewProps> = ({
         console.warn('Failed to load submissions:', e);
       }
 
-      const latest = submissions[0];
+      const withAtt = submissions.find(s => Array.isArray(s.attachments) && s.attachments.length > 0);
+      const latest = withAtt || submissions[0];
       if (latest) {
         setReviewSubmission({
           ...latest,

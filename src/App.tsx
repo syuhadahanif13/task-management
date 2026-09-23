@@ -510,12 +510,13 @@ export default function App() {
       }
 
       if (subs && subs.length > 0) {
-        const first = subs[0];
+        const withAtt = subs.find(s => Array.isArray(s.attachments) && s.attachments.length > 0);
+        const activeSub = withAtt || subs[0];
         setReviewSubmission({
-          ...first,
-          assignee: first.assignee || task.assignee || 'User',
-          notes: first.notes || 'Pekerjaan telah diajukan dan menunggu peninjauan admin.',
-          attachments: Array.isArray(first.attachments) ? first.attachments : [],
+          ...activeSub,
+          assignee: activeSub.assignee || task.assignee || 'User',
+          notes: activeSub.notes || 'Pekerjaan telah diajukan dan menunggu peninjauan admin.',
+          attachments: Array.isArray(activeSub.attachments) ? activeSub.attachments : [],
         });
       } else {
         setReviewSubmission({
