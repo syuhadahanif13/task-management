@@ -1,5 +1,6 @@
 import React from 'react';
 import { Task, TaskStatus } from '../types';
+import { extractTaskDescription } from '../utils/submissionUtils';
 import { CheckCircle2, Circle, Trash2, Edit2, User, Calendar, Send, FileText, ChevronDown, Paperclip, Clock } from 'lucide-react';
 
 interface TaskItemProps {
@@ -240,7 +241,7 @@ export const TaskItem: React.FC<TaskItemProps> = ({
           </h4>
           {task.description && (
             <p className="text-xs text-gray-500 dark:text-zinc-400 line-clamp-2 mt-1">
-              {task.description}
+              {extractTaskDescription(task.description)}
             </p>
           )}
         </div>

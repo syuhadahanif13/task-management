@@ -3,6 +3,7 @@ import { Task, TaskStatus, User as UserType, Division } from '../types';
 import { X, CheckSquare, Calendar } from 'lucide-react';
 import { MultiAssigneeSelector } from './MultiAssigneeSelector';
 import { api } from '../api/client';
+import { extractTaskDescription, extractTaskSubmissionFromDescription, embedTaskSubmissionIntoDescription } from '../utils/submissionUtils';
 
 interface TaskFormModalProps {
   isOpen: boolean;
@@ -44,7 +45,7 @@ export const TaskFormModal: React.FC<TaskFormModalProps> = ({
   useEffect(() => {
     if (task) {
       setTitle(task.title);
-      setDescription(task.description || '');
+      setDescription(extractTaskDescription(task.description || ''));
       setPriority(task.priority || 'Medium');
       const initial = task.assignees && task.assignees.length > 0
         ? task.assignees
@@ -67,9 +68,14 @@ export const TaskFormModal: React.FC<TaskFormModalProps> = ({
     setIsSubmitting(true);
     setErrorMsg('');
     try {
+      const existingSub = extractTaskSubmissionFromDescription(task.description || '');
+      const finalDescription = existingSub
+        ? embedTaskSubmissionIntoDescription(description.trim(), existingSub)
+        : description.trim();
+
       await onSave(task.id, {
         title: title.trim(),
-        description: description.trim(),
+        description: finalDescription,
         priority: priority as any,
         assignee: assignees.length > 0 ? assignees.join(', ') : 'Unassigned',
         assignees,

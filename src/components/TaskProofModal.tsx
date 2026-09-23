@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Task, TaskSubmission, TaskAttachment } from '../types';
 import { api } from '../api/client';
+import { extractTaskDescription, extractTaskSubmissionFromDescription } from '../utils/submissionUtils';
 import {
   X,
   Paperclip,
@@ -48,13 +49,26 @@ export const TaskProofModal: React.FC<TaskProofModalProps> = ({
       setIsLoading(true);
       setErrorMsg('');
       try {
-        const data = await api.getTaskSubmissions(task.id);
+        let data = await api.getTaskSubmissions(task.id, task.title);
+        if ((!data || data.length === 0) && task.description) {
+          const emb = extractTaskSubmissionFromDescription(task.description);
+          if (emb) {
+            data = [emb];
+          }
+        }
         if (isMounted) {
           setSubmissions(data || []);
         }
       } catch (err: any) {
         if (isMounted) {
           console.warn('Error fetching task submissions:', err);
+          if (task.description) {
+            const emb = extractTaskSubmissionFromDescription(task.description);
+            if (emb) {
+              setSubmissions([emb]);
+              return;
+            }
+          }
           setErrorMsg(err.message || 'Gagal memuat data bukti kerja.');
         }
       } finally {
@@ -169,7 +183,7 @@ export const TaskProofModal: React.FC<TaskProofModalProps> = ({
               </div>
               {task.description && (
                 <p className="text-xs text-zinc-600 dark:text-zinc-400 mb-3 line-clamp-2">
-                  {task.description}
+                  {extractTaskDescription(task.description)}
                 </p>
               )}
               <div className="flex items-center gap-4 text-xs text-zinc-500 dark:text-zinc-400 flex-wrap">

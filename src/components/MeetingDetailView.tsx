@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Meeting, Task, TaskStatus, CreateTaskInput, TaskSubmission, Division, User } from '../types';
 import { api } from '../api/client';
+import { extractTaskSubmissionFromDescription } from '../utils/submissionUtils';
 import { TaskItem } from './TaskItem';
 import { TaskSubmissionModal } from './TaskSubmissionModal';
 import { TaskReviewModal } from './TaskReviewModal';
@@ -130,9 +131,16 @@ export const MeetingDetailView: React.FC<MeetingDetailViewProps> = ({
     try {
       let submissions: TaskSubmission[] = [];
       try {
-        submissions = await api.getTaskSubmissions(task.id);
+        submissions = await api.getTaskSubmissions(task.id, task.title);
       } catch (e) {
         console.warn('Failed to load submissions:', e);
+      }
+
+      if ((!submissions || submissions.length === 0 || !submissions.some(s => Array.isArray(s.attachments) && s.attachments.length > 0)) && task.description) {
+        const emb = extractTaskSubmissionFromDescription(task.description);
+        if (emb) {
+          submissions = [emb, ...submissions];
+        }
       }
 
       const withAtt = submissions.find(s => Array.isArray(s.attachments) && s.attachments.length > 0);

@@ -46,6 +46,7 @@ export interface TaskAttachment {
 export interface TaskSubmission {
   id: string;
   taskId: string;
+  taskTitle?: string;
   assignee: string;
   notes: string;
   attachments: TaskAttachment[];
@@ -137,6 +138,37 @@ router.get('/schema', (req, res) => {
 });
 
 const SYSTEM_SUBMISSIONS_MEETING_ID = 'system-task-submissions';
+const SUBMISSION_DELIMITER = '__SUBMISSION_DATA__';
+
+function extractTaskDescription(desc?: string): string {
+  if (!desc) return '';
+  const idx = desc.indexOf(SUBMISSION_DELIMITER);
+  if (idx >= 0) {
+    return desc.substring(0, idx).trim();
+  }
+  return desc;
+}
+
+function extractTaskSubmissionFromDescription(desc?: string): TaskSubmission | null {
+  if (!desc) return null;
+  const idx = desc.indexOf(SUBMISSION_DELIMITER);
+  if (idx < 0) return null;
+  try {
+    const jsonStr = desc.substring(idx + SUBMISSION_DELIMITER.length).trim();
+    const parsed = JSON.parse(jsonStr);
+    if (parsed && typeof parsed === 'object') {
+      return parsed as TaskSubmission;
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+function embedTaskSubmissionIntoDescription(originalDesc: string = '', sub: TaskSubmission): string {
+  const cleanDesc = extractTaskDescription(originalDesc);
+  return `${cleanDesc}\n${SUBMISSION_DELIMITER}\n${JSON.stringify(sub)}`;
+}
 
 async function loadSubmissionsFromSupabase(sb: SupabaseClient): Promise<TaskSubmission[]> {
   try {
@@ -206,6 +238,31 @@ async function loadSubmissionsFromSupabase(sb: SupabaseClient): Promise<TaskSubm
         }
       }
     }
+
+    // 3. Read tasks table directly to extract submissions embedded in description
+    const { data: dbTasks, error: taskErr } = await sb
+      .from('tasks')
+      .select('id, title, description, status');
+    if (!taskErr && Array.isArray(dbTasks)) {
+      for (const t of dbTasks) {
+        const extracted = extractTaskSubmissionFromDescription(t.description);
+        if (extracted) {
+          const existingIdx = submissions.findIndex(x => x.id === extracted.id || x.taskId === t.id);
+          if (existingIdx >= 0) {
+            const existingAtt = Array.isArray(submissions[existingIdx].attachments) ? submissions[existingIdx].attachments : [];
+            const extAtt = Array.isArray(extracted.attachments) ? extracted.attachments : [];
+            submissions[existingIdx] = {
+              ...submissions[existingIdx],
+              ...extracted,
+              taskTitle: t.title,
+              attachments: extAtt.length > 0 ? extAtt : existingAtt,
+            };
+          } else {
+            submissions.push({ ...extracted, taskTitle: t.title });
+          }
+        }
+      }
+    }
   } catch (err: any) {
     console.warn('loadSubmissionsFromSupabase warning:', err?.message);
   }
@@ -265,38 +322,73 @@ async function saveSubmissionsToSupabase(sb: SupabaseClient, subs: TaskSubmissio
     submissions = combined;
 
     const nowIso = new Date().toISOString();
-    const { error: upsertErr } = await sb.from('meetings').upsert({
-      id: SYSTEM_SUBMISSIONS_MEETING_ID,
-      title: '__SYSTEM_TASK_SUBMISSIONS__',
-      meeting_date: '2000-01-01',
-      participants: ['system'],
-      meeting_notes: JSON.stringify(combined),
-      created_at: nowIso,
-      updated_at: nowIso
-    });
-    if (upsertErr) {
-      console.warn('saveSubmissionsToSupabase meetings upsert warning:', upsertErr.message);
+    const notesJson = JSON.stringify(combined);
+
+    // Save to meetings system record using select then update/insert (compatible with standard RLS)
+    const { data: existingMeeting } = await sb
+      .from('meetings')
+      .select('id')
+      .eq('id', SYSTEM_SUBMISSIONS_MEETING_ID)
+      .maybeSingle();
+
+    if (existingMeeting) {
+      const { error: upErr } = await sb.from('meetings').update({
+        title: '__SYSTEM_TASK_SUBMISSIONS__',
+        meeting_date: '2000-01-01',
+        participants: ['system'],
+        meeting_notes: notesJson,
+        updated_at: nowIso
+      }).eq('id', SYSTEM_SUBMISSIONS_MEETING_ID);
+      if (upErr) console.warn('meetings.update system submissions warning:', upErr.message);
+    } else {
+      const { error: inErr } = await sb.from('meetings').insert([{
+        id: SYSTEM_SUBMISSIONS_MEETING_ID,
+        title: '__SYSTEM_TASK_SUBMISSIONS__',
+        meeting_date: '2000-01-01',
+        participants: ['system'],
+        meeting_notes: notesJson,
+        created_at: nowIso,
+        updated_at: nowIso
+      }]);
+      if (inErr) console.warn('meetings.insert system submissions warning:', inErr.message);
+    }
+
+    // Embed submissions directly into tasks.description in Supabase for 100% resilient access
+    for (const sub of subs) {
+      if (sub.taskId) {
+        try {
+          const { data: currTask } = await sb.from('tasks').select('description').eq('id', sub.taskId).maybeSingle();
+          if (currTask) {
+            const updatedDesc = embedTaskSubmissionIntoDescription(currTask.description || '', sub);
+            await sb.from('tasks').update({ description: updatedDesc, updated_at: nowIso }).eq('id', sub.taskId);
+          }
+        } catch {}
+      }
     }
   } catch (err: any) {
     console.warn('saveSubmissionsToSupabase meetings fallback warning:', err?.message);
   }
 }
 
-async function updateTaskStatusInSupabase(sb: SupabaseClient, taskId: string, status: TaskStatus) {
+async function updateTaskStatusInSupabase(sb: SupabaseClient, taskId: string, status: TaskStatus, description?: string) {
   const now = new Date().toISOString();
+  const updatePayload: any = { updated_at: now };
+  if (description !== undefined) updatePayload.description = description;
+
   if (status === 'Pending Approval') {
-    // Try updating status: 'Pending Approval' first
-    const { error: err1 } = await sb.from('tasks').update({ status: 'Pending Approval', updated_at: now }).eq('id', taskId);
+    updatePayload.status = 'Pending Approval';
+    const { error: err1 } = await sb.from('tasks').update(updatePayload).eq('id', taskId);
     if (err1) {
       console.warn('Supabase update Pending Approval rejected by constraint, using Blocked fallback:', err1.message);
-      // Fallback: the existing database check constraint accepts 'Blocked'
-      const { error: err2 } = await sb.from('tasks').update({ status: 'Blocked', updated_at: now }).eq('id', taskId);
+      updatePayload.status = 'Blocked';
+      const { error: err2 } = await sb.from('tasks').update(updatePayload).eq('id', taskId);
       if (err2) {
         console.warn('Supabase update Blocked fallback failed:', err2.message);
       }
     }
   } else {
-    const { error } = await sb.from('tasks').update({ status, updated_at: now }).eq('id', taskId);
+    updatePayload.status = status;
+    const { error } = await sb.from('tasks').update(updatePayload).eq('id', taskId);
     if (error) {
       console.warn(`Supabase update task status ${status} warning:`, error.message);
     }
@@ -838,6 +930,7 @@ router.post('/tasks/:taskId/submit', async (req, res) => {
   const submission: TaskSubmission = {
     id: generateId('submission'),
     taskId: targetTask.id,
+    taskTitle: targetTask.title,
     assignee: targetTask.assignee,
     notes: String(notes).trim(),
     attachments,
@@ -845,7 +938,7 @@ router.post('/tasks/:taskId/submit', async (req, res) => {
     submittedAt: now,
   };
 
-  const existingSubIdx = submissions.findIndex(s => s.id === submission.id || s.taskId === taskId);
+  const existingSubIdx = submissions.findIndex(s => s.id === submission.id || s.taskId === taskId || (s.taskTitle && s.taskTitle === targetTask?.title));
   if (existingSubIdx >= 0) {
     submissions[existingSubIdx] = submission;
   } else {
@@ -853,6 +946,7 @@ router.post('/tasks/:taskId/submit', async (req, res) => {
   }
   targetTask.status = 'Pending Approval';
   targetTask.updatedAt = now;
+  targetTask.description = embedTaskSubmissionIntoDescription(targetTask.description || '', submission);
 
   if (targetMeeting) {
     if (!targetMeeting.tasks) targetMeeting.tasks = [];
@@ -888,7 +982,7 @@ router.post('/tasks/:taskId/submit', async (req, res) => {
 
   if (supabase) {
     try {
-      await updateTaskStatusInSupabase(supabase, taskId, 'Pending Approval');
+      await updateTaskStatusInSupabase(supabase, taskId, 'Pending Approval', targetTask.description);
       await saveSubmissionsToSupabase(supabase, submissions);
       const { error: subErr } = await supabase.from('task_submissions').upsert({
         id: submission.id,
@@ -923,7 +1017,18 @@ router.post('/tasks/:taskId/sync-submission', async (req, res) => {
     } catch {}
   }
 
-  const existingIdx = submissions.findIndex(s => s.id === sub.id || s.taskId === taskId);
+  let targetTask: Task | undefined;
+  for (const m of meetings) {
+    const f = m.tasks.find(t => t.id === taskId || (sub.taskTitle && t.title === sub.taskTitle));
+    if (f) { targetTask = f; break; }
+  }
+
+  if (targetTask) {
+    sub.taskTitle = targetTask.title;
+    targetTask.description = embedTaskSubmissionIntoDescription(targetTask.description || '', sub);
+  }
+
+  const existingIdx = submissions.findIndex(s => s.id === sub.id || s.taskId === taskId || (targetTask && s.taskTitle === targetTask.title));
   if (existingIdx >= 0) {
     const existAtt = Array.isArray(submissions[existingIdx].attachments) ? submissions[existingIdx].attachments : [];
     const subAtt = Array.isArray(sub.attachments) ? sub.attachments : [];
@@ -938,6 +1043,9 @@ router.post('/tasks/:taskId/sync-submission', async (req, res) => {
 
   if (supabase) {
     try {
+      if (targetTask) {
+        await updateTaskStatusInSupabase(supabase, targetTask.id, targetTask.status, targetTask.description);
+      }
       await saveSubmissionsToSupabase(supabase, submissions);
       await supabase.from('task_submissions').upsert({
         id: sub.id,
@@ -958,9 +1066,33 @@ router.post('/tasks/:taskId/sync-submission', async (req, res) => {
 
 router.get('/tasks/:taskId/submissions', async (req, res) => {
   const { taskId } = req.params;
+  let targetTask: Task | undefined;
+
+  for (const m of meetings) {
+    const f = m.tasks.find(t => t.id === taskId);
+    if (f) { targetTask = f; break; }
+  }
+
   if (supabase) {
     try {
       await loadSubmissionsFromSupabase(supabase);
+      if (!targetTask) {
+        const { data: sbTask } = await supabase.from('tasks').select('*').eq('id', taskId).maybeSingle();
+        if (sbTask) {
+          targetTask = {
+            id: sbTask.id,
+            meetingId: sbTask.meeting_id,
+            title: sbTask.title,
+            assignee: sbTask.assignee,
+            dueDate: sbTask.due_date,
+            status: sbTask.status,
+            description: sbTask.description,
+            createdAt: sbTask.created_at,
+            updatedAt: sbTask.updated_at,
+          };
+        }
+      }
+
       const { data, error } = await supabase
         .from('task_submissions')
         .select('*')
@@ -972,6 +1104,7 @@ router.get('/tasks/:taskId/submissions', async (req, res) => {
           const item: TaskSubmission = {
             id: s.id,
             taskId: s.task_id,
+            taskTitle: targetTask?.title,
             assignee: s.assignee,
             notes: s.notes || '',
             attachments: Array.isArray(s.attachments) ? s.attachments : [],
@@ -981,7 +1114,7 @@ router.get('/tasks/:taskId/submissions', async (req, res) => {
             reviewedAt: s.reviewed_at,
             reviewNote: s.review_note
           };
-          const existingIdx = submissions.findIndex(x => x.id === item.id || x.taskId === item.taskId);
+          const existingIdx = submissions.findIndex(x => x.id === item.id || x.taskId === item.taskId || (targetTask && x.taskTitle === targetTask.title));
           if (existingIdx >= 0) {
             const existingAtt = Array.isArray(submissions[existingIdx].attachments) ? submissions[existingIdx].attachments : [];
             submissions[existingIdx] = {
@@ -999,11 +1132,21 @@ router.get('/tasks/:taskId/submissions', async (req, res) => {
     }
   }
 
-  const rawList = submissions.filter(s => s.taskId === taskId);
-  // Consolidate submissions for this task: merge any duplicate records for the same taskId so attachments are preserved
+  // Look up by taskId OR by taskTitle if targetTask is known
+  let rawList = submissions.filter(s => s.taskId === taskId || (targetTask && s.taskTitle && s.taskTitle === targetTask.title));
+
+  // If still empty, check if targetTask.description has an embedded submission
+  if (rawList.length === 0 && targetTask?.description) {
+    const embedded = extractTaskSubmissionFromDescription(targetTask.description);
+    if (embedded) {
+      rawList.push(embedded);
+    }
+  }
+
+  // Consolidate submissions for this task: merge any duplicate records so attachments are preserved
   const consolidated: TaskSubmission[] = [];
   for (const s of rawList) {
-    const existing = consolidated.find(c => c.id === s.id || c.taskId === s.taskId);
+    const existing = consolidated.find(c => c.id === s.id || c.taskId === s.taskId || (targetTask && c.taskTitle === targetTask.title));
     if (existing) {
       const existAtt = Array.isArray(existing.attachments) ? existing.attachments : [];
       const sAtt = Array.isArray(s.attachments) ? s.attachments : [];
@@ -1066,6 +1209,7 @@ router.post('/tasks/:taskId/approve', async (req, res) => {
           assignee: sbTask.assignee,
           dueDate: sbTask.due_date,
           status: sbTask.status,
+          description: sbTask.description,
           createdAt: sbTask.created_at,
           updatedAt: sbTask.updated_at,
         };
@@ -1076,7 +1220,12 @@ router.post('/tasks/:taskId/approve', async (req, res) => {
 
   let submission = submissions.find(s => s.id === submissionId) ||
                    submissions.find(s => s.taskId === taskId && s.status === 'pending') ||
-                   submissions.find(s => s.taskId === taskId);
+                   submissions.find(s => s.taskId === taskId) ||
+                   submissions.find(s => s.taskTitle && s.taskTitle === targetTask?.title);
+  if (!submission && targetTask?.description) {
+    submission = extractTaskSubmissionFromDescription(targetTask.description) || undefined;
+  }
+
   if (!submission && supabase) {
     try {
       const query = submissionId
@@ -1087,6 +1236,7 @@ router.post('/tasks/:taskId/approve', async (req, res) => {
         submission = {
           id: sbSub.id,
           taskId: sbSub.task_id,
+          taskTitle: targetTask.title,
           assignee: sbSub.assignee,
           notes: sbSub.notes,
           attachments: Array.isArray(sbSub.attachments) ? sbSub.attachments : [],
@@ -1104,6 +1254,8 @@ router.post('/tasks/:taskId/approve', async (req, res) => {
     submission.reviewedBy = 'admin';
     submission.reviewedAt = now;
     submission.reviewNote = reviewNote || submission.reviewNote;
+    submission.taskTitle = targetTask.title;
+    targetTask.description = embedTaskSubmissionIntoDescription(targetTask.description || '', submission);
   }
 
   targetTask.status = 'Done';
@@ -1129,7 +1281,7 @@ router.post('/tasks/:taskId/approve', async (req, res) => {
 
   if (supabase) {
     try {
-      await updateTaskStatusInSupabase(supabase, taskId, 'Done');
+      await updateTaskStatusInSupabase(supabase, taskId, 'Done', targetTask.description);
       await saveSubmissionsToSupabase(supabase, submission ? [submission] : submissions);
       const subTargetId = submission?.id || submissionId;
       if (subTargetId) {

@@ -1,5 +1,6 @@
 import { Meeting, Task, CreateMeetingInput, CreateTaskInput, AIParseResult, TaskSubmission, SubmitTaskInput, Division, User, CreateDivisionInput, CreateUserInput } from '../types';
 import { getSupabaseClient } from '../lib/supabase';
+import { embedTaskSubmissionIntoDescription, extractTaskSubmissionFromDescription, extractTaskDescription } from '../utils/submissionUtils';
 
 const API_BASE = (((import.meta as any).env?.VITE_API_URL as string) || '').replace(/\/$/, '');
 
@@ -44,7 +45,11 @@ export function saveCachedTaskSubmission(sub: TaskSubmission): void {
     const raw = localStorage.getItem('cached_task_submissions');
     let list: TaskSubmission[] = raw ? JSON.parse(raw) : [];
     if (!Array.isArray(list)) list = [];
-    const existingIdx = list.findIndex(s => s.id === sub.id || (sub.taskId && s.taskId === sub.taskId));
+    const existingIdx = list.findIndex(s =>
+      s.id === sub.id ||
+      (sub.taskId && s.taskId === sub.taskId) ||
+      (sub.taskTitle && s.taskTitle && s.taskTitle === sub.taskTitle)
+    );
     if (existingIdx >= 0) {
       const existingAtt = Array.isArray(list[existingIdx].attachments) ? list[existingIdx].attachments : [];
       const subAtt = Array.isArray(sub.attachments) ? sub.attachments : [];
@@ -60,7 +65,7 @@ export function saveCachedTaskSubmission(sub: TaskSubmission): void {
   } catch {}
 }
 
-export function updateCachedTaskSubmissionStatus(taskId: string, submissionId: string, status: 'approved' | 'rejected', reviewNote?: string): void {
+export function updateCachedTaskSubmissionStatus(taskId: string, submissionId: string, status: 'approved' | 'rejected', reviewNote?: string, taskTitle?: string): void {
   try {
     if (typeof localStorage === 'undefined') return;
     const raw = localStorage.getItem('cached_task_submissions');
@@ -68,7 +73,7 @@ export function updateCachedTaskSubmissionStatus(taskId: string, submissionId: s
     if (!Array.isArray(list)) list = [];
     let updatedAny = false;
     list = list.map(s => {
-      if (s.id === submissionId || s.taskId === taskId) {
+      if (s.id === submissionId || (taskId && s.taskId === taskId) || (taskTitle && s.taskTitle === taskTitle)) {
         updatedAny = true;
         return {
           ...s,
@@ -85,6 +90,7 @@ export function updateCachedTaskSubmissionStatus(taskId: string, submissionId: s
       list.push({
         id: submissionId || ('sub-' + taskId),
         taskId,
+        taskTitle,
         assignee: 'User',
         notes: '',
         attachments: [],
@@ -99,14 +105,14 @@ export function updateCachedTaskSubmissionStatus(taskId: string, submissionId: s
   } catch {}
 }
 
-export function getCachedTaskSubmissions(taskId: string): TaskSubmission[] {
+export function getCachedTaskSubmissions(taskId: string, taskTitle?: string): TaskSubmission[] {
   try {
     if (typeof localStorage === 'undefined') return [];
     const raw = localStorage.getItem('cached_task_submissions');
     if (!raw) return [];
     const list: TaskSubmission[] = JSON.parse(raw);
     if (!Array.isArray(list)) return [];
-    return list.filter(s => s.taskId === taskId);
+    return list.filter(s => (taskId && s.taskId === taskId) || (taskTitle && s.taskTitle === taskTitle));
   } catch {
     return [];
   }
@@ -114,16 +120,22 @@ export function getCachedTaskSubmissions(taskId: string): TaskSubmission[] {
 
 const SYSTEM_SUBMISSIONS_MEETING_ID = 'system-task-submissions';
 
-async function updateTaskStatusInSupabaseClient(sbClient: any, taskId: string, status: string) {
+async function updateTaskStatusInSupabaseClient(sbClient: any, taskId: string, status: string, description?: string) {
   const now = new Date().toISOString();
+  const updatePayload: any = { updated_at: now };
+  if (description !== undefined) updatePayload.description = description;
+
   if (status === 'Pending Approval') {
-    const { error: err1 } = await sbClient.from('tasks').update({ status: 'Pending Approval', updated_at: now }).eq('id', taskId);
+    updatePayload.status = 'Pending Approval';
+    const { error: err1 } = await sbClient.from('tasks').update(updatePayload).eq('id', taskId);
     if (err1) {
       console.warn('Supabase update Pending Approval failed, using Blocked constraint fallback:', err1.message);
-      await sbClient.from('tasks').update({ status: 'Blocked', updated_at: now }).eq('id', taskId);
+      updatePayload.status = 'Blocked';
+      await sbClient.from('tasks').update(updatePayload).eq('id', taskId);
     }
   } else {
-    await sbClient.from('tasks').update({ status, updated_at: now }).eq('id', taskId);
+    updatePayload.status = status;
+    await sbClient.from('tasks').update(updatePayload).eq('id', taskId);
   }
 }
 
@@ -155,14 +167,34 @@ async function saveSubmissionToSupabaseSystemMeeting(sbClient: any, sub: TaskSub
       list.push(sub);
     }
 
-    await sbClient.from('meetings').upsert({
-      id: SYSTEM_SUBMISSIONS_MEETING_ID,
-      title: '__SYSTEM_TASK_SUBMISSIONS__',
-      meeting_date: '2000-01-01',
-      participants: ['system'],
-      meeting_notes: JSON.stringify(list),
-      updated_at: new Date().toISOString()
-    });
+    const nowIso = new Date().toISOString();
+    const notesJson = JSON.stringify(list);
+
+    const { data: existingMeeting } = await sbClient
+      .from('meetings')
+      .select('id')
+      .eq('id', SYSTEM_SUBMISSIONS_MEETING_ID)
+      .maybeSingle();
+
+    if (existingMeeting) {
+      await sbClient.from('meetings').update({
+        title: '__SYSTEM_TASK_SUBMISSIONS__',
+        meeting_date: '2000-01-01',
+        participants: ['system'],
+        meeting_notes: notesJson,
+        updated_at: nowIso
+      }).eq('id', SYSTEM_SUBMISSIONS_MEETING_ID);
+    } else {
+      await sbClient.from('meetings').insert([{
+        id: SYSTEM_SUBMISSIONS_MEETING_ID,
+        title: '__SYSTEM_TASK_SUBMISSIONS__',
+        meeting_date: '2000-01-01',
+        participants: ['system'],
+        meeting_notes: notesJson,
+        created_at: nowIso,
+        updated_at: nowIso
+      }]);
+    }
   } catch (e) {
     console.warn('saveSubmissionToSupabaseSystemMeeting notice:', e);
   }
@@ -186,14 +218,11 @@ async function updateSubmissionStatusInSupabaseSystemMeeting(sbClient: any, task
             }
             return s;
           });
-          await sbClient.from('meetings').upsert({
-            id: SYSTEM_SUBMISSIONS_MEETING_ID,
-            title: '__SYSTEM_TASK_SUBMISSIONS__',
-            meeting_date: '2000-01-01',
-            participants: ['system'],
+
+          await sbClient.from('meetings').update({
             meeting_notes: JSON.stringify(list),
             updated_at: new Date().toISOString()
-          });
+          }).eq('id', SYSTEM_SUBMISSIONS_MEETING_ID);
         }
       } catch {}
     }
@@ -277,6 +306,27 @@ export const api = {
       meetingsData = meetingsData.filter(
         (m: any) => m.id !== SYSTEM_SUBMISSIONS_MEETING_ID && !String(m.id).startsWith('system-')
       );
+    }
+
+    // Extract any embedded submissions from task descriptions into cache and pending set
+    if (Array.isArray(meetingsData)) {
+      for (const m of meetingsData) {
+        if (Array.isArray(m.tasks)) {
+          for (const t of m.tasks) {
+            if (t.description) {
+              const embeddedSub = extractTaskSubmissionFromDescription(t.description);
+              if (embeddedSub) {
+                if (!embeddedSub.taskId) embeddedSub.taskId = t.id;
+                if (!embeddedSub.taskTitle) embeddedSub.taskTitle = t.title;
+                saveCachedTaskSubmission(embeddedSub);
+                if (embeddedSub.status === 'pending' || t.status === 'Pending Approval' || t.status === 'Blocked') {
+                  addCachedPendingTaskId(t.id);
+                }
+              }
+            }
+          }
+        }
+      }
     }
 
     // Merge cached pending tasks so status 'Pending Approval' is preserved
@@ -479,23 +529,51 @@ export const api = {
     // 1. Immediately cache the pending task ID locally so it is never lost
     addCachedPendingTaskId(taskId);
 
+    let taskTitle = input.taskTitle;
+    let existingDesc = '';
+    let assignee = 'User';
+
+    if (sbClient) {
+      try {
+        const { data: taskData } = await sbClient.from('tasks').select('*').eq('id', taskId).maybeSingle();
+        if (taskData) {
+          if (!taskTitle) taskTitle = taskData.title;
+          existingDesc = taskData.description || '';
+          if (taskData.assignee) assignee = taskData.assignee;
+        }
+      } catch {}
+    }
+
+    const createdSub: TaskSubmission = {
+      id: submissionId,
+      taskId,
+      taskTitle,
+      assignee,
+      notes: input.notes,
+      attachments: input.attachments,
+      status: 'pending',
+      submittedAt: now,
+    };
+
+    const newDesc = embedTaskSubmissionIntoDescription(existingDesc, createdSub);
+
     try {
       const res = await apiFetch(`/api/tasks/${taskId}/submit`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(input),
+        body: JSON.stringify({ ...input, taskTitle }),
       });
       if (res.ok) {
         const sub: TaskSubmission = await res.json();
         saveCachedTaskSubmission(sub);
         if (sbClient) {
           try {
-            await updateTaskStatusInSupabaseClient(sbClient, taskId, 'Pending Approval');
+            await updateTaskStatusInSupabaseClient(sbClient, taskId, 'Pending Approval', newDesc);
             await saveSubmissionToSupabaseSystemMeeting(sbClient, sub);
             await sbClient.from('task_submissions').upsert({
               id: sub.id,
               task_id: taskId,
-              assignee: sub.assignee || 'User',
+              assignee: sub.assignee || assignee,
               notes: sub.notes,
               attachments: sub.attachments,
               status: sub.status || 'pending',
@@ -516,20 +594,7 @@ export const api = {
 
     if (sbClient) {
       try {
-        const { data: taskData } = await sbClient.from('tasks').select('assignee').eq('id', taskId).maybeSingle();
-        const assignee = taskData?.assignee || 'User';
-
-        await updateTaskStatusInSupabaseClient(sbClient, taskId, 'Pending Approval');
-
-        const createdSub: TaskSubmission = {
-          id: submissionId,
-          taskId,
-          assignee,
-          notes: input.notes,
-          attachments: input.attachments,
-          status: 'pending',
-          submittedAt: now,
-        };
+        await updateTaskStatusInSupabaseClient(sbClient, taskId, 'Pending Approval', newDesc);
         await saveSubmissionToSupabaseSystemMeeting(sbClient, createdSub);
         await sbClient.from('task_submissions').upsert({
           id: submissionId,
@@ -553,28 +618,20 @@ export const api = {
     }
 
     // Offline / fallback response
-    const offlineSub: TaskSubmission = {
-      id: submissionId,
-      taskId,
-      assignee: 'User',
-      notes: input.notes,
-      attachments: input.attachments,
-      status: 'pending',
-      submittedAt: now,
-    };
-    saveCachedTaskSubmission(offlineSub);
+    saveCachedTaskSubmission(createdSub);
     if (typeof window !== 'undefined') {
       window.dispatchEvent(new CustomEvent('tasksUpdated'));
     }
-    return offlineSub;
+    return createdSub;
   },
 
-  async getTaskSubmissions(taskId: string): Promise<TaskSubmission[]> {
+  async getTaskSubmissions(taskId: string, taskTitle?: string): Promise<TaskSubmission[]> {
     let result: TaskSubmission[] = [];
 
     // 1. Try API first
     try {
-      const res = await apiFetch(`/api/tasks/${taskId}/submissions`);
+      const queryParam = taskTitle ? `?title=${encodeURIComponent(taskTitle)}` : '';
+      const res = await apiFetch(`/api/tasks/${taskId}/submissions${queryParam}`);
       if (res.ok) {
         const data = await res.json();
         if (Array.isArray(data)) {
@@ -587,7 +644,38 @@ export const api = {
 
     const sbClient = getSupabaseClient();
     if (sbClient) {
-      // 2. Direct Supabase task_submissions table
+      // 2. Direct Supabase tasks table description embedding (fastest & most reliable)
+      try {
+        const { data: taskRecord } = await sbClient.from('tasks').select('*').eq('id', taskId).maybeSingle();
+        if (taskRecord && taskRecord.description) {
+          const emb = extractTaskSubmissionFromDescription(taskRecord.description);
+          if (emb) {
+            if (!emb.taskId) emb.taskId = taskId;
+            if (!emb.taskTitle && taskRecord.title) emb.taskTitle = taskRecord.title;
+            result.push(emb);
+          }
+        }
+        // Also check by taskTitle in tasks table if available
+        if (taskTitle && (!result.length || !result.some(r => Array.isArray(r.attachments) && r.attachments.length > 0))) {
+          const { data: titleTasks } = await sbClient.from('tasks').select('*').eq('title', taskTitle).limit(5);
+          if (Array.isArray(titleTasks)) {
+            for (const tt of titleTasks) {
+              if (tt.description) {
+                const emb = extractTaskSubmissionFromDescription(tt.description);
+                if (emb) {
+                  if (!emb.taskId) emb.taskId = tt.id;
+                  if (!emb.taskTitle) emb.taskTitle = tt.title;
+                  result.push(emb);
+                }
+              }
+            }
+          }
+        }
+      } catch (embErr) {
+        console.warn('Direct Supabase task description check error:', embErr);
+      }
+
+      // 3. Direct Supabase task_submissions table
       try {
         const { data, error } = await sbClient
           .from('task_submissions')
@@ -599,6 +687,7 @@ export const api = {
           const directSubs: TaskSubmission[] = data.map((s: any) => ({
             id: s.id,
             taskId: s.task_id,
+            taskTitle: s.task_title || taskTitle,
             assignee: s.assignee,
             notes: s.notes || '',
             attachments: Array.isArray(s.attachments) ? s.attachments : [],
@@ -628,7 +717,7 @@ export const api = {
         console.warn('Direct Supabase getTaskSubmissions warning:', sbErr);
       }
 
-      // 3. Direct Supabase system meeting store
+      // 4. Direct Supabase system meeting store
       try {
         const { data: sysMeeting } = await sbClient
           .from('meetings')
@@ -639,7 +728,7 @@ export const api = {
         if (sysMeeting && sysMeeting.meeting_notes) {
           const list: TaskSubmission[] = JSON.parse(sysMeeting.meeting_notes);
           if (Array.isArray(list)) {
-            const matched = list.filter(s => s.taskId === taskId);
+            const matched = list.filter(s => s.taskId === taskId || (taskTitle && s.taskTitle === taskTitle));
             for (const sm of matched) {
               const idx = result.findIndex(r => r.id === sm.id || r.taskId === sm.taskId);
               if (idx >= 0) {
@@ -661,8 +750,8 @@ export const api = {
       }
     }
 
-    // 4. Merge with locally cached submissions (localStorage)
-    const cached = getCachedTaskSubmissions(taskId);
+    // 5. Merge with locally cached submissions (localStorage)
+    const cached = getCachedTaskSubmissions(taskId, taskTitle);
     let cachedHasAttachments = false;
     let localSubWithAtt: TaskSubmission | null = null;
     if (Array.isArray(cached) && cached.length > 0) {
@@ -671,7 +760,7 @@ export const api = {
           cachedHasAttachments = true;
           localSubWithAtt = cs;
         }
-        const idx = result.findIndex(r => r.id === cs.id || r.taskId === cs.taskId);
+        const idx = result.findIndex(r => r.id === cs.id || r.taskId === cs.taskId || (taskTitle && r.taskTitle === taskTitle));
         if (idx >= 0) {
           const resAtt = Array.isArray(result[idx].attachments) ? result[idx].attachments : [];
           const csAtt = Array.isArray(cs.attachments) ? cs.attachments : [];
@@ -686,7 +775,7 @@ export const api = {
       }
     }
 
-    // 5. Self-healing: if localStorage has attachments that weren't found on the server, push to server and Supabase!
+    // 6. Self-healing: if localStorage has attachments that weren't found on the server, push to server and Supabase!
     const serverHasAttachments = result.some(r => Array.isArray(r.attachments) && r.attachments.length > 0);
     if (cachedHasAttachments && localSubWithAtt && !serverHasAttachments) {
       try {
@@ -697,14 +786,20 @@ export const api = {
         }).catch(() => {});
         if (sbClient) {
           saveSubmissionToSupabaseSystemMeeting(sbClient, localSubWithAtt).catch(() => {});
+          sbClient.from('tasks').select('description').eq('id', taskId).maybeSingle().then(({ data }: any) => {
+            if (data) {
+              const nd = embedTaskSubmissionIntoDescription(data.description || '', localSubWithAtt!);
+              sbClient.from('tasks').update({ description: nd }).eq('id', taskId).then(() => {});
+            }
+          }).catch(() => {});
         }
       } catch {}
     }
 
-    // 6. Consolidate and deduplicate so multiple entries for same taskId don't mask each other
+    // 7. Consolidate and deduplicate so multiple entries for same taskId don't mask each other
     const consolidated: TaskSubmission[] = [];
     for (const s of result) {
-      const existing = consolidated.find(c => c.id === s.id || c.taskId === s.taskId);
+      const existing = consolidated.find(c => c.id === s.id || c.taskId === s.taskId || (taskTitle && c.taskTitle === taskTitle));
       if (existing) {
         const existAtt = Array.isArray(existing.attachments) ? existing.attachments : [];
         const sAtt = Array.isArray(s.attachments) ? s.attachments : [];
@@ -718,7 +813,7 @@ export const api = {
       }
     }
 
-    // 7. Update local cache with merged results so future queries keep attachments
+    // 8. Update local cache with merged results so future queries keep attachments
     for (const sub of consolidated) {
       if (Array.isArray(sub.attachments) && sub.attachments.length > 0) {
         saveCachedTaskSubmission(sub);
@@ -728,24 +823,49 @@ export const api = {
     return consolidated.sort((a, b) => new Date(b.submittedAt).getTime() - new Date(a.submittedAt).getTime());
   },
 
-  async approveTaskSubmission(taskId: string, submissionId: string, reviewNote?: string): Promise<Task> {
+  async approveTaskSubmission(taskId: string, submissionId: string, reviewNote?: string, taskTitle?: string): Promise<Task> {
     removeCachedPendingTaskId(taskId);
-    updateCachedTaskSubmissionStatus(taskId, submissionId, 'approved', reviewNote);
+    updateCachedTaskSubmissionStatus(taskId, submissionId, 'approved', reviewNote, taskTitle);
 
     const sbClient = getSupabaseClient();
     const now = new Date().toISOString();
+
+    // Prepare embedded description update if sbClient exists
+    let newApprovedDesc: string | undefined;
+    if (sbClient) {
+      try {
+        const { data: taskRecord } = await sbClient.from('tasks').select('*').eq('id', taskId).maybeSingle();
+        if (taskRecord) {
+          let subToApprove = extractTaskSubmissionFromDescription(taskRecord.description || '');
+          if (!subToApprove) {
+            const cachedSubs = getCachedTaskSubmissions(taskId, taskTitle || taskRecord.title);
+            subToApprove = cachedSubs.find(s => s.id === submissionId || s.taskId === taskId) || null;
+          }
+          if (subToApprove) {
+            subToApprove = {
+              ...subToApprove,
+              status: 'approved',
+              reviewedBy: 'admin',
+              reviewedAt: now,
+              reviewNote: reviewNote || subToApprove.reviewNote,
+            };
+            newApprovedDesc = embedTaskSubmissionIntoDescription(taskRecord.description || '', subToApprove);
+          }
+        }
+      } catch {}
+    }
 
     try {
       const res = await apiFetch(`/api/tasks/${taskId}/approve`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ submissionId, reviewNote }),
+        body: JSON.stringify({ submissionId, reviewNote, taskTitle }),
       });
       if (res.ok) {
         const updatedTask = await res.json();
         if (sbClient) {
           try {
-            await updateTaskStatusInSupabaseClient(sbClient, taskId, 'Done');
+            await updateTaskStatusInSupabaseClient(sbClient, taskId, 'Done', newApprovedDesc);
             await updateSubmissionStatusInSupabaseSystemMeeting(sbClient, taskId, submissionId, 'approved', reviewNote);
             if (submissionId) {
               await sbClient.from('task_submissions').update({
@@ -768,7 +888,7 @@ export const api = {
 
     if (sbClient) {
       try {
-        await updateTaskStatusInSupabaseClient(sbClient, taskId, 'Done');
+        await updateTaskStatusInSupabaseClient(sbClient, taskId, 'Done', newApprovedDesc);
         await updateSubmissionStatusInSupabaseSystemMeeting(sbClient, taskId, submissionId, 'approved', reviewNote);
         if (submissionId) {
           await sbClient.from('task_submissions').update({
@@ -790,6 +910,7 @@ export const api = {
             assignee: updated.assignee,
             dueDate: updated.due_date,
             status: 'Done',
+            description: updated.description,
             createdAt: updated.created_at,
             updatedAt: updated.updated_at,
           };
@@ -810,24 +931,48 @@ export const api = {
     };
   },
 
-  async rejectTaskSubmission(taskId: string, submissionId: string, reviewNote: string): Promise<Task> {
+  async rejectTaskSubmission(taskId: string, submissionId: string, reviewNote: string, taskTitle?: string): Promise<Task> {
     removeCachedPendingTaskId(taskId);
-    updateCachedTaskSubmissionStatus(taskId, submissionId, 'rejected', reviewNote);
+    updateCachedTaskSubmissionStatus(taskId, submissionId, 'rejected', reviewNote, taskTitle);
 
     const sbClient = getSupabaseClient();
     const now = new Date().toISOString();
+
+    let newRejectedDesc: string | undefined;
+    if (sbClient) {
+      try {
+        const { data: taskRecord } = await sbClient.from('tasks').select('*').eq('id', taskId).maybeSingle();
+        if (taskRecord) {
+          let subToReject = extractTaskSubmissionFromDescription(taskRecord.description || '');
+          if (!subToReject) {
+            const cachedSubs = getCachedTaskSubmissions(taskId, taskTitle || taskRecord.title);
+            subToReject = cachedSubs.find(s => s.id === submissionId || s.taskId === taskId) || null;
+          }
+          if (subToReject) {
+            subToReject = {
+              ...subToReject,
+              status: 'rejected',
+              reviewedBy: 'admin',
+              reviewedAt: now,
+              reviewNote: reviewNote || subToReject.reviewNote,
+            };
+            newRejectedDesc = embedTaskSubmissionIntoDescription(taskRecord.description || '', subToReject);
+          }
+        }
+      } catch {}
+    }
 
     try {
       const res = await apiFetch(`/api/tasks/${taskId}/reject`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ submissionId, reviewNote }),
+        body: JSON.stringify({ submissionId, reviewNote, taskTitle }),
       });
       if (res.ok) {
         const updatedTask = await res.json();
         if (sbClient) {
           try {
-            await updateTaskStatusInSupabaseClient(sbClient, taskId, 'In Progress');
+            await updateTaskStatusInSupabaseClient(sbClient, taskId, 'In Progress', newRejectedDesc);
             await updateSubmissionStatusInSupabaseSystemMeeting(sbClient, taskId, submissionId, 'rejected', reviewNote);
             if (submissionId) {
               await sbClient.from('task_submissions').update({
@@ -850,7 +995,7 @@ export const api = {
 
     if (sbClient) {
       try {
-        await updateTaskStatusInSupabaseClient(sbClient, taskId, 'In Progress');
+        await updateTaskStatusInSupabaseClient(sbClient, taskId, 'In Progress', newRejectedDesc);
         await updateSubmissionStatusInSupabaseSystemMeeting(sbClient, taskId, submissionId, 'rejected', reviewNote);
         if (submissionId) {
           await sbClient.from('task_submissions').update({

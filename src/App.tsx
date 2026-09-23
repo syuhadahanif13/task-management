@@ -4,6 +4,7 @@ import { Language, getT } from './i18n';
 import { api, saveCachedTaskSubmission } from './api/client';
 import { getSupabaseClient } from './lib/supabase';
 import { filterTasksForUser } from './utils/taskAccess';
+import { extractTaskSubmissionFromDescription, embedTaskSubmissionIntoDescription } from './utils/submissionUtils';
 
 // Layout
 import { Sidebar } from './components/Sidebar';
@@ -394,17 +395,32 @@ export default function App() {
   ) => {
     try {
       // 1. Optimistic update immediately in React state
+      const targetTitle = submittingTask?.title;
+      const optimisticSub: TaskSubmission = {
+        id: 'sub-' + Date.now(),
+        taskId,
+        taskTitle: targetTitle,
+        assignee: currentUser?.username || 'User',
+        notes: input.notes,
+        attachments: input.attachments,
+        status: 'pending',
+        submittedAt: new Date().toISOString(),
+      };
       setMeetings((prev) =>
         prev.map((m) => ({
           ...m,
-          tasks: (m.tasks || []).map((t) =>
-            t.id === taskId ? { ...t, status: 'Pending Approval' as const } : t
-          ),
+          tasks: (m.tasks || []).map((t) => {
+            if (t.id === taskId) {
+              const updatedDesc = embedTaskSubmissionIntoDescription(t.description || '', optimisticSub);
+              return { ...t, status: 'Pending Approval' as const, description: updatedDesc };
+            }
+            return t;
+          }),
         }))
       );
 
       // 2. Submit to API / Supabase
-      await api.submitTask(taskId, input);
+      await api.submitTask(taskId, { ...input, taskTitle: targetTitle });
 
       // 3. Ensure task status update is sent to tasks table
       api.updateTask(taskId, { status: 'Pending Approval' }).catch(() => {});
@@ -435,19 +451,35 @@ export default function App() {
       if (reviewSubmission) {
         saveCachedTaskSubmission({
           ...reviewSubmission,
+          taskTitle: reviewingTask?.title,
           status: 'approved',
           reviewedBy: 'admin',
           reviewedAt: new Date().toISOString(),
           reviewNote: reviewNote || reviewSubmission.reviewNote,
         });
       }
-      await api.approveTaskSubmission(taskId, submissionId, reviewNote);
+      await api.approveTaskSubmission(taskId, submissionId, reviewNote, reviewingTask?.title);
       setMeetings((prev) =>
         prev.map((m) => ({
           ...m,
-          tasks: (m.tasks || []).map((t) =>
-            t.id === taskId ? { ...t, status: 'Done' } : t
-          ),
+          tasks: (m.tasks || []).map((t) => {
+            if (t.id === taskId) {
+              let updatedDesc = t.description;
+              if (reviewSubmission) {
+                const appSub: TaskSubmission = {
+                  ...reviewSubmission,
+                  taskTitle: reviewingTask?.title,
+                  status: 'approved',
+                  reviewedBy: 'admin',
+                  reviewedAt: new Date().toISOString(),
+                  reviewNote: reviewNote || reviewSubmission.reviewNote,
+                };
+                updatedDesc = embedTaskSubmissionIntoDescription(t.description || '', appSub);
+              }
+              return { ...t, status: 'Done', description: updatedDesc };
+            }
+            return t;
+          }),
         }))
       );
       showToast('Submission berhasil disetujui.');
@@ -467,19 +499,35 @@ export default function App() {
       if (reviewSubmission) {
         saveCachedTaskSubmission({
           ...reviewSubmission,
+          taskTitle: reviewingTask?.title,
           status: 'rejected',
           reviewedBy: 'admin',
           reviewedAt: new Date().toISOString(),
           reviewNote: reviewNote || reviewSubmission.reviewNote,
         });
       }
-      await api.rejectTaskSubmission(taskId, submissionId, reviewNote);
+      await api.rejectTaskSubmission(taskId, submissionId, reviewNote, reviewingTask?.title);
       setMeetings((prev) =>
         prev.map((m) => ({
           ...m,
-          tasks: (m.tasks || []).map((t) =>
-            t.id === taskId ? { ...t, status: 'In Progress' } : t
-          ),
+          tasks: (m.tasks || []).map((t) => {
+            if (t.id === taskId) {
+              let updatedDesc = t.description;
+              if (reviewSubmission) {
+                const rejSub: TaskSubmission = {
+                  ...reviewSubmission,
+                  taskTitle: reviewingTask?.title,
+                  status: 'rejected',
+                  reviewedBy: 'admin',
+                  reviewedAt: new Date().toISOString(),
+                  reviewNote: reviewNote || reviewSubmission.reviewNote,
+                };
+                updatedDesc = embedTaskSubmissionIntoDescription(t.description || '', rejSub);
+              }
+              return { ...t, status: 'In Progress', description: updatedDesc };
+            }
+            return t;
+          }),
         }))
       );
       showToast('Submission ditolak. Tugas dikembalikan ke In Progress.');
@@ -504,9 +552,16 @@ export default function App() {
     try {
       let subs: TaskSubmission[] = [];
       try {
-        subs = await api.getTaskSubmissions(task.id);
+        subs = await api.getTaskSubmissions(task.id, task.title);
       } catch (e) {
         console.warn('Failed to get submissions:', e);
+      }
+
+      if ((!subs || subs.length === 0 || !subs.some(s => Array.isArray(s.attachments) && s.attachments.length > 0)) && task.description) {
+        const emb = extractTaskSubmissionFromDescription(task.description);
+        if (emb) {
+          subs = [emb, ...subs];
+        }
       }
 
       if (subs && subs.length > 0) {

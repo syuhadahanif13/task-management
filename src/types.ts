@@ -37,6 +37,7 @@ export interface TaskAttachment {
 export interface TaskSubmission {
   id: string;
   taskId: string;
+  taskTitle?: string;
   assignee: string;
   notes: string;
   attachments: TaskAttachment[];
@@ -102,6 +103,7 @@ export interface AIParseResult {
 export interface SubmitTaskInput {
   notes: string;
   attachments: TaskAttachment[];
+  taskTitle?: string;
 }
 
 export interface Division {
