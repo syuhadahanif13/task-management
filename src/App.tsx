@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Meeting, Task, TaskStatus, CreateMeetingInput, CreateTaskInput, TaskSubmission, AppTab } from './types';
 import { Language, getT } from './i18n';
-import { api } from './api/client';
+import { api, saveCachedTaskSubmission } from './api/client';
 import { getSupabaseClient } from './lib/supabase';
 import { filterTasksForUser } from './utils/taskAccess';
 
@@ -432,6 +432,15 @@ export default function App() {
     reviewNote?: string
   ) => {
     try {
+      if (reviewSubmission) {
+        saveCachedTaskSubmission({
+          ...reviewSubmission,
+          status: 'approved',
+          reviewedBy: 'admin',
+          reviewedAt: new Date().toISOString(),
+          reviewNote: reviewNote || reviewSubmission.reviewNote,
+        });
+      }
       await api.approveTaskSubmission(taskId, submissionId, reviewNote);
       setMeetings((prev) =>
         prev.map((m) => ({
@@ -455,6 +464,15 @@ export default function App() {
     reviewNote: string
   ) => {
     try {
+      if (reviewSubmission) {
+        saveCachedTaskSubmission({
+          ...reviewSubmission,
+          status: 'rejected',
+          reviewedBy: 'admin',
+          reviewedAt: new Date().toISOString(),
+          reviewNote: reviewNote || reviewSubmission.reviewNote,
+        });
+      }
       await api.rejectTaskSubmission(taskId, submissionId, reviewNote);
       setMeetings((prev) =>
         prev.map((m) => ({

@@ -44,7 +44,18 @@ export function saveCachedTaskSubmission(sub: TaskSubmission): void {
     const raw = localStorage.getItem('cached_task_submissions');
     let list: TaskSubmission[] = raw ? JSON.parse(raw) : [];
     if (!Array.isArray(list)) list = [];
-    list = [sub, ...list.filter(s => s.id !== sub.id)];
+    const existingIdx = list.findIndex(s => s.id === sub.id || (sub.taskId && s.taskId === sub.taskId));
+    if (existingIdx >= 0) {
+      const existingAtt = Array.isArray(list[existingIdx].attachments) ? list[existingIdx].attachments : [];
+      const subAtt = Array.isArray(sub.attachments) ? sub.attachments : [];
+      list[existingIdx] = {
+        ...list[existingIdx],
+        ...sub,
+        attachments: subAtt.length > 0 ? subAtt : existingAtt,
+      };
+    } else {
+      list = [sub, ...list];
+    }
     localStorage.setItem('cached_task_submissions', JSON.stringify(list));
   } catch {}
 }
@@ -55,12 +66,35 @@ export function updateCachedTaskSubmissionStatus(taskId: string, submissionId: s
     const raw = localStorage.getItem('cached_task_submissions');
     let list: TaskSubmission[] = raw ? JSON.parse(raw) : [];
     if (!Array.isArray(list)) list = [];
+    let updatedAny = false;
     list = list.map(s => {
       if (s.id === submissionId || s.taskId === taskId) {
-        return { ...s, status, reviewNote: reviewNote || s.reviewNote, reviewedAt: new Date().toISOString() };
+        updatedAny = true;
+        return {
+          ...s,
+          status,
+          reviewNote: reviewNote || s.reviewNote,
+          reviewedAt: new Date().toISOString(),
+          reviewedBy: 'admin',
+          attachments: Array.isArray(s.attachments) ? s.attachments : []
+        };
       }
       return s;
     });
+    if (!updatedAny && taskId) {
+      list.push({
+        id: submissionId || ('sub-' + taskId),
+        taskId,
+        assignee: 'User',
+        notes: '',
+        attachments: [],
+        status,
+        submittedAt: new Date().toISOString(),
+        reviewedBy: 'admin',
+        reviewedAt: new Date().toISOString(),
+        reviewNote
+      });
+    }
     localStorage.setItem('cached_task_submissions', JSON.stringify(list));
   } catch {}
 }
@@ -530,11 +564,16 @@ export const api = {
   },
 
   async getTaskSubmissions(taskId: string): Promise<TaskSubmission[]> {
+    let result: TaskSubmission[] = [];
+
+    // 1. Try API first
     try {
       const res = await apiFetch(`/api/tasks/${taskId}/submissions`);
       if (res.ok) {
         const data = await res.json();
-        if (Array.isArray(data) && data.length > 0) return data;
+        if (Array.isArray(data)) {
+          result = data;
+        }
       }
     } catch (err) {
       console.warn('API getTaskSubmissions error, trying direct Supabase:', err);
@@ -542,6 +581,7 @@ export const api = {
 
     const sbClient = getSupabaseClient();
     if (sbClient) {
+      // 2. Direct Supabase task_submissions table
       try {
         const { data, error } = await sbClient
           .from('task_submissions')
@@ -550,24 +590,39 @@ export const api = {
           .order('submitted_at', { ascending: false });
 
         if (!error && Array.isArray(data) && data.length > 0) {
-          return data.map((s: any) => ({
+          const directSubs: TaskSubmission[] = data.map((s: any) => ({
             id: s.id,
             taskId: s.task_id,
             assignee: s.assignee,
             notes: s.notes || '',
-            attachments: s.attachments || [],
+            attachments: Array.isArray(s.attachments) ? s.attachments : [],
             status: s.status || 'pending',
             submittedAt: s.submitted_at,
             reviewedBy: s.reviewed_by,
             reviewedAt: s.reviewed_at,
             reviewNote: s.review_note,
           }));
+
+          for (const ds of directSubs) {
+            const idx = result.findIndex(r => r.id === ds.id);
+            if (idx >= 0) {
+              const resAtt = Array.isArray(result[idx].attachments) ? result[idx].attachments : [];
+              const dsAtt = Array.isArray(ds.attachments) ? ds.attachments : [];
+              result[idx] = {
+                ...result[idx],
+                ...ds,
+                attachments: dsAtt.length > 0 ? dsAtt : resAtt,
+              };
+            } else {
+              result.push(ds);
+            }
+          }
         }
       } catch (sbErr) {
         console.warn('Direct Supabase getTaskSubmissions warning:', sbErr);
       }
 
-      // Check system meeting store in Supabase
+      // 3. Direct Supabase system meeting store
       try {
         const { data: sysMeeting } = await sbClient
           .from('meetings')
@@ -579,8 +634,19 @@ export const api = {
           const list: TaskSubmission[] = JSON.parse(sysMeeting.meeting_notes);
           if (Array.isArray(list)) {
             const matched = list.filter(s => s.taskId === taskId);
-            if (matched.length > 0) {
-              return matched.sort((a, b) => new Date(b.submittedAt).getTime() - new Date(a.submittedAt).getTime());
+            for (const sm of matched) {
+              const idx = result.findIndex(r => r.id === sm.id);
+              if (idx >= 0) {
+                const resAtt = Array.isArray(result[idx].attachments) ? result[idx].attachments : [];
+                const smAtt = Array.isArray(sm.attachments) ? sm.attachments : [];
+                result[idx] = {
+                  ...result[idx],
+                  ...sm,
+                  attachments: smAtt.length > 0 ? smAtt : resAtt,
+                };
+              } else {
+                result.push(sm);
+              }
             }
           }
         }
@@ -589,11 +655,33 @@ export const api = {
       }
     }
 
-    // Fallback to locally cached submissions
+    // 4. Merge with locally cached submissions (localStorage)
     const cached = getCachedTaskSubmissions(taskId);
-    if (cached.length > 0) return cached;
+    if (Array.isArray(cached) && cached.length > 0) {
+      for (const cs of cached) {
+        const idx = result.findIndex(r => r.id === cs.id);
+        if (idx >= 0) {
+          const resAtt = Array.isArray(result[idx].attachments) ? result[idx].attachments : [];
+          const csAtt = Array.isArray(cs.attachments) ? cs.attachments : [];
+          result[idx] = {
+            ...result[idx],
+            ...cs,
+            attachments: csAtt.length > 0 ? csAtt : resAtt,
+          };
+        } else {
+          result.push(cs);
+        }
+      }
+    }
 
-    return [];
+    // 5. Update local cache with merged results so future queries keep attachments
+    for (const sub of result) {
+      if (Array.isArray(sub.attachments) && sub.attachments.length > 0) {
+        saveCachedTaskSubmission(sub);
+      }
+    }
+
+    return result.sort((a, b) => new Date(b.submittedAt).getTime() - new Date(a.submittedAt).getTime());
   },
 
   async approveTaskSubmission(taskId: string, submissionId: string, reviewNote?: string): Promise<Task> {
