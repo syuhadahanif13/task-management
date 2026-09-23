@@ -78,6 +78,90 @@ export function getCachedTaskSubmissions(taskId: string): TaskSubmission[] {
   }
 }
 
+const SYSTEM_SUBMISSIONS_MEETING_ID = 'system-task-submissions';
+
+async function updateTaskStatusInSupabaseClient(sbClient: any, taskId: string, status: string) {
+  const now = new Date().toISOString();
+  if (status === 'Pending Approval') {
+    const { error: err1 } = await sbClient.from('tasks').update({ status: 'Pending Approval', updated_at: now }).eq('id', taskId);
+    if (err1) {
+      console.warn('Supabase update Pending Approval failed, using Blocked constraint fallback:', err1.message);
+      await sbClient.from('tasks').update({ status: 'Blocked', updated_at: now }).eq('id', taskId);
+    }
+  } else {
+    await sbClient.from('tasks').update({ status, updated_at: now }).eq('id', taskId);
+  }
+}
+
+async function saveSubmissionToSupabaseSystemMeeting(sbClient: any, sub: TaskSubmission) {
+  try {
+    const { data: sysMeeting } = await sbClient
+      .from('meetings')
+      .select('meeting_notes')
+      .eq('id', SYSTEM_SUBMISSIONS_MEETING_ID)
+      .maybeSingle();
+
+    let list: TaskSubmission[] = [];
+    if (sysMeeting && sysMeeting.meeting_notes) {
+      try {
+        const parsed = JSON.parse(sysMeeting.meeting_notes);
+        if (Array.isArray(parsed)) list = parsed;
+      } catch {}
+    }
+    const idx = list.findIndex(s => s.id === sub.id);
+    if (idx >= 0) {
+      list[idx] = { ...list[idx], ...sub };
+    } else {
+      list.push(sub);
+    }
+
+    await sbClient.from('meetings').upsert({
+      id: SYSTEM_SUBMISSIONS_MEETING_ID,
+      title: '__SYSTEM_TASK_SUBMISSIONS__',
+      meeting_date: '2000-01-01',
+      participants: ['system'],
+      meeting_notes: JSON.stringify(list),
+      updated_at: new Date().toISOString()
+    });
+  } catch (e) {
+    console.warn('saveSubmissionToSupabaseSystemMeeting notice:', e);
+  }
+}
+
+async function updateSubmissionStatusInSupabaseSystemMeeting(sbClient: any, taskId: string, submissionId: string, status: 'approved' | 'rejected', reviewNote?: string) {
+  try {
+    const { data: sysMeeting } = await sbClient
+      .from('meetings')
+      .select('meeting_notes')
+      .eq('id', SYSTEM_SUBMISSIONS_MEETING_ID)
+      .maybeSingle();
+
+    if (sysMeeting && sysMeeting.meeting_notes) {
+      try {
+        let list: TaskSubmission[] = JSON.parse(sysMeeting.meeting_notes);
+        if (Array.isArray(list)) {
+          list = list.map(s => {
+            if (s.id === submissionId || s.taskId === taskId) {
+              return { ...s, status, reviewNote: reviewNote || s.reviewNote, reviewedAt: new Date().toISOString(), reviewedBy: 'admin' };
+            }
+            return s;
+          });
+          await sbClient.from('meetings').upsert({
+            id: SYSTEM_SUBMISSIONS_MEETING_ID,
+            title: '__SYSTEM_TASK_SUBMISSIONS__',
+            meeting_date: '2000-01-01',
+            participants: ['system'],
+            meeting_notes: JSON.stringify(list),
+            updated_at: new Date().toISOString()
+          });
+        }
+      } catch {}
+    }
+  } catch (e) {
+    console.warn('updateSubmissionStatusInSupabaseSystemMeeting notice:', e);
+  }
+}
+
 export const api = {
   async getMeetings(): Promise<Meeting[]> {
     let meetingsData: Meeting[] = [];
@@ -90,9 +174,10 @@ export const api = {
       console.warn('API getMeetings failed, checking Supabase client:', err);
     }
 
+    const sbClient = getSupabaseClient();
+
     // Direct Supabase fallback if API failed or returned empty
-    if ((!meetingsData || meetingsData.length === 0)) {
-      const sbClient = getSupabaseClient();
+    if (!meetingsData || meetingsData.length === 0) {
       if (sbClient) {
         try {
           const { data, error } = await sbClient
@@ -100,6 +185,22 @@ export const api = {
             .select('*, tasks(*)')
             .order('meeting_date', { ascending: false });
           if (!error && Array.isArray(data) && data.length > 0) {
+            // Check system submissions store in meetings table
+            const sysMeeting = data.find((m: any) => m.id === SYSTEM_SUBMISSIONS_MEETING_ID);
+            if (sysMeeting && sysMeeting.meeting_notes) {
+              try {
+                const parsedSubs: TaskSubmission[] = JSON.parse(sysMeeting.meeting_notes);
+                if (Array.isArray(parsedSubs)) {
+                  for (const s of parsedSubs) {
+                    saveCachedTaskSubmission(s);
+                    if (s.status === 'pending') {
+                      addCachedPendingTaskId(s.taskId);
+                    }
+                  }
+                }
+              } catch {}
+            }
+
             meetingsData = data.map((m: any) => ({
               id: m.id,
               title: m.title,
@@ -116,7 +217,7 @@ export const api = {
                 assignees: t.assignees || (t.assignee ? String(t.assignee).split(',').map((s: string) => s.trim()).filter(Boolean) : []),
                 dueDate: t.due_date,
                 dueTime: t.due_time,
-                status: t.status,
+                status: t.status === 'Blocked' ? 'Pending Approval' : t.status,
                 priority: t.priority,
                 description: t.description,
                 tags: t.tags || [],
@@ -131,17 +232,24 @@ export const api = {
       }
     }
 
-    // Merge cached pending tasks so status 'Pending Approval' is never lost
+    // Always filter out system meetings
+    if (Array.isArray(meetingsData)) {
+      meetingsData = meetingsData.filter(
+        (m: any) => m.id !== SYSTEM_SUBMISSIONS_MEETING_ID && !String(m.id).startsWith('system-')
+      );
+    }
+
+    // Merge cached pending tasks so status 'Pending Approval' is preserved
     const pendingIds = getCachedPendingTaskIds();
-    if (pendingIds.size > 0 && Array.isArray(meetingsData)) {
+    if (Array.isArray(meetingsData)) {
       meetingsData = meetingsData.map((m) => ({
         ...m,
         tasks: (m.tasks || []).map((t) => {
-          if (pendingIds.has(t.id)) {
-            if (t.status === 'Done') {
-              removeCachedPendingTaskId(t.id);
-              return t;
-            }
+          if (t.status === 'Done') {
+            if (pendingIds.has(t.id)) removeCachedPendingTaskId(t.id);
+            return t;
+          }
+          if (t.status === 'Blocked' || t.status === 'Pending Approval' || pendingIds.has(t.id)) {
             return { ...t, status: 'Pending Approval' as const };
           }
           return t;
@@ -342,7 +450,8 @@ export const api = {
         saveCachedTaskSubmission(sub);
         if (sbClient) {
           try {
-            await sbClient.from('tasks').update({ status: 'Pending Approval', updated_at: now }).eq('id', taskId);
+            await updateTaskStatusInSupabaseClient(sbClient, taskId, 'Pending Approval');
+            await saveSubmissionToSupabaseSystemMeeting(sbClient, sub);
             await sbClient.from('task_submissions').upsert({
               id: sub.id,
               task_id: taskId,
@@ -370,16 +479,7 @@ export const api = {
         const { data: taskData } = await sbClient.from('tasks').select('assignee').eq('id', taskId).maybeSingle();
         const assignee = taskData?.assignee || 'User';
 
-        await sbClient.from('tasks').update({ status: 'Pending Approval', updated_at: now }).eq('id', taskId);
-        await sbClient.from('task_submissions').upsert({
-          id: submissionId,
-          task_id: taskId,
-          assignee,
-          notes: input.notes,
-          attachments: input.attachments,
-          status: 'pending',
-          submitted_at: now,
-        });
+        await updateTaskStatusInSupabaseClient(sbClient, taskId, 'Pending Approval');
 
         const createdSub: TaskSubmission = {
           id: submissionId,
@@ -390,6 +490,17 @@ export const api = {
           status: 'pending',
           submittedAt: now,
         };
+        await saveSubmissionToSupabaseSystemMeeting(sbClient, createdSub);
+        await sbClient.from('task_submissions').upsert({
+          id: submissionId,
+          task_id: taskId,
+          assignee,
+          notes: input.notes,
+          attachments: input.attachments,
+          status: 'pending',
+          submitted_at: now,
+        });
+
         saveCachedTaskSubmission(createdSub);
 
         if (typeof window !== 'undefined') {
@@ -455,6 +566,27 @@ export const api = {
       } catch (sbErr) {
         console.warn('Direct Supabase getTaskSubmissions warning:', sbErr);
       }
+
+      // Check system meeting store in Supabase
+      try {
+        const { data: sysMeeting } = await sbClient
+          .from('meetings')
+          .select('meeting_notes')
+          .eq('id', SYSTEM_SUBMISSIONS_MEETING_ID)
+          .maybeSingle();
+
+        if (sysMeeting && sysMeeting.meeting_notes) {
+          const list: TaskSubmission[] = JSON.parse(sysMeeting.meeting_notes);
+          if (Array.isArray(list)) {
+            const matched = list.filter(s => s.taskId === taskId);
+            if (matched.length > 0) {
+              return matched.sort((a, b) => new Date(b.submittedAt).getTime() - new Date(a.submittedAt).getTime());
+            }
+          }
+        }
+      } catch (sysErr) {
+        console.warn('Direct Supabase system meeting submissions warning:', sysErr);
+      }
     }
 
     // Fallback to locally cached submissions
@@ -481,7 +613,8 @@ export const api = {
         const updatedTask = await res.json();
         if (sbClient) {
           try {
-            await sbClient.from('tasks').update({ status: 'Done', updated_at: now }).eq('id', taskId);
+            await updateTaskStatusInSupabaseClient(sbClient, taskId, 'Done');
+            await updateSubmissionStatusInSupabaseSystemMeeting(sbClient, taskId, submissionId, 'approved', reviewNote);
             if (submissionId) {
               await sbClient.from('task_submissions').update({
                 status: 'approved',
@@ -503,7 +636,8 @@ export const api = {
 
     if (sbClient) {
       try {
-        await sbClient.from('tasks').update({ status: 'Done', updated_at: now }).eq('id', taskId);
+        await updateTaskStatusInSupabaseClient(sbClient, taskId, 'Done');
+        await updateSubmissionStatusInSupabaseSystemMeeting(sbClient, taskId, submissionId, 'approved', reviewNote);
         if (submissionId) {
           await sbClient.from('task_submissions').update({
             status: 'approved',
@@ -561,7 +695,8 @@ export const api = {
         const updatedTask = await res.json();
         if (sbClient) {
           try {
-            await sbClient.from('tasks').update({ status: 'In Progress', updated_at: now }).eq('id', taskId);
+            await updateTaskStatusInSupabaseClient(sbClient, taskId, 'In Progress');
+            await updateSubmissionStatusInSupabaseSystemMeeting(sbClient, taskId, submissionId, 'rejected', reviewNote);
             if (submissionId) {
               await sbClient.from('task_submissions').update({
                 status: 'rejected',
@@ -583,7 +718,8 @@ export const api = {
 
     if (sbClient) {
       try {
-        await sbClient.from('tasks').update({ status: 'In Progress', updated_at: now }).eq('id', taskId);
+        await updateTaskStatusInSupabaseClient(sbClient, taskId, 'In Progress');
+        await updateSubmissionStatusInSupabaseSystemMeeting(sbClient, taskId, submissionId, 'rejected', reviewNote);
         if (submissionId) {
           await sbClient.from('task_submissions').update({
             status: 'rejected',

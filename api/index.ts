@@ -136,9 +136,110 @@ router.get('/schema', (req, res) => {
   });
 });
 
+const SYSTEM_SUBMISSIONS_MEETING_ID = 'system-task-submissions';
+
+async function loadSubmissionsFromSupabase(sb: SupabaseClient): Promise<TaskSubmission[]> {
+  try {
+    // 1. Read from system meeting record in meetings table
+    const { data: sysMeeting } = await sb
+      .from('meetings')
+      .select('meeting_notes')
+      .eq('id', SYSTEM_SUBMISSIONS_MEETING_ID)
+      .maybeSingle();
+
+    if (sysMeeting && sysMeeting.meeting_notes) {
+      try {
+        const parsed = JSON.parse(sysMeeting.meeting_notes);
+        if (Array.isArray(parsed)) {
+          for (const item of parsed) {
+            const existingIdx = submissions.findIndex(s => s.id === item.id);
+            if (existingIdx >= 0) {
+              submissions[existingIdx] = { ...submissions[existingIdx], ...item };
+            } else {
+              submissions.push(item);
+            }
+          }
+        }
+      } catch (e) {
+        console.warn('Failed parsing submissions from system-task-submissions:', e);
+      }
+    }
+
+    // 2. Also try reading from task_submissions table if available
+    const { data: dbSubs, error: dbErr } = await sb
+      .from('task_submissions')
+      .select('*');
+
+    if (!dbErr && Array.isArray(dbSubs)) {
+      for (const s of dbSubs) {
+        const item: TaskSubmission = {
+          id: s.id,
+          taskId: s.task_id,
+          assignee: s.assignee,
+          notes: s.notes || '',
+          attachments: s.attachments || [],
+          status: s.status || 'pending',
+          submittedAt: s.submitted_at,
+          reviewedBy: s.reviewed_by,
+          reviewedAt: s.reviewed_at,
+          reviewNote: s.review_note
+        };
+        const existingIdx = submissions.findIndex(x => x.id === item.id);
+        if (existingIdx >= 0) {
+          submissions[existingIdx] = { ...submissions[existingIdx], ...item };
+        } else {
+          submissions.push(item);
+        }
+      }
+    }
+  } catch (err: any) {
+    console.warn('loadSubmissionsFromSupabase warning:', err?.message);
+  }
+  return submissions;
+}
+
+async function saveSubmissionsToSupabase(sb: SupabaseClient, subs: TaskSubmission[]) {
+  try {
+    await sb.from('meetings').upsert({
+      id: SYSTEM_SUBMISSIONS_MEETING_ID,
+      title: '__SYSTEM_TASK_SUBMISSIONS__',
+      meeting_date: '2000-01-01',
+      participants: ['system'],
+      meeting_notes: JSON.stringify(subs),
+      updated_at: new Date().toISOString()
+    });
+  } catch (err: any) {
+    console.warn('saveSubmissionsToSupabase meetings fallback warning:', err?.message);
+  }
+}
+
+async function updateTaskStatusInSupabase(sb: SupabaseClient, taskId: string, status: TaskStatus) {
+  const now = new Date().toISOString();
+  if (status === 'Pending Approval') {
+    // Try updating status: 'Pending Approval' first
+    const { error: err1 } = await sb.from('tasks').update({ status: 'Pending Approval', updated_at: now }).eq('id', taskId);
+    if (err1) {
+      console.warn('Supabase update Pending Approval rejected by constraint, using Blocked fallback:', err1.message);
+      // Fallback: the existing database check constraint accepts 'Blocked'
+      const { error: err2 } = await sb.from('tasks').update({ status: 'Blocked', updated_at: now }).eq('id', taskId);
+      if (err2) {
+        console.warn('Supabase update Blocked fallback failed:', err2.message);
+      }
+    }
+  } else {
+    const { error } = await sb.from('tasks').update({ status, updated_at: now }).eq('id', taskId);
+    if (error) {
+      console.warn(`Supabase update task status ${status} warning:`, error.message);
+    }
+  }
+}
+
 async function syncMeetingsFromSupabase(): Promise<Meeting[]> {
   if (!supabase) return meetings;
   try {
+    // Sync submissions from Supabase system store and task_submissions table
+    await loadSubmissionsFromSupabase(supabase);
+
     const { data: dbMeetings, error } = await supabase
       .from('meetings')
       .select('*, tasks(*)')
@@ -147,21 +248,7 @@ async function syncMeetingsFromSupabase(): Promise<Meeting[]> {
     // Collect all task IDs that have pending submissions
     const pendingTaskIdSet = new Set<string>();
 
-    try {
-      const { data: pendingSubs } = await supabase
-        .from('task_submissions')
-        .select('task_id')
-        .eq('status', 'pending');
-      if (Array.isArray(pendingSubs)) {
-        for (const s of pendingSubs) {
-          if (s.task_id) pendingTaskIdSet.add(s.task_id);
-        }
-      }
-    } catch (e) {
-      console.warn('Failed to query pending task_submissions:', e);
-    }
-
-    // Add pending tasks from in-memory submissions
+    // Add pending tasks from submissions store
     for (const s of submissions) {
       if (s.status === 'pending') {
         pendingTaskIdSet.add(s.taskId);
@@ -178,7 +265,12 @@ async function syncMeetingsFromSupabase(): Promise<Meeting[]> {
     }
 
     if (!error && Array.isArray(dbMeetings)) {
-      const formatted: Meeting[] = dbMeetings.map((m: any) => ({
+      // Exclude system meetings
+      const cleanDbMeetings = dbMeetings.filter(
+        (m: any) => m.id !== SYSTEM_SUBMISSIONS_MEETING_ID && !String(m.id).startsWith('system-')
+      );
+
+      const formatted: Meeting[] = cleanDbMeetings.map((m: any) => ({
         id: m.id,
         title: m.title,
         meetingDate: m.meeting_date,
@@ -187,7 +279,7 @@ async function syncMeetingsFromSupabase(): Promise<Meeting[]> {
         createdAt: m.created_at,
         updatedAt: m.updated_at,
         tasks: (m.tasks || []).map((t: any) => {
-          const isPending = pendingTaskIdSet.has(t.id) || t.status === 'Pending Approval';
+          const isPending = pendingTaskIdSet.has(t.id) || t.status === 'Pending Approval' || t.status === 'Blocked';
           return {
             id: t.id,
             meetingId: t.meeting_id,
@@ -716,10 +808,8 @@ router.post('/tasks/:taskId/submit', async (req, res) => {
 
   if (supabase) {
     try {
-      const { error: taskErr } = await supabase.from('tasks').update({ status: 'Pending Approval', updated_at: now }).eq('id', taskId);
-      if (taskErr) {
-        console.warn('Supabase tasks.update status warning:', taskErr.message);
-      }
+      await updateTaskStatusInSupabase(supabase, taskId, 'Pending Approval');
+      await saveSubmissionsToSupabase(supabase, submissions);
       const { error: subErr } = await supabase.from('task_submissions').upsert({
         id: submission.id,
         task_id: submission.taskId,
@@ -744,6 +834,7 @@ router.get('/tasks/:taskId/submissions', async (req, res) => {
   const { taskId } = req.params;
   if (supabase) {
     try {
+      await loadSubmissionsFromSupabase(supabase);
       const { data, error } = await supabase
         .from('task_submissions')
         .select('*')
@@ -869,7 +960,8 @@ router.post('/tasks/:taskId/approve', async (req, res) => {
 
   if (supabase) {
     try {
-      await supabase.from('tasks').update({ status: 'Done', updated_at: now }).eq('id', taskId);
+      await updateTaskStatusInSupabase(supabase, taskId, 'Done');
+      await saveSubmissionsToSupabase(supabase, submissions);
       if (submissionId) {
         await supabase.from('task_submissions').update({
           status: 'approved',
@@ -986,7 +1078,8 @@ router.post('/tasks/:taskId/reject', async (req, res) => {
 
   if (supabase) {
     try {
-      await supabase.from('tasks').update({ status: 'In Progress', updated_at: now }).eq('id', taskId);
+      await updateTaskStatusInSupabase(supabase, taskId, 'In Progress');
+      await saveSubmissionsToSupabase(supabase, submissions);
       if (submissionId) {
         await supabase.from('task_submissions').update({
           status: 'rejected',

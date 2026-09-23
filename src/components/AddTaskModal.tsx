@@ -271,7 +271,7 @@ export const AddTaskModal: React.FC<AddTaskModalProps> = ({ isOpen, onClose, onA
                 className="w-full bg-transparent text-sm font-semibold text-gray-800 dark:text-white focus:outline-none cursor-pointer"
               >
                 <option value="">📁 General Tasks (Tugas Mandiri / Tanpa Rapat)</option>
-                {meetings.map((m) => (
+                {meetings.filter((m) => m.id !== 'general-tasks' && !m.id.startsWith('system-')).map((m) => (
                   <option key={m.id} value={m.id}>
                     📁 {m.title || `Rapat ${m.meetingDate}`} ({m.meetingDate})
                   </option>

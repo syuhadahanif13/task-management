@@ -144,15 +144,17 @@ export default function App() {
             }
           }
         }
-        return data.map((m) => ({
-          ...m,
-          tasks: (m.tasks || []).map((t) => {
-            if (localPending.has(t.id) && t.status === 'In Progress') {
-              return { ...t, status: 'Pending Approval' as const };
-            }
-            return t;
-          }),
-        }));
+        return data
+          .filter((m) => !m.id.startsWith('system-'))
+          .map((m) => ({
+            ...m,
+            tasks: (m.tasks || []).map((t) => {
+              if (localPending.has(t.id) && t.status === 'In Progress') {
+                return { ...t, status: 'Pending Approval' as const };
+              }
+              return t;
+            }),
+          }));
       });
     } catch (err: any) {
       console.error(err);
@@ -169,7 +171,13 @@ export default function App() {
       loadMeetings();
     };
     window.addEventListener('tasksUpdated', handleTasksUpdate);
-    return () => window.removeEventListener('tasksUpdated', handleTasksUpdate);
+    const interval = setInterval(() => {
+      loadMeetings();
+    }, 8000);
+    return () => {
+      window.removeEventListener('tasksUpdated', handleTasksUpdate);
+      clearInterval(interval);
+    };
   }, []);
 
   // ─── Handlers: Auth ───
@@ -492,7 +500,8 @@ export default function App() {
   };
 
   // ─── Derived data ───
-  const allTasksWithOrigin = meetings.flatMap((m) =>
+  const validMeetings = meetings.filter((m) => !m.id.startsWith('system-'));
+  const allTasksWithOrigin = validMeetings.flatMap((m) =>
     (m.tasks || []).map((t) => {
       const isStandalone = m.id === 'general-tasks' || !t.meetingId || t.meetingId === 'general-tasks';
       return {
@@ -506,15 +515,15 @@ export default function App() {
   // Scoped tasks based on user role (Admin gets all tasks, regular user gets only their assigned tasks)
   const scopedTasksWithOrigin = filterTasksForUser(allTasksWithOrigin, currentUser);
 
-  const selectedMeeting = meetings.find((m) => m.id === selectedMeetingId);
-  const totalMeetings = meetings.filter((m) => m.id !== 'general-tasks').length;
+  const selectedMeeting = validMeetings.find((m) => m.id === selectedMeetingId);
+  const totalMeetings = validMeetings.filter((m) => m.id !== 'general-tasks').length;
   const totalTasks = scopedTasksWithOrigin.length;
   const userOverdueCount = scopedTasksWithOrigin.filter(
     (task) => task.status !== 'Done' && task.dueDate && task.dueDate < new Date().toISOString().split('T')[0]
   ).length;
 
   const pendingReviewCount = currentUser?.role === 'admin'
-    ? meetings.flatMap((m) => m.tasks || []).filter((t) => t.status === 'Pending Approval').length
+    ? validMeetings.flatMap((m) => m.tasks || []).filter((t) => t.status === 'Pending Approval').length
     : 0;
 
   // Tab navigation handler

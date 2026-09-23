@@ -66,6 +66,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
     };
 
     for (const m of meetings) {
+      if (m.id.startsWith('system-')) continue;
       if (m.id !== 'general-tasks') {
         addEvent(m.meetingDate, {
           id: `m-${m.id}`,
@@ -132,6 +133,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
 
     // Meetings on selected date
     for (const m of meetings) {
+      if (m.id.startsWith('system-')) continue;
       if (m.id !== 'general-tasks' && m.meetingDate === selectedDate) {
         items.push({
           id: `m-${m.id}`,

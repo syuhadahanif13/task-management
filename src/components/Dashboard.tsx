@@ -46,9 +46,10 @@ export const Dashboard: React.FC<DashboardProps> = ({
   const [notificationOpen, setNotificationOpen] = useState(false);
 
   // Extract all tasks with parent meeting title
-  const realMeetings = meetings.filter((m) => m.id !== 'general-tasks');
+  const realMeetings = meetings.filter((m) => m.id !== 'general-tasks' && !m.id.startsWith('system-'));
   const rawTasks: Array<Task & { meetingTitle: string }> = [];
   for (const m of meetings) {
+    if (m.id.startsWith('system-')) continue;
     for (const task of m.tasks || []) {
       const isStandalone = m.id === 'general-tasks' || !task.meetingId || task.meetingId === 'general-tasks';
       rawTasks.push({
