@@ -91,7 +91,8 @@ export interface CreateUserInput {
 
 const app = express();
 
-app.use(express.json({ limit: '10mb' }));
+app.use(express.json({ limit: '50mb' }));
+app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
 // Initialize Supabase client
 const supabaseUrl = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
@@ -143,6 +144,39 @@ async function syncMeetingsFromSupabase(): Promise<Meeting[]> {
       .select('*, tasks(*)')
       .order('meeting_date', { ascending: false });
 
+    // Collect all task IDs that have pending submissions
+    const pendingTaskIdSet = new Set<string>();
+
+    try {
+      const { data: pendingSubs } = await supabase
+        .from('task_submissions')
+        .select('task_id')
+        .eq('status', 'pending');
+      if (Array.isArray(pendingSubs)) {
+        for (const s of pendingSubs) {
+          if (s.task_id) pendingTaskIdSet.add(s.task_id);
+        }
+      }
+    } catch (e) {
+      console.warn('Failed to query pending task_submissions:', e);
+    }
+
+    // Add pending tasks from in-memory submissions
+    for (const s of submissions) {
+      if (s.status === 'pending') {
+        pendingTaskIdSet.add(s.taskId);
+      }
+    }
+
+    // Retain Pending Approval status currently in memory to prevent race condition reversion
+    for (const m of meetings) {
+      for (const t of m.tasks || []) {
+        if (t.status === 'Pending Approval') {
+          pendingTaskIdSet.add(t.id);
+        }
+      }
+    }
+
     if (!error && Array.isArray(dbMeetings)) {
       const formatted: Meeting[] = dbMeetings.map((m: any) => ({
         id: m.id,
@@ -152,21 +186,24 @@ async function syncMeetingsFromSupabase(): Promise<Meeting[]> {
         meetingNotes: m.meeting_notes,
         createdAt: m.created_at,
         updatedAt: m.updated_at,
-        tasks: (m.tasks || []).map((t: any) => ({
-          id: t.id,
-          meetingId: t.meeting_id,
-          title: t.title,
-          assignee: t.assignee,
-          assignees: t.assignees || (t.assignee ? String(t.assignee).split(',').map((s: string) => s.trim()).filter(Boolean) : []),
-          dueDate: t.due_date,
-          dueTime: t.due_time,
-          status: t.status,
-          priority: t.priority,
-          description: t.description,
-          tags: t.tags || [],
-          createdAt: t.created_at,
-          updatedAt: t.updated_at
-        }))
+        tasks: (m.tasks || []).map((t: any) => {
+          const isPending = pendingTaskIdSet.has(t.id) || t.status === 'Pending Approval';
+          return {
+            id: t.id,
+            meetingId: t.meeting_id,
+            title: t.title,
+            assignee: t.assignee,
+            assignees: t.assignees || (t.assignee ? String(t.assignee).split(',').map((s: string) => s.trim()).filter(Boolean) : []),
+            dueDate: t.due_date,
+            dueTime: t.due_time,
+            status: isPending ? ('Pending Approval' as TaskStatus) : (t.status as TaskStatus),
+            priority: t.priority,
+            description: t.description,
+            tags: t.tags || [],
+            createdAt: t.created_at,
+            updatedAt: t.updated_at
+          };
+        })
       }));
       meetings = formatted;
       return formatted;
@@ -644,12 +681,46 @@ router.post('/tasks/:taskId/submit', async (req, res) => {
   submissions.push(submission);
   targetTask.status = 'Pending Approval';
   targetTask.updatedAt = now;
-  if (targetMeeting) targetMeeting.updatedAt = now;
+
+  if (targetMeeting) {
+    if (!targetMeeting.tasks) targetMeeting.tasks = [];
+    const idx = targetMeeting.tasks.findIndex(t => t.id === taskId);
+    if (idx >= 0) {
+      targetMeeting.tasks[idx] = { ...targetTask, status: 'Pending Approval', updatedAt: now };
+    } else {
+      targetMeeting.tasks.push(targetTask);
+    }
+    targetMeeting.updatedAt = now;
+  } else {
+    let generalMeeting = meetings.find(m => m.id === 'general-tasks');
+    if (!generalMeeting) {
+      generalMeeting = {
+        id: 'general-tasks',
+        title: 'Tugas Mandiri',
+        meetingDate: now.split('T')[0],
+        participants: [],
+        meetingNotes: 'Wadah otomatis tugas mandiri',
+        tasks: [],
+        createdAt: now,
+        updatedAt: now,
+      };
+      meetings.push(generalMeeting);
+    }
+    const idx = generalMeeting.tasks.findIndex(t => t.id === taskId);
+    if (idx >= 0) {
+      generalMeeting.tasks[idx] = { ...targetTask, status: 'Pending Approval', updatedAt: now };
+    } else {
+      generalMeeting.tasks.push(targetTask);
+    }
+  }
 
   if (supabase) {
     try {
-      await supabase.from('tasks').update({ status: 'Pending Approval', updated_at: now }).eq('id', taskId);
-      await supabase.from('task_submissions').insert({
+      const { error: taskErr } = await supabase.from('tasks').update({ status: 'Pending Approval', updated_at: now }).eq('id', taskId);
+      if (taskErr) {
+        console.warn('Supabase tasks.update status warning:', taskErr.message);
+      }
+      const { error: subErr } = await supabase.from('task_submissions').upsert({
         id: submission.id,
         task_id: submission.taskId,
         assignee: submission.assignee,
@@ -658,6 +729,9 @@ router.post('/tasks/:taskId/submit', async (req, res) => {
         status: submission.status,
         submitted_at: submission.submittedAt,
       });
+      if (subErr) {
+        console.warn('Supabase task_submissions.upsert warning:', subErr.message);
+      }
     } catch (err: any) {
       console.warn('Supabase submit warning:', err?.message);
     }
@@ -774,7 +848,24 @@ router.post('/tasks/:taskId/approve', async (req, res) => {
 
   targetTask.status = 'Done';
   targetTask.updatedAt = now;
-  if (targetMeeting) targetMeeting.updatedAt = now;
+  if (targetMeeting) {
+    if (!targetMeeting.tasks) targetMeeting.tasks = [];
+    const idx = targetMeeting.tasks.findIndex(t => t.id === taskId);
+    if (idx >= 0) {
+      targetMeeting.tasks[idx] = { ...targetTask, status: 'Done', updatedAt: now };
+    } else {
+      targetMeeting.tasks.push(targetTask);
+    }
+    targetMeeting.updatedAt = now;
+  } else {
+    const generalMeeting = meetings.find(m => m.id === 'general-tasks');
+    if (generalMeeting) {
+      const idx = generalMeeting.tasks.findIndex(t => t.id === taskId);
+      if (idx >= 0) {
+        generalMeeting.tasks[idx] = { ...targetTask, status: 'Done', updatedAt: now };
+      }
+    }
+  }
 
   if (supabase) {
     try {
@@ -874,7 +965,24 @@ router.post('/tasks/:taskId/reject', async (req, res) => {
 
   targetTask.status = 'In Progress';
   targetTask.updatedAt = now;
-  if (targetMeeting) targetMeeting.updatedAt = now;
+  if (targetMeeting) {
+    if (!targetMeeting.tasks) targetMeeting.tasks = [];
+    const idx = targetMeeting.tasks.findIndex(t => t.id === taskId);
+    if (idx >= 0) {
+      targetMeeting.tasks[idx] = { ...targetTask, status: 'In Progress', updatedAt: now };
+    } else {
+      targetMeeting.tasks.push(targetTask);
+    }
+    targetMeeting.updatedAt = now;
+  } else {
+    const generalMeeting = meetings.find(m => m.id === 'general-tasks');
+    if (generalMeeting) {
+      const idx = generalMeeting.tasks.findIndex(t => t.id === taskId);
+      if (idx >= 0) {
+        generalMeeting.tasks[idx] = { ...targetTask, status: 'In Progress', updatedAt: now };
+      }
+    }
+  }
 
   if (supabase) {
     try {
@@ -1010,6 +1118,10 @@ router.put('/tasks/:id', async (req, res) => {
 
       if (sbErr) {
         console.error('Supabase task update error:', sbErr);
+        if (targetTask.status === 'Pending Approval' && (sbErr.message?.includes('chk_task_status') || sbErr.message?.includes('check constraint'))) {
+          console.warn('Supabase check constraint prevented writing Pending Approval to tasks table. Handled gracefully.');
+          return res.json(targetTask);
+        }
         return res.status(500).json({ error: sbErr.message || 'Gagal menyimpan perubahan ke database Supabase.' });
       }
     } catch (err: any) {

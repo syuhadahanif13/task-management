@@ -685,7 +685,21 @@ export const MeetingDetailView: React.FC<MeetingDetailViewProps> = ({
         isOpen={!!submittingTask}
         onClose={() => setSubmittingTask(null)}
         task={submittingTask}
-        onSubmit={onSubmitTask}
+        onSubmit={async (taskId, input) => {
+          if (onSubmitTask) {
+            await onSubmitTask(taskId, input);
+          }
+          setSubmittingTask(null);
+          return {
+            id: 'sub-' + Date.now(),
+            taskId,
+            assignee: currentUser?.username || 'User',
+            notes: input.notes,
+            attachments: input.attachments,
+            status: 'pending',
+            submittedAt: new Date().toISOString(),
+          };
+        }}
       />
 
       <TaskReviewModal

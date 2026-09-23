@@ -134,7 +134,26 @@ export default function App() {
     setErrorMsg('');
     try {
       const data = await api.getMeetings();
-      setMeetings(data);
+      setMeetings((prevMeetings) => {
+        // Collect currently pending approval tasks to avoid race-condition reset
+        const localPending = new Set<string>();
+        for (const m of prevMeetings) {
+          for (const t of m.tasks || []) {
+            if (t.status === 'Pending Approval') {
+              localPending.add(t.id);
+            }
+          }
+        }
+        return data.map((m) => ({
+          ...m,
+          tasks: (m.tasks || []).map((t) => {
+            if (localPending.has(t.id) && t.status === 'In Progress') {
+              return { ...t, status: 'Pending Approval' as const };
+            }
+            return t;
+          }),
+        }));
+      });
     } catch (err: any) {
       console.error(err);
       setErrorMsg(t.meetings.failedLoad);
@@ -348,15 +367,32 @@ export default function App() {
     input: { notes: string; attachments: TaskSubmission['attachments'] }
   ) => {
     try {
-      await api.submitTask(taskId, input);
+      // 1. Optimistic update immediately in React state
       setMeetings((prev) =>
         prev.map((m) => ({
           ...m,
           tasks: (m.tasks || []).map((t) =>
-            t.id === taskId ? { ...t, status: 'Pending Approval' } : t
+            t.id === taskId ? { ...t, status: 'Pending Approval' as const } : t
           ),
         }))
       );
+
+      // 2. Submit to API / Supabase
+      await api.submitTask(taskId, input);
+
+      // 3. Ensure task status update is sent to tasks table
+      api.updateTask(taskId, { status: 'Pending Approval' }).catch(() => {});
+
+      // 4. Re-enforce local state so any concurrent loadMeetings won't revert
+      setMeetings((prev) =>
+        prev.map((m) => ({
+          ...m,
+          tasks: (m.tasks || []).map((t) =>
+            t.id === taskId ? { ...t, status: 'Pending Approval' as const } : t
+          ),
+        }))
+      );
+
       showToast('Pekerjaan berhasil dikirim untuk approval.');
       setSubmittingTask(null);
     } catch (err: any) {

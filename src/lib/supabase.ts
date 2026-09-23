@@ -71,6 +71,15 @@ CREATE TABLE IF NOT EXISTS public.tasks (
     CONSTRAINT chk_task_status CHECK (status IN ('To Do', 'In Progress', 'Done', 'Pending Approval'))
 );
 
+-- Pastikan constraint status pada tabel tasks yang sudah ada diperbarui mendukung 'Pending Approval'
+DO $$ 
+BEGIN
+    ALTER TABLE public.tasks DROP CONSTRAINT IF EXISTS chk_task_status;
+    ALTER TABLE public.tasks ADD CONSTRAINT chk_task_status CHECK (status IN ('To Do', 'In Progress', 'Done', 'Pending Approval'));
+EXCEPTION
+    WHEN OTHERS THEN NULL;
+END $$;
+
 -- 3. Tabel Divisions (Divisi Organisasi)
 CREATE TABLE IF NOT EXISTS public.divisions (
     id TEXT PRIMARY KEY,
