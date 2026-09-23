@@ -129,8 +129,10 @@ export default function App() {
   }, []);
 
   // ─── Handlers: Meetings ───
-  const loadMeetings = async () => {
-    setIsLoading(true);
+  const loadMeetings = async (silent = false) => {
+    if (!silent) {
+      setIsLoading(true);
+    }
     setErrorMsg('');
     try {
       const data = await api.getMeetings();
@@ -158,24 +160,40 @@ export default function App() {
       });
     } catch (err: any) {
       console.error(err);
-      setErrorMsg(t.meetings.failedLoad);
+      if (!silent) {
+        setErrorMsg(t.meetings.failedLoad);
+      }
     } finally {
-      setIsLoading(false);
+      if (!silent) {
+        setIsLoading(false);
+      }
     }
   };
 
   useEffect(() => {
-    loadMeetings();
+    // Initial load with spinner
+    loadMeetings(false);
 
+    // Silent background refresh on internal task update
     const handleTasksUpdate = () => {
-      loadMeetings();
+      loadMeetings(true);
     };
     window.addEventListener('tasksUpdated', handleTasksUpdate);
+
+    // Silent refresh when user switches back to this tab
+    const handleFocus = () => {
+      loadMeetings(true);
+    };
+    window.addEventListener('focus', handleFocus);
+
+    // Gentle silent periodic sync every 30 seconds
     const interval = setInterval(() => {
-      loadMeetings();
-    }, 8000);
+      loadMeetings(true);
+    }, 30000);
+
     return () => {
       window.removeEventListener('tasksUpdated', handleTasksUpdate);
+      window.removeEventListener('focus', handleFocus);
       clearInterval(interval);
     };
   }, []);
