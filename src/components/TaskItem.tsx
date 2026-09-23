@@ -1,6 +1,6 @@
 import React from 'react';
 import { Task, TaskStatus } from '../types';
-import { CheckCircle2, Circle, Trash2, Edit2, User, Calendar, Send, FileText, ChevronDown, Paperclip } from 'lucide-react';
+import { CheckCircle2, Circle, Trash2, Edit2, User, Calendar, Send, FileText, ChevronDown, Paperclip, Clock } from 'lucide-react';
 
 interface TaskItemProps {
   task: Task;
@@ -101,6 +101,13 @@ export const TaskItem: React.FC<TaskItemProps> = ({
         <div className="flex items-center gap-1.5 flex-wrap min-w-0">
           {getPriorityBadge()}
 
+          {isPendingApproval && (
+            <span className="text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 dark:bg-amber-950/70 dark:text-amber-300 border border-amber-300/60 inline-flex items-center gap-1 shrink-0">
+              <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-ping" />
+              Menunggu Review
+            </span>
+          )}
+
           {showMeetingOrigin && (
             (!task.meetingId || task.meetingId === 'general-tasks') ? (
               <span className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-zinc-100 dark:bg-zinc-700/60 text-zinc-600 dark:text-zinc-300 shrink-0 whitespace-nowrap">
@@ -157,10 +164,11 @@ export const TaskItem: React.FC<TaskItemProps> = ({
             <button
               type="button"
               onClick={() => onOpenReview(task)}
-              className="w-7 h-7 rounded-lg flex items-center justify-center text-gray-400 hover:text-amber-600 hover:bg-amber-50 dark:hover:bg-amber-950/40 transition-colors"
-              title="Review Submission"
+              className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold text-amber-900 dark:text-amber-100 bg-amber-400 hover:bg-amber-500 shadow-xs transition-all active:scale-95"
+              title="Tinjau & Setujui Submission"
             >
               <FileText className="w-3.5 h-3.5" />
+              <span>Tinjau</span>
             </button>
           )}
           {onEdit && (
@@ -191,8 +199,14 @@ export const TaskItem: React.FC<TaskItemProps> = ({
         <button
           type="button"
           onClick={() => {
-            if (isDone || isPendingApproval) {
+            if (isDone) {
               onStatusChange(task.id, 'In Progress');
+            } else if (isPendingApproval) {
+              if (onOpenReview) {
+                onOpenReview(task);
+              } else if (onViewProof) {
+                onViewProof(task);
+              }
             } else if (onOpenSubmit) {
               // Regular user: submitting work opens approval modal
               onOpenSubmit(task);
@@ -201,10 +215,20 @@ export const TaskItem: React.FC<TaskItemProps> = ({
             }
           }}
           className="mt-0.5 text-gray-400 hover:text-emerald-500 transition-colors shrink-0"
-          title={isDone || isPendingApproval ? "Tandai belum selesai" : (onOpenSubmit ? "Kirim untuk persetujuan" : "Tandai selesai")}
+          title={
+            isDone
+              ? 'Tandai belum selesai'
+              : isPendingApproval
+              ? (onOpenReview ? 'Tinjau hasil kerja (Pending Approval)' : 'Menunggu review admin')
+              : onOpenSubmit
+              ? 'Kirim untuk persetujuan'
+              : 'Tandai selesai'
+          }
         >
-          {(isDone || isPendingApproval) ? (
+          {isDone ? (
             <CheckCircle2 className="w-5 h-5 text-emerald-500" />
+          ) : isPendingApproval ? (
+            <Clock className="w-5 h-5 text-amber-500 animate-pulse" />
           ) : (
             <Circle className="w-5 h-5 stroke-[1.75]" />
           )}

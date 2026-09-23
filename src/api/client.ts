@@ -162,48 +162,260 @@ export const api = {
   },
 
   async submitTask(taskId: string, input: SubmitTaskInput): Promise<TaskSubmission> {
-    const res = await apiFetch(`/api/tasks/${taskId}/submit`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(input),
-    });
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({}));
-      throw new Error(err.error || 'Failed to submit task');
+    const sbClient = getSupabaseClient();
+    const now = new Date().toISOString();
+    const submissionId = 'sub-' + Date.now() + '-' + Math.random().toString(36).substr(2, 6);
+
+    try {
+      const res = await apiFetch(`/api/tasks/${taskId}/submit`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(input),
+      });
+      if (res.ok) {
+        const sub = await res.json();
+        if (sbClient) {
+          try {
+            await sbClient.from('tasks').update({ status: 'Pending Approval', updated_at: now }).eq('id', taskId);
+            await sbClient.from('task_submissions').upsert({
+              id: sub.id,
+              task_id: taskId,
+              assignee: sub.assignee || 'User',
+              notes: sub.notes,
+              attachments: sub.attachments,
+              status: sub.status || 'pending',
+              submitted_at: sub.submittedAt || now,
+            });
+          } catch (e) {
+            console.warn('Direct Supabase submit fallback notice:', e);
+          }
+        }
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('tasksUpdated'));
+        }
+        return sub;
+      }
+    } catch (err) {
+      console.warn('apiFetch submitTask error, trying direct Supabase:', err);
     }
-    return res.json();
+
+    if (sbClient) {
+      try {
+        const { data: taskData } = await sbClient.from('tasks').select('assignee').eq('id', taskId).maybeSingle();
+        const assignee = taskData?.assignee || 'User';
+
+        await sbClient.from('tasks').update({ status: 'Pending Approval', updated_at: now }).eq('id', taskId);
+        const { error: insErr } = await sbClient.from('task_submissions').insert({
+          id: submissionId,
+          task_id: taskId,
+          assignee,
+          notes: input.notes,
+          attachments: input.attachments,
+          status: 'pending',
+          submitted_at: now,
+        });
+
+        if (!insErr) {
+          const createdSub: TaskSubmission = {
+            id: submissionId,
+            taskId,
+            assignee,
+            notes: input.notes,
+            attachments: input.attachments,
+            status: 'pending',
+            submittedAt: now,
+          };
+          if (typeof window !== 'undefined') {
+            window.dispatchEvent(new CustomEvent('tasksUpdated'));
+          }
+          return createdSub;
+        }
+      } catch (sbErr) {
+        console.warn('Direct Supabase submitTask failed:', sbErr);
+      }
+    }
+
+    throw new Error('Gagal mengirimkan tugas untuk review');
   },
 
   async getTaskSubmissions(taskId: string): Promise<TaskSubmission[]> {
-    const res = await apiFetch(`/api/tasks/${taskId}/submissions`);
-    if (!res.ok) throw new Error('Failed to fetch submissions');
-    return res.json();
+    try {
+      const res = await apiFetch(`/api/tasks/${taskId}/submissions`);
+      if (res.ok) {
+        const data = await res.json();
+        if (Array.isArray(data) && data.length > 0) return data;
+      }
+    } catch (err) {
+      console.warn('API getTaskSubmissions error, trying direct Supabase:', err);
+    }
+
+    const sbClient = getSupabaseClient();
+    if (sbClient) {
+      try {
+        const { data, error } = await sbClient
+          .from('task_submissions')
+          .select('*')
+          .eq('task_id', taskId)
+          .order('submitted_at', { ascending: false });
+
+        if (!error && Array.isArray(data) && data.length > 0) {
+          return data.map((s: any) => ({
+            id: s.id,
+            taskId: s.task_id,
+            assignee: s.assignee,
+            notes: s.notes || '',
+            attachments: s.attachments || [],
+            status: s.status || 'pending',
+            submittedAt: s.submitted_at,
+            reviewedBy: s.reviewed_by,
+            reviewedAt: s.reviewed_at,
+            reviewNote: s.review_note,
+          }));
+        }
+      } catch (sbErr) {
+        console.warn('Direct Supabase getTaskSubmissions warning:', sbErr);
+      }
+    }
+
+    return [];
   },
 
   async approveTaskSubmission(taskId: string, submissionId: string, reviewNote?: string): Promise<Task> {
-    const res = await apiFetch(`/api/tasks/${taskId}/approve`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ submissionId, reviewNote }),
-    });
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({}));
-      throw new Error(err.error || 'Failed to approve task');
+    const sbClient = getSupabaseClient();
+    const now = new Date().toISOString();
+
+    try {
+      const res = await apiFetch(`/api/tasks/${taskId}/approve`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ submissionId, reviewNote }),
+      });
+      if (res.ok) {
+        const updatedTask = await res.json();
+        if (sbClient) {
+          try {
+            await sbClient.from('tasks').update({ status: 'Done', updated_at: now }).eq('id', taskId);
+            if (submissionId) {
+              await sbClient.from('task_submissions').update({
+                status: 'approved',
+                reviewed_by: 'admin',
+                reviewed_at: now,
+                review_note: reviewNote,
+              }).eq('id', submissionId);
+            }
+          } catch {}
+        }
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('tasksUpdated'));
+        }
+        return updatedTask;
+      }
+    } catch (err) {
+      console.warn('API approve error, trying direct Supabase:', err);
     }
-    return res.json();
+
+    if (sbClient) {
+      try {
+        await sbClient.from('tasks').update({ status: 'Done', updated_at: now }).eq('id', taskId);
+        if (submissionId) {
+          await sbClient.from('task_submissions').update({
+            status: 'approved',
+            reviewed_by: 'admin',
+            reviewed_at: now,
+            review_note: reviewNote,
+          }).eq('id', submissionId);
+        }
+        const { data: updated } = await sbClient.from('tasks').select('*').eq('id', taskId).maybeSingle();
+        if (updated) {
+          if (typeof window !== 'undefined') {
+            window.dispatchEvent(new CustomEvent('tasksUpdated'));
+          }
+          return {
+            id: updated.id,
+            meetingId: updated.meeting_id,
+            title: updated.title,
+            assignee: updated.assignee,
+            dueDate: updated.due_date,
+            status: 'Done',
+            createdAt: updated.created_at,
+            updatedAt: updated.updated_at,
+          };
+        }
+      } catch (sbErr) {
+        console.warn('Direct Supabase approveTaskSubmission failed:', sbErr);
+      }
+    }
+
+    throw new Error('Gagal menyetujui tugas');
   },
 
   async rejectTaskSubmission(taskId: string, submissionId: string, reviewNote: string): Promise<Task> {
-    const res = await apiFetch(`/api/tasks/${taskId}/reject`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ submissionId, reviewNote }),
-    });
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({}));
-      throw new Error(err.error || 'Failed to reject task');
+    const sbClient = getSupabaseClient();
+    const now = new Date().toISOString();
+
+    try {
+      const res = await apiFetch(`/api/tasks/${taskId}/reject`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ submissionId, reviewNote }),
+      });
+      if (res.ok) {
+        const updatedTask = await res.json();
+        if (sbClient) {
+          try {
+            await sbClient.from('tasks').update({ status: 'In Progress', updated_at: now }).eq('id', taskId);
+            if (submissionId) {
+              await sbClient.from('task_submissions').update({
+                status: 'rejected',
+                reviewed_by: 'admin',
+                reviewed_at: now,
+                review_note: reviewNote,
+              }).eq('id', submissionId);
+            }
+          } catch {}
+        }
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('tasksUpdated'));
+        }
+        return updatedTask;
+      }
+    } catch (err) {
+      console.warn('API reject error, trying direct Supabase:', err);
     }
-    return res.json();
+
+    if (sbClient) {
+      try {
+        await sbClient.from('tasks').update({ status: 'In Progress', updated_at: now }).eq('id', taskId);
+        if (submissionId) {
+          await sbClient.from('task_submissions').update({
+            status: 'rejected',
+            reviewed_by: 'admin',
+            reviewed_at: now,
+            review_note: reviewNote,
+          }).eq('id', submissionId);
+        }
+        const { data: updated } = await sbClient.from('tasks').select('*').eq('id', taskId).maybeSingle();
+        if (updated) {
+          if (typeof window !== 'undefined') {
+            window.dispatchEvent(new CustomEvent('tasksUpdated'));
+          }
+          return {
+            id: updated.id,
+            meetingId: updated.meeting_id,
+            title: updated.title,
+            assignee: updated.assignee,
+            dueDate: updated.due_date,
+            status: 'In Progress',
+            createdAt: updated.created_at,
+            updatedAt: updated.updated_at,
+          };
+        }
+      } catch (sbErr) {
+        console.warn('Direct Supabase rejectTaskSubmission failed:', sbErr);
+      }
+    }
+
+    throw new Error('Gagal menolak tugas');
   },
 
   async extractFromNotes(rawText: string, fallbackDate?: string): Promise<AIParseResult & { isAiGenerated?: boolean; notice?: string }> {

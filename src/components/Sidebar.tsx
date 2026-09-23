@@ -24,6 +24,7 @@ interface SidebarProps {
   onOpenAiExtract: () => void;
   meetingCount: number;
   taskCount: number;
+  pendingReviewCount?: number;
   isDarkMode: boolean;
   onToggleDarkMode: () => void;
   onLogout: () => void;
@@ -37,6 +38,7 @@ interface NavItem {
   label: string;
   icon: React.ElementType;
   badge?: number;
+  alertBadge?: number;
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({
@@ -47,6 +49,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onOpenAiExtract,
   meetingCount,
   taskCount,
+  pendingReviewCount = 0,
   isDarkMode,
   onToggleDarkMode,
   onLogout,
@@ -58,7 +61,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
     { tab: 'dashboard', label: t.nav.dashboard, icon: LayoutDashboard },
     { tab: 'calendar', label: t.nav.calendar, icon: CalendarDays },
     { tab: 'meetings', label: t.nav.meetings, icon: BookOpen, badge: meetingCount },
-    { tab: 'all-tasks', label: t.nav.tasks, icon: CheckSquare, badge: taskCount },
+    { tab: 'all-tasks', label: t.nav.tasks, icon: CheckSquare, badge: taskCount, alertBadge: pendingReviewCount },
     { tab: 'team', label: t.nav.team, icon: Users },
   ];
 
@@ -139,7 +142,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
           Menu Navigasi
         </p>
 
-        {navItems.map(({ tab, label, icon: Icon, badge }) => {
+        {navItems.map(({ tab, label, icon: Icon, badge, alertBadge }) => {
           const active = isActive(tab);
           return (
             <button
@@ -163,6 +166,15 @@ export const Sidebar: React.FC<SidebarProps> = ({
               />
 
               <span className="flex-1 truncate">{label}</span>
+
+              {alertBadge !== undefined && alertBadge > 0 && (
+                <span
+                  className="text-[10px] font-extrabold px-1.5 py-0.5 rounded-full bg-amber-500 text-white animate-pulse shadow-[0_0_8px_rgba(245,158,11,0.6)] shrink-0"
+                  title={`${alertBadge} tugas perlu direview`}
+                >
+                  {alertBadge} review
+                </span>
+              )}
 
               {badge !== undefined && badge > 0 && (
                 <span

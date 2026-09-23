@@ -18,6 +18,7 @@ import {
   Moon,
   LogOut,
   AlertCircle,
+  Clock,
 } from 'lucide-react';
 
 interface TopBarProps {
@@ -36,6 +37,7 @@ interface TopBarProps {
   onOpenAddTask?: () => void;
   currentUser?: { username: string; role?: string; divisionId?: string } | null;
   overdueCount?: number;
+  pendingReviewCount?: number;
   showBack?: boolean;
   onSwitchToAdmin?: () => void;
 }
@@ -56,6 +58,7 @@ export const TopBar: React.FC<TopBarProps> = ({
   onOpenAddTask,
   currentUser,
   overdueCount = 0,
+  pendingReviewCount = 0,
   showBack,
   onSwitchToAdmin,
 }) => {
@@ -136,15 +139,15 @@ export const TopBar: React.FC<TopBarProps> = ({
                   aria-label="Notifikasi"
                 >
                   <Bell className="w-4.5 h-4.5 stroke-[1.8]" />
-                  {overdueCount > 0 && (
-                    <span className="absolute top-2 right-2 w-2 h-2 bg-rose-500 rounded-full ring-2 ring-white dark:ring-[#0f1015]" />
+                  {(overdueCount > 0 || pendingReviewCount > 0) && (
+                    <span className={`absolute top-2 right-2 w-2.5 h-2.5 rounded-full ring-2 ring-white dark:ring-[#0f1015] ${overdueCount > 0 ? 'bg-rose-500' : 'bg-amber-500'}`} />
                   )}
                 </button>
 
                 {/* Notification Dropdown */}
                 {isNotifOpen && (
-                  <div className="absolute right-0 mt-2 w-72 bg-white/85 dark:bg-zinc-900/85 backdrop-blur-2xl rounded-2xl shadow-2xl border border-white/50 dark:border-white/10 p-4 z-40 animate-in fade-in slide-in-from-top-2 duration-200">
-                    <div className="flex items-center justify-between mb-2">
+                  <div className="absolute right-0 mt-2 w-72 bg-white/90 dark:bg-zinc-900/90 backdrop-blur-2xl rounded-2xl shadow-2xl border border-white/50 dark:border-white/10 p-4 z-40 animate-in fade-in slide-in-from-top-2 duration-200">
+                    <div className="flex items-center justify-between mb-2 pb-1 border-b border-gray-100 dark:border-zinc-800">
                       <p className="text-xs font-bold text-gray-900 dark:text-white">Pemberitahuan</p>
                       <button
                         onClick={() => setIsNotifOpen(false)}
@@ -153,14 +156,33 @@ export const TopBar: React.FC<TopBarProps> = ({
                         ✕
                       </button>
                     </div>
-                    {overdueCount > 0 ? (
+
+                    {pendingReviewCount > 0 && (
+                      <div
+                        onClick={() => {
+                          setIsNotifOpen(false);
+                          onTabChange('all-tasks');
+                        }}
+                        className="p-2.5 rounded-xl bg-amber-50/90 dark:bg-amber-950/40 text-amber-800 dark:text-amber-300 text-xs flex items-center gap-2.5 cursor-pointer hover:bg-amber-100 dark:hover:bg-amber-900/50 transition border border-amber-200/80 dark:border-amber-900/40 mb-2"
+                      >
+                        <Clock className="w-4 h-4 shrink-0 text-amber-600 dark:text-amber-400" />
+                        <div>
+                          <p className="font-bold">Ada {pendingReviewCount} tugas menunggu review!</p>
+                          <p className="text-[10px] opacity-80">Klik untuk melihat dan meninjau</p>
+                        </div>
+                      </div>
+                    )}
+
+                    {overdueCount > 0 && (
                       <div className="p-2.5 rounded-xl bg-rose-50/80 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300 text-xs flex items-center gap-2">
                         <AlertCircle className="w-4 h-4 shrink-0" />
                         <span>Ada <strong>{overdueCount} tugas</strong> yang terlambat!</span>
                       </div>
-                    ) : (
-                      <p className="text-xs text-gray-500 dark:text-zinc-400">
-                        Semua tugas berjalan tepat waktu.
+                    )}
+
+                    {overdueCount === 0 && pendingReviewCount === 0 && (
+                      <p className="text-xs text-gray-500 dark:text-zinc-400 py-1">
+                        Semua tugas berjalan tepat waktu & tidak ada review tertunda.
                       </p>
                     )}
                   </div>

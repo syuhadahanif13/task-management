@@ -591,7 +591,41 @@ router.post('/tasks/:taskId/submit', async (req, res) => {
     }
   }
 
-  if (!targetMeeting || !targetTask) return res.status(404).json({ error: 'Task not found' });
+  // Fallback: sync from Supabase if not in memory
+  if (!targetTask && supabase) {
+    try {
+      await syncMeetingsFromSupabase();
+      for (const m of meetings) {
+        const found = m.tasks.find(t => t.id === taskId);
+        if (found) {
+          targetMeeting = m;
+          targetTask = found;
+          break;
+        }
+      }
+    } catch {}
+  }
+
+  // Fallback: standalone task lookup in Supabase
+  if (!targetTask && supabase) {
+    try {
+      const { data: sbTask } = await supabase.from('tasks').select('*').eq('id', taskId).maybeSingle();
+      if (sbTask) {
+        targetTask = {
+          id: sbTask.id,
+          meetingId: sbTask.meeting_id,
+          title: sbTask.title,
+          assignee: sbTask.assignee,
+          dueDate: sbTask.due_date,
+          status: sbTask.status,
+          createdAt: sbTask.created_at,
+          updatedAt: sbTask.updated_at,
+        };
+      }
+    } catch {}
+  }
+
+  if (!targetTask) return res.status(404).json({ error: 'Task not found' });
   if (!notes || !attachments || !Array.isArray(attachments) || attachments.length === 0) {
     return res.status(400).json({ error: 'Submission must include notes and at least one attachment.' });
   }
@@ -610,7 +644,7 @@ router.post('/tasks/:taskId/submit', async (req, res) => {
   submissions.push(submission);
   targetTask.status = 'Pending Approval';
   targetTask.updatedAt = now;
-  targetMeeting.updatedAt = now;
+  if (targetMeeting) targetMeeting.updatedAt = now;
 
   if (supabase) {
     try {
@@ -679,30 +713,80 @@ router.post('/tasks/:taskId/approve', async (req, res) => {
       break;
     }
   }
-  if (!targetMeeting || !targetTask) return res.status(404).json({ error: 'Task not found' });
+  if (!targetTask && supabase) {
+    try {
+      await syncMeetingsFromSupabase();
+      for (const m of meetings) {
+        const found = m.tasks.find(t => t.id === taskId);
+        if (found) {
+          targetMeeting = m;
+          targetTask = found;
+          break;
+        }
+      }
+    } catch {}
+  }
+  if (!targetTask && supabase) {
+    try {
+      const { data: sbTask } = await supabase.from('tasks').select('*').eq('id', taskId).maybeSingle();
+      if (sbTask) {
+        targetTask = {
+          id: sbTask.id,
+          meetingId: sbTask.meeting_id,
+          title: sbTask.title,
+          assignee: sbTask.assignee,
+          dueDate: sbTask.due_date,
+          status: sbTask.status,
+          createdAt: sbTask.created_at,
+          updatedAt: sbTask.updated_at,
+        };
+      }
+    } catch {}
+  }
+  if (!targetTask) return res.status(404).json({ error: 'Task not found' });
 
-  const submission = submissions.find(s => s.id === submissionId && s.taskId === taskId);
-  if (!submission) return res.status(404).json({ error: 'Submission not found' });
+  let submission = submissions.find(s => (s.id === submissionId || s.taskId === taskId) && s.status === 'pending');
+  if (!submission && supabase) {
+    try {
+      const { data: sbSub } = await supabase.from('task_submissions').select('*').eq('id', submissionId).maybeSingle();
+      if (sbSub) {
+        submission = {
+          id: sbSub.id,
+          taskId: sbSub.task_id,
+          assignee: sbSub.assignee,
+          notes: sbSub.notes,
+          attachments: sbSub.attachments,
+          status: sbSub.status,
+          submittedAt: sbSub.submitted_at,
+        };
+        submissions.push(submission);
+      }
+    } catch {}
+  }
 
   const now = new Date().toISOString();
-  submission.status = 'approved';
-  submission.reviewedBy = 'admin';
-  submission.reviewedAt = now;
-  submission.reviewNote = reviewNote;
+  if (submission) {
+    submission.status = 'approved';
+    submission.reviewedBy = 'admin';
+    submission.reviewedAt = now;
+    submission.reviewNote = reviewNote;
+  }
 
   targetTask.status = 'Done';
   targetTask.updatedAt = now;
-  targetMeeting.updatedAt = now;
+  if (targetMeeting) targetMeeting.updatedAt = now;
 
   if (supabase) {
     try {
       await supabase.from('tasks').update({ status: 'Done', updated_at: now }).eq('id', taskId);
-      await supabase.from('task_submissions').update({
-        status: 'approved',
-        reviewed_by: 'admin',
-        reviewed_at: now,
-        review_note: reviewNote,
-      }).eq('id', submissionId);
+      if (submissionId) {
+        await supabase.from('task_submissions').update({
+          status: 'approved',
+          reviewed_by: 'admin',
+          reviewed_at: now,
+          review_note: reviewNote,
+        }).eq('id', submissionId);
+      }
     } catch (err: any) {
       console.warn('Supabase approve warning:', err?.message);
     }
@@ -729,30 +813,80 @@ router.post('/tasks/:taskId/reject', async (req, res) => {
       break;
     }
   }
-  if (!targetMeeting || !targetTask) return res.status(404).json({ error: 'Task not found' });
+  if (!targetTask && supabase) {
+    try {
+      await syncMeetingsFromSupabase();
+      for (const m of meetings) {
+        const found = m.tasks.find(t => t.id === taskId);
+        if (found) {
+          targetMeeting = m;
+          targetTask = found;
+          break;
+        }
+      }
+    } catch {}
+  }
+  if (!targetTask && supabase) {
+    try {
+      const { data: sbTask } = await supabase.from('tasks').select('*').eq('id', taskId).maybeSingle();
+      if (sbTask) {
+        targetTask = {
+          id: sbTask.id,
+          meetingId: sbTask.meeting_id,
+          title: sbTask.title,
+          assignee: sbTask.assignee,
+          dueDate: sbTask.due_date,
+          status: sbTask.status,
+          createdAt: sbTask.created_at,
+          updatedAt: sbTask.updated_at,
+        };
+      }
+    } catch {}
+  }
+  if (!targetTask) return res.status(404).json({ error: 'Task not found' });
 
-  const submission = submissions.find(s => s.id === submissionId && s.taskId === taskId);
-  if (!submission) return res.status(404).json({ error: 'Submission not found' });
+  let submission = submissions.find(s => (s.id === submissionId || s.taskId === taskId) && s.status === 'pending');
+  if (!submission && supabase) {
+    try {
+      const { data: sbSub } = await supabase.from('task_submissions').select('*').eq('id', submissionId).maybeSingle();
+      if (sbSub) {
+        submission = {
+          id: sbSub.id,
+          taskId: sbSub.task_id,
+          assignee: sbSub.assignee,
+          notes: sbSub.notes,
+          attachments: sbSub.attachments,
+          status: sbSub.status,
+          submittedAt: sbSub.submitted_at,
+        };
+        submissions.push(submission);
+      }
+    } catch {}
+  }
 
   const now = new Date().toISOString();
-  submission.status = 'rejected';
-  submission.reviewedBy = 'admin';
-  submission.reviewedAt = now;
-  submission.reviewNote = reviewNote;
+  if (submission) {
+    submission.status = 'rejected';
+    submission.reviewedBy = 'admin';
+    submission.reviewedAt = now;
+    submission.reviewNote = reviewNote;
+  }
 
   targetTask.status = 'In Progress';
   targetTask.updatedAt = now;
-  targetMeeting.updatedAt = now;
+  if (targetMeeting) targetMeeting.updatedAt = now;
 
   if (supabase) {
     try {
       await supabase.from('tasks').update({ status: 'In Progress', updated_at: now }).eq('id', taskId);
-      await supabase.from('task_submissions').update({
-        status: 'rejected',
-        reviewed_by: 'admin',
-        reviewed_at: now,
-        review_note: reviewNote,
-      }).eq('id', submissionId);
+      if (submissionId) {
+        await supabase.from('task_submissions').update({
+          status: 'rejected',
+          reviewed_by: 'admin',
+          reviewed_at: now,
+          review_note: reviewNote,
+        }).eq('id', submissionId);
+      }
     } catch (err: any) {
       console.warn('Supabase reject warning:', err?.message);
     }

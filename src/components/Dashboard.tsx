@@ -16,6 +16,7 @@ import {
   CheckSquare,
   Search,
   Paperclip,
+  FileText,
 } from 'lucide-react';
 
 interface DashboardProps {
@@ -26,6 +27,7 @@ interface DashboardProps {
   onTabChange: (tab: any) => void;
   onOpenAddTask?: () => void;
   onViewProof?: (task: Task) => void;
+  onOpenReview?: (task: Task) => void;
 }
 
 export const Dashboard: React.FC<DashboardProps> = ({
@@ -36,6 +38,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
   onTabChange,
   onOpenAddTask,
   onViewProof,
+  onOpenReview,
 }) => {
   const today = new Date().toISOString().split('T')[0];
   const [selectedStatusFilter, setSelectedStatusFilter] = useState<string>('all');
@@ -64,6 +67,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
   const pendingTasks = allTasks.filter((t) => t.status === 'Pending Approval' || t.status === 'To Do').length;
   const todoTasks = allTasks.filter((t) => t.status === 'To Do').length;
   const reviewTasks = allTasks.filter((t) => t.status === 'Pending Approval').length;
+  const pendingApprovalTasks = allTasks.filter((t) => t.status === 'Pending Approval');
   const overdueTasks = allTasks.filter(
     (t) => t.status !== 'Done' && t.dueDate && t.dueDate < today
   ).length;
@@ -310,23 +314,135 @@ export const Dashboard: React.FC<DashboardProps> = ({
                 </div>
               </div>
 
-              {/* Pending Task */}
-              <div className="flex items-center gap-3.5">
-                <div className="w-9 h-9 rounded-xl bg-[#28292f] flex items-center justify-center text-amber-400 shrink-0">
-                  <Clock className="w-4 h-4" />
+              {/* Pending / In Review Task */}
+              {currentUser?.role === 'admin' && reviewTasks > 0 ? (
+                <div
+                  onClick={() => {
+                    setSelectedStatusFilter('review');
+                    document.getElementById('todays-tasks-section')?.scrollIntoView({ behavior: 'smooth' });
+                  }}
+                  className="flex items-center gap-3.5 cursor-pointer hover:bg-white/10 p-1.5 -m-1.5 rounded-xl transition-all"
+                  title="Lihat tugas yang perlu direview"
+                >
+                  <div className="w-9 h-9 rounded-xl bg-amber-500/25 flex items-center justify-center text-amber-400 shrink-0 shadow-[0_0_12px_rgba(245,158,11,0.3)]">
+                    <Clock className="w-4 h-4 animate-pulse" />
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-1.5">
+                      <p className="text-base font-bold text-white leading-none">{reviewTasks}</p>
+                      <span className="text-[10px] font-extrabold px-1.5 py-0.2 rounded-full bg-amber-500 text-black">
+                        Perlu Aksi
+                      </span>
+                    </div>
+                    <p className="text-xs text-amber-300 font-medium mt-1">Perlu Direview</p>
+                  </div>
                 </div>
-                <div>
-                  <p className="text-base font-bold text-white leading-none">{pendingTasks}</p>
-                  <p className="text-xs text-zinc-400 mt-1">Pending Task</p>
+              ) : (
+                <div className="flex items-center gap-3.5">
+                  <div className="w-9 h-9 rounded-xl bg-[#28292f] flex items-center justify-center text-amber-400 shrink-0">
+                    <Clock className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <p className="text-base font-bold text-white leading-none">{pendingTasks}</p>
+                    <p className="text-xs text-zinc-400 mt-1">Pending Task</p>
+                  </div>
                 </div>
-              </div>
+              )}
             </div>
           </div>
         </div>
       </div>
 
+      {/* ─── 3.5. ADMIN ONLY: TASKS PENDING REVIEW & APPROVAL ─── */}
+      {currentUser?.role === 'admin' && pendingApprovalTasks.length > 0 && (
+        <div className="bg-gradient-to-r from-amber-500/10 via-amber-500/5 to-transparent border border-amber-500/30 dark:border-amber-500/20 rounded-[30px] p-5 sm:p-6 shadow-sm space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+            <div className="flex items-center gap-3">
+              <span className="w-9 h-9 rounded-xl bg-amber-500/20 text-amber-600 dark:text-amber-400 flex items-center justify-center shrink-0 shadow-xs">
+                <Clock className="w-5 h-5 animate-pulse" />
+              </span>
+              <div>
+                <div className="flex items-center gap-2">
+                  <h3 className="text-base sm:text-lg font-black text-gray-900 dark:text-white tracking-tight">
+                    Tugas Menunggu Review & Approval
+                  </h3>
+                  <span className="px-2 py-0.5 rounded-full text-xs font-black bg-amber-500 text-white shadow-xs">
+                    {pendingApprovalTasks.length}
+                  </span>
+                </div>
+                <p className="text-xs text-gray-500 dark:text-zinc-400 mt-0.5">
+                  Anggota tim telah mengajukan bukti kerja dan menunggu persetujuan Administrator.
+                </p>
+              </div>
+            </div>
+            <button
+              onClick={() => {
+                setSelectedStatusFilter('review');
+                document.getElementById('todays-tasks-section')?.scrollIntoView({ behavior: 'smooth' });
+              }}
+              className="text-xs font-bold text-amber-700 dark:text-amber-400 hover:underline shrink-0"
+            >
+              Lihat di Daftar Tugas ↓
+            </button>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
+            {pendingApprovalTasks.map((task) => (
+              <div
+                key={task.id}
+                className="bg-white dark:bg-zinc-800/95 rounded-2xl p-4 border border-amber-200/80 dark:border-amber-900/50 shadow-xs flex flex-col justify-between gap-3 group hover:border-amber-400 dark:hover:border-amber-500/50 transition-all"
+              >
+                <div>
+                  <div className="flex items-center justify-between gap-2 mb-2">
+                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-100 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300 border border-amber-300/40 flex items-center gap-1">
+                      <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-ping" />
+                      Menunggu Approval
+                    </span>
+                    <span className="text-[11px] font-semibold text-gray-600 dark:text-zinc-300">
+                      PIC: <strong className="text-gray-900 dark:text-white">{task.assignee || 'User'}</strong>
+                    </span>
+                  </div>
+                  <h4 className="text-sm font-bold text-gray-900 dark:text-white line-clamp-2">
+                    {task.title}
+                  </h4>
+                  <p className="text-xs text-gray-500 dark:text-zinc-400 mt-1 line-clamp-1">
+                    {task.meetingTitle} · Tenggat: {fmtDate(task.dueDate)}
+                  </p>
+                </div>
+
+                <div className="pt-2.5 border-t border-gray-100 dark:border-zinc-700/60 flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-1.5">
+                    {onViewProof && (
+                      <button
+                        type="button"
+                        onClick={() => onViewProof(task)}
+                        className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-indigo-50 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300 text-xs font-bold hover:bg-indigo-100 dark:hover:bg-indigo-900/50 transition-colors"
+                        title="Lihat Bukti Kerja & Lampiran"
+                      >
+                        <Paperclip className="w-3.5 h-3.5" />
+                        <span>Bukti</span>
+                      </button>
+                    )}
+                  </div>
+                  {onOpenReview && (
+                    <button
+                      type="button"
+                      onClick={() => onOpenReview(task)}
+                      className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-white text-xs font-extrabold shadow-sm hover:shadow-md transition-all active:scale-95"
+                    >
+                      <FileText className="w-3.5 h-3.5" />
+                      <span>Tinjau & Setujui</span>
+                    </button>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* ─── 4. "TODAY'S TASKS" SECTION ─── */}
-      <div className="space-y-4 pt-2">
+      <div id="todays-tasks-section" className="space-y-4 pt-2">
         <div className="flex items-center justify-between">
           <h2 className="text-xl sm:text-2xl font-black text-gray-900 dark:text-white tracking-tight">
             Today's Tasks
@@ -413,6 +529,20 @@ export const Dashboard: React.FC<DashboardProps> = ({
                             title="Lihat Bukti Kerja / Lampiran"
                           >
                             <Paperclip className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+                        {onOpenReview && task.status === 'Pending Approval' && (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              onOpenReview(task);
+                            }}
+                            className="px-2.5 py-1 rounded-full bg-amber-500 hover:bg-amber-600 text-white text-[11px] font-bold flex items-center gap-1 transition-all shadow-xs active:scale-95"
+                            title="Tinjau & Setujui Submission"
+                          >
+                            <FileText className="w-3 h-3" />
+                            <span>Tinjau</span>
                           </button>
                         )}
                         <button

@@ -128,6 +128,31 @@ export default function App() {
     }
   }, []);
 
+  // ─── Handlers: Meetings ───
+  const loadMeetings = async () => {
+    setIsLoading(true);
+    setErrorMsg('');
+    try {
+      const data = await api.getMeetings();
+      setMeetings(data);
+    } catch (err: any) {
+      console.error(err);
+      setErrorMsg(t.meetings.failedLoad);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadMeetings();
+
+    const handleTasksUpdate = () => {
+      loadMeetings();
+    };
+    window.addEventListener('tasksUpdated', handleTasksUpdate);
+    return () => window.removeEventListener('tasksUpdated', handleTasksUpdate);
+  }, []);
+
   // ─── Handlers: Auth ───
   const handleLogin = async (username: string, password: string) => {
     try {
@@ -136,6 +161,7 @@ export default function App() {
       setCurrentUser(response.user);
       sessionStorage.setItem('isAuthenticated', 'true');
       sessionStorage.setItem('currentUser', JSON.stringify(response.user));
+      await loadMeetings();
       return true;
     } catch (err) {
       const seededUsers = [
@@ -158,6 +184,7 @@ export default function App() {
         setCurrentUser(safeUser);
         sessionStorage.setItem('isAuthenticated', 'true');
         sessionStorage.setItem('currentUser', JSON.stringify(safeUser));
+        await loadMeetings();
         return true;
       }
       return false;
@@ -169,7 +196,6 @@ export default function App() {
     setCurrentUser(null);
     sessionStorage.removeItem('isAuthenticated');
     sessionStorage.removeItem('currentUser');
-    setMeetings([]);
     setSelectedMeetingId(null);
     setCurrentTab('dashboard');
     setErrorMsg('');
@@ -181,25 +207,6 @@ export default function App() {
     setToastMessage(msg);
     setTimeout(() => setToastMessage(null), 3500);
   };
-
-  // ─── Handlers: Meetings ───
-  const loadMeetings = async () => {
-    setIsLoading(true);
-    setErrorMsg('');
-    try {
-      const data = await api.getMeetings();
-      setMeetings(data);
-    } catch (err: any) {
-      console.error(err);
-      setErrorMsg(t.meetings.failedLoad);
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    loadMeetings();
-  }, []);
 
   const handleSelectMeeting = (meeting: Meeting) => {
     setSelectedMeetingId(meeting.id);
@@ -444,6 +451,7 @@ export default function App() {
     const adminUser = { id: 'admin', username: 'admin', role: 'admin' as const, divisionId: '' };
     setCurrentUser(adminUser);
     sessionStorage.setItem('currentUser', JSON.stringify(adminUser));
+    loadMeetings();
     showToast('Beralih kembali ke Administrator.');
   };
 
@@ -469,6 +477,10 @@ export default function App() {
     (task) => task.status !== 'Done' && task.dueDate && task.dueDate < new Date().toISOString().split('T')[0]
   ).length;
 
+  const pendingReviewCount = currentUser?.role === 'admin'
+    ? meetings.flatMap((m) => m.tasks || []).filter((t) => t.status === 'Pending Approval').length
+    : 0;
+
   // Tab navigation handler
   const handleTabChange = (tab: AppTab) => {
     if (tab !== 'active-meeting') setSelectedMeetingId(null);
@@ -479,31 +491,35 @@ export default function App() {
     }
   };
 
-  // Page title
-  const getPageTitle = (): string => {
-    if (currentTab === 'active-meeting' && selectedMeeting) {
-      return selectedMeeting.title || `Rapat ${selectedMeeting.meetingDate}`;
+  // Title for top bar
+  const getPageTitle = () => {
+    switch (currentTab) {
+      case 'dashboard':
+        return t.nav.dashboard;
+      case 'calendar':
+        return t.nav.calendar;
+      case 'meetings':
+        return t.nav.meetings;
+      case 'active-meeting':
+        return selectedMeeting ? selectedMeeting.title || `Rapat ${selectedMeeting.meetingDate}` : t.nav.meetings;
+      case 'all-tasks':
+        return t.nav.tasks;
+      case 'team':
+        return t.nav.team;
+      case 'settings':
+        return t.nav.settings;
+      default:
+        return 'Meeting Task';
     }
-    const map: Partial<Record<AppTab, string>> = {
-      dashboard: t.nav.dashboard,
-      calendar: t.nav.calendar,
-      meetings: t.nav.meetings,
-      'all-tasks': t.nav.tasks,
-      team: t.nav.team,
-      settings: t.nav.settings,
-    };
-    return map[currentTab] || 'Meeting Hub';
   };
 
-  // ─── Render ───
+  // If not authenticated, render Login Page
   if (!isAuthenticated) {
     return (
       <LoginPage
         onLogin={handleLogin}
         isDarkMode={isDarkMode}
         onToggleDarkMode={() => setIsDarkMode((p) => !p)}
-        language={language}
-        onToggleLanguage={() => setLanguage((l) => (l === 'id' ? 'en' : 'id'))}
       />
     );
   }
@@ -523,6 +539,7 @@ export default function App() {
         }}
         meetingCount={totalMeetings}
         taskCount={totalTasks}
+        pendingReviewCount={pendingReviewCount}
         isDarkMode={isDarkMode}
         onToggleDarkMode={() => setIsDarkMode((p) => !p)}
         onLogout={handleLogout}
@@ -557,6 +574,7 @@ export default function App() {
           onOpenAddTask={() => setIsAddTaskOpen(true)}
           currentUser={currentUser}
           overdueCount={userOverdueCount}
+          pendingReviewCount={pendingReviewCount}
           showBack={currentTab === 'active-meeting'}
           onSwitchToAdmin={handleSwitchToAdmin}
         />
@@ -597,6 +615,7 @@ export default function App() {
                   onTabChange={handleTabChange}
                   onOpenAddTask={() => setIsAddTaskOpen(true)}
                   onViewProof={(task) => setViewingProofTask(task)}
+                  onOpenReview={handleOpenReview}
                 />
               )}
 

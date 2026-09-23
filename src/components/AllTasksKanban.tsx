@@ -271,8 +271,17 @@ export const AllTasksKanban: React.FC<AllTasksKanbanProps> = ({
                     <span className="text-xs font-black text-gray-900 dark:text-white uppercase tracking-wider">
                       {col.label}
                     </span>
+                    {col.id === 'Pending Approval' && currentUserRole === 'admin' && colTasks.length > 0 && (
+                      <span className="text-[10px] font-black px-1.5 py-0.2 rounded-full bg-amber-500 text-white animate-pulse">
+                        Perlu Aksi
+                      </span>
+                    )}
                   </div>
-                  <span className="w-6 h-6 rounded-full bg-white dark:bg-zinc-700 shadow-xs flex items-center justify-center text-[11px] font-bold text-gray-700 dark:text-zinc-200">
+                  <span className={`w-6 h-6 rounded-full shadow-xs flex items-center justify-center text-[11px] font-bold ${
+                    col.id === 'Pending Approval' && currentUserRole === 'admin' && colTasks.length > 0
+                      ? 'bg-amber-400 text-amber-950 font-black'
+                      : 'bg-white dark:bg-zinc-700 text-gray-700 dark:text-zinc-200'
+                  }`}>
                     {colTasks.length}
                   </span>
                 </div>
