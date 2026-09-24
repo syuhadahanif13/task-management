@@ -120,6 +120,15 @@ export function getCachedTaskSubmissions(taskId: string, taskTitle?: string): Ta
 
 const SYSTEM_SUBMISSIONS_MEETING_ID = 'system-task-submissions';
 
+function getValidSystemMeetingUuid(): string {
+  try {
+    if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+      return crypto.randomUUID();
+    }
+  } catch {}
+  return 'a0000000-0000-0000-0000-000000000001';
+}
+
 async function updateTaskStatusInSupabaseClient(sbClient: any, taskId: string, status: string, description?: string) {
   const now = new Date().toISOString();
   const updatePayload: any = { updated_at: now };
@@ -141,11 +150,15 @@ async function updateTaskStatusInSupabaseClient(sbClient: any, taskId: string, s
 
 async function saveSubmissionToSupabaseSystemMeeting(sbClient: any, sub: TaskSubmission) {
   try {
-    const { data: sysMeeting } = await sbClient
-      .from('meetings')
-      .select('meeting_notes')
-      .eq('id', SYSTEM_SUBMISSIONS_MEETING_ID)
-      .maybeSingle();
+    let sysMeeting: any = null;
+    try {
+      const { data } = await sbClient
+        .from('meetings')
+        .select('id, meeting_notes')
+        .eq('title', '__SYSTEM_TASK_SUBMISSIONS__')
+        .maybeSingle();
+      sysMeeting = data;
+    } catch {}
 
     let list: TaskSubmission[] = [];
     if (sysMeeting && sysMeeting.meeting_notes) {
@@ -154,7 +167,7 @@ async function saveSubmissionToSupabaseSystemMeeting(sbClient: any, sub: TaskSub
         if (Array.isArray(parsed)) list = parsed;
       } catch {}
     }
-    const idx = list.findIndex(s => s.id === sub.id || s.taskId === sub.taskId);
+    const idx = list.findIndex(s => s.id === sub.id || (sub.taskId && s.taskId === sub.taskId) || (sub.taskTitle && s.taskTitle === sub.taskTitle));
     if (idx >= 0) {
       const existingAtt = Array.isArray(list[idx].attachments) ? list[idx].attachments : [];
       const subAtt = Array.isArray(sub.attachments) ? sub.attachments : [];
@@ -170,23 +183,14 @@ async function saveSubmissionToSupabaseSystemMeeting(sbClient: any, sub: TaskSub
     const nowIso = new Date().toISOString();
     const notesJson = JSON.stringify(list);
 
-    const { data: existingMeeting } = await sbClient
-      .from('meetings')
-      .select('id')
-      .eq('id', SYSTEM_SUBMISSIONS_MEETING_ID)
-      .maybeSingle();
-
-    if (existingMeeting) {
+    if (sysMeeting) {
       await sbClient.from('meetings').update({
-        title: '__SYSTEM_TASK_SUBMISSIONS__',
-        meeting_date: '2000-01-01',
-        participants: ['system'],
         meeting_notes: notesJson,
         updated_at: nowIso
-      }).eq('id', SYSTEM_SUBMISSIONS_MEETING_ID);
+      }).eq('id', sysMeeting.id);
     } else {
       await sbClient.from('meetings').insert([{
-        id: SYSTEM_SUBMISSIONS_MEETING_ID,
+        id: getValidSystemMeetingUuid(),
         title: '__SYSTEM_TASK_SUBMISSIONS__',
         meeting_date: '2000-01-01',
         participants: ['system'],
@@ -202,11 +206,15 @@ async function saveSubmissionToSupabaseSystemMeeting(sbClient: any, sub: TaskSub
 
 async function updateSubmissionStatusInSupabaseSystemMeeting(sbClient: any, taskId: string, submissionId: string, status: 'approved' | 'rejected', reviewNote?: string) {
   try {
-    const { data: sysMeeting } = await sbClient
-      .from('meetings')
-      .select('meeting_notes')
-      .eq('id', SYSTEM_SUBMISSIONS_MEETING_ID)
-      .maybeSingle();
+    let sysMeeting: any = null;
+    try {
+      const { data } = await sbClient
+        .from('meetings')
+        .select('id, meeting_notes')
+        .eq('title', '__SYSTEM_TASK_SUBMISSIONS__')
+        .maybeSingle();
+      sysMeeting = data;
+    } catch {}
 
     if (sysMeeting && sysMeeting.meeting_notes) {
       try {
@@ -222,12 +230,51 @@ async function updateSubmissionStatusInSupabaseSystemMeeting(sbClient: any, task
           await sbClient.from('meetings').update({
             meeting_notes: JSON.stringify(list),
             updated_at: new Date().toISOString()
-          }).eq('id', SYSTEM_SUBMISSIONS_MEETING_ID);
+          }).eq('id', sysMeeting.id);
         }
       } catch {}
     }
   } catch (e) {
     console.warn('updateSubmissionStatusInSupabaseSystemMeeting notice:', e);
+  }
+}
+
+export async function syncAllCachedSubmissions(): Promise<void> {
+  try {
+    if (typeof localStorage === 'undefined') return;
+    const raw = localStorage.getItem('cached_task_submissions');
+    if (!raw) return;
+    const list: TaskSubmission[] = JSON.parse(raw);
+    if (!Array.isArray(list) || list.length === 0) return;
+
+    const withContent = list.filter(s => (Array.isArray(s.attachments) && s.attachments.length > 0) || (s.notes && s.notes.trim().length > 0));
+    if (withContent.length === 0) return;
+
+    try {
+      await apiFetch('/api/submissions/sync-all', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ submissions: withContent }),
+      });
+    } catch {}
+
+    const sbClient = getSupabaseClient();
+    if (sbClient) {
+      for (const sub of withContent) {
+        try {
+          await saveSubmissionToSupabaseSystemMeeting(sbClient, sub);
+          if (sub.taskId) {
+            const { data: taskData } = await sbClient.from('tasks').select('id, description').eq('id', sub.taskId).maybeSingle();
+            if (taskData) {
+              const newDesc = embedTaskSubmissionIntoDescription(taskData.description || '', sub);
+              await sbClient.from('tasks').update({ description: newDesc }).eq('id', sub.taskId);
+            }
+          }
+        } catch {}
+      }
+    }
+  } catch (err) {
+    console.warn('syncAllCachedSubmissions notice:', err);
   }
 }
 
@@ -255,7 +302,7 @@ export const api = {
             .order('meeting_date', { ascending: false });
           if (!error && Array.isArray(data) && data.length > 0) {
             // Check system submissions store in meetings table
-            const sysMeeting = data.find((m: any) => m.id === SYSTEM_SUBMISSIONS_MEETING_ID);
+            const sysMeeting = data.find((m: any) => m.title === '__SYSTEM_TASK_SUBMISSIONS__' || m.id === SYSTEM_SUBMISSIONS_MEETING_ID);
             if (sysMeeting && sysMeeting.meeting_notes) {
               try {
                 const parsedSubs: TaskSubmission[] = JSON.parse(sysMeeting.meeting_notes);
@@ -304,9 +351,12 @@ export const api = {
     // Always filter out system meetings
     if (Array.isArray(meetingsData)) {
       meetingsData = meetingsData.filter(
-        (m: any) => m.id !== SYSTEM_SUBMISSIONS_MEETING_ID && !String(m.id).startsWith('system-')
+        (m: any) => m.id !== SYSTEM_SUBMISSIONS_MEETING_ID && !String(m.id).startsWith('system-') && m.title !== '__SYSTEM_TASK_SUBMISSIONS__'
       );
     }
+
+    // Background sync of any locally cached submissions to database/server
+    syncAllCachedSubmissions().catch(() => {});
 
     // Extract any embedded submissions from task descriptions into cache and pending set
     if (Array.isArray(meetingsData)) {
@@ -719,11 +769,15 @@ export const api = {
 
       // 4. Direct Supabase system meeting store
       try {
-        const { data: sysMeeting } = await sbClient
-          .from('meetings')
-          .select('meeting_notes')
-          .eq('id', SYSTEM_SUBMISSIONS_MEETING_ID)
-          .maybeSingle();
+        let sysMeeting: any = null;
+        try {
+          const { data } = await sbClient
+            .from('meetings')
+            .select('meeting_notes')
+            .eq('title', '__SYSTEM_TASK_SUBMISSIONS__')
+            .maybeSingle();
+          sysMeeting = data;
+        } catch {}
 
         if (sysMeeting && sysMeeting.meeting_notes) {
           const list: TaskSubmission[] = JSON.parse(sysMeeting.meeting_notes);
@@ -1586,5 +1640,7 @@ export const api = {
       throw new Error(err.error || 'Login failed');
     }
     return res.json();
-  }
+  },
+
+  syncAllCachedSubmissions,
 };

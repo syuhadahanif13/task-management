@@ -99,7 +99,7 @@ export const TopBar: React.FC<TopBarProps> = ({
           Hidden on Desktop (lg:hidden)
          ──────────────────────────────────────────────────────────── */}
       <header
-        className="lg:hidden sticky top-0 z-30 bg-white/60 dark:bg-[#090a0f]/60 backdrop-blur-2xl backdrop-saturate-150 border-b border-white/40 dark:border-white/10 shadow-[0_4px_24px_rgba(0,0,0,0.03)] dark:shadow-[0_4px_24px_rgba(0,0,0,0.35)] px-4 pb-3 transition-colors"
+        className="lg:hidden fixed top-0 left-0 right-0 z-30 bg-white/60 dark:bg-[#090a0f]/60 backdrop-blur-2xl backdrop-saturate-150 border-b border-white/40 dark:border-white/10 shadow-[0_4px_24px_rgba(0,0,0,0.03)] dark:shadow-[0_4px_24px_rgba(0,0,0,0.35)] px-4 pb-3 transition-colors"
         style={{
           paddingTop: 'max(env(safe-area-inset-top, 0px), 12px)',
           WebkitBackdropFilter: 'blur(20px) saturate(150%)',
@@ -254,6 +254,13 @@ export const TopBar: React.FC<TopBarProps> = ({
           </div>
         )}
       </header>
+
+      {/* Spacer for fixed mobile header to prevent content overlap */}
+      <div
+        className="lg:hidden w-full shrink-0 pointer-events-none"
+        style={{ height: 'calc(62px + max(env(safe-area-inset-top, 0px), 12px))' }}
+        aria-hidden="true"
+      />
 
       {/* ────────────────────────────────────────────────────────────
           BURGER MENU SLIDE-OVER DRAWER (Glassmorphism + Neon Blur)

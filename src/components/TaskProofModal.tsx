@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Task, TaskSubmission, TaskAttachment } from '../types';
-import { api } from '../api/client';
+import { api, getCachedTaskSubmissions } from '../api/client';
 import { extractTaskDescription, extractTaskSubmissionFromDescription } from '../utils/submissionUtils';
 import {
   X,
@@ -50,24 +50,61 @@ export const TaskProofModal: React.FC<TaskProofModalProps> = ({
       setErrorMsg('');
       try {
         let data = await api.getTaskSubmissions(task.id, task.title);
-        if ((!data || data.length === 0) && task.description) {
+        const hasAttachments = Array.isArray(data) && data.some(s => Array.isArray(s.attachments) && s.attachments.length > 0);
+
+        // If no data or no attachments found, check task description for embedded submission
+        if (!hasAttachments && task.description) {
           const emb = extractTaskSubmissionFromDescription(task.description);
-          if (emb) {
-            data = [emb];
+          if (emb && Array.isArray(emb.attachments) && emb.attachments.length > 0) {
+            if (!data || data.length === 0) {
+              data = [emb];
+            } else {
+              data = data.map(s => {
+                const isMatch = s.id === emb.id || s.taskId === emb.taskId || (!s.attachments || s.attachments.length === 0);
+                return isMatch
+                  ? { ...s, attachments: emb.attachments, notes: emb.notes || s.notes }
+                  : s;
+              });
+            }
           }
         }
+
+        // Check local cached submissions (covers cross-page and offline submissions on this browser)
+        const stillNoAtt = !data || !data.some(s => Array.isArray(s.attachments) && s.attachments.length > 0);
+        if (stillNoAtt) {
+          const cached = getCachedTaskSubmissions(task.id, task.title);
+          const cachedWithAtt = cached.find(c => Array.isArray(c.attachments) && c.attachments.length > 0);
+          if (cachedWithAtt) {
+            if (!data || data.length === 0) {
+              data = [cachedWithAtt];
+            } else {
+              data = data.map(s => ({
+                ...s,
+                attachments: Array.isArray(s.attachments) && s.attachments.length > 0 ? s.attachments : cachedWithAtt.attachments,
+                notes: s.notes || cachedWithAtt.notes,
+              }));
+            }
+          }
+        }
+
         if (isMounted) {
           setSubmissions(data || []);
         }
       } catch (err: any) {
         if (isMounted) {
           console.warn('Error fetching task submissions:', err);
+          let fallbackData: TaskSubmission[] = [];
           if (task.description) {
             const emb = extractTaskSubmissionFromDescription(task.description);
-            if (emb) {
-              setSubmissions([emb]);
-              return;
-            }
+            if (emb) fallbackData.push(emb);
+          }
+          const cached = getCachedTaskSubmissions(task.id, task.title);
+          if (cached.length > 0 && fallbackData.length === 0) {
+            fallbackData = cached;
+          }
+          if (fallbackData.length > 0) {
+            setSubmissions(fallbackData);
+            return;
           }
           setErrorMsg(err.message || 'Gagal memuat data bukti kerja.');
         }

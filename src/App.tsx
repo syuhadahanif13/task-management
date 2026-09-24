@@ -724,7 +724,7 @@ export default function App() {
         />
 
         {/* Page content */}
-        <main className="flex-1 p-4 sm:p-5 lg:p-6 pb-safe lg:pb-8 overflow-y-auto min-h-0">
+        <main className="flex-1 p-4 sm:p-5 lg:p-6 pb-28 lg:pb-8 overflow-y-auto min-h-0">
           {/* Error notification */}
           {errorMsg && (
             <div className="mb-5 p-4 bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-900 text-red-700 dark:text-red-400 rounded-2xl text-xs flex items-center justify-between">
