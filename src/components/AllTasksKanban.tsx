@@ -197,7 +197,7 @@ export const AllTasksKanban: React.FC<AllTasksKanbanProps> = ({
             placeholder="Cari tugas, PIC, atau rapat..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full bg-gray-50 dark:bg-zinc-750/70 rounded-full pl-11 pr-4 py-2.5 text-xs sm:text-sm font-semibold text-gray-900 dark:text-white placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-black dark:focus:ring-white border border-transparent"
+            className="w-full bg-gray-50 dark:bg-zinc-900/90 rounded-full pl-11 pr-4 py-2.5 text-xs sm:text-sm font-semibold text-gray-900 dark:text-white placeholder:text-gray-400 dark:placeholder:text-zinc-500 focus:outline-none focus:ring-2 focus:ring-black dark:focus:ring-white border border-gray-200/40 dark:border-zinc-700/60"
           />
         </div>
 
@@ -211,16 +211,16 @@ export const AllTasksKanban: React.FC<AllTasksKanbanProps> = ({
               </span>
             </div>
           ) : (
-            <div className="flex items-center gap-2 bg-gray-50 dark:bg-zinc-750/70 px-3.5 py-2 rounded-full border border-gray-200/50 dark:border-zinc-700">
-              <User className="w-3.5 h-3.5 text-gray-400" />
+            <div className="flex items-center gap-2 bg-gray-50 dark:bg-zinc-900/90 px-3.5 py-2 rounded-full border border-gray-200/50 dark:border-zinc-700/60">
+              <User className="w-3.5 h-3.5 text-gray-400 dark:text-zinc-400" />
               <select
                 value={filterAssignee}
                 onChange={(e) => setFilterAssignee(e.target.value)}
                 className="bg-transparent text-xs font-bold text-gray-800 dark:text-white focus:outline-none cursor-pointer"
               >
-                <option value="all">Semua PIC</option>
+                <option value="all" className="dark:bg-zinc-900">Semua PIC</option>
                 {assignees.map((a, idx) => (
-                  <option key={idx} value={a}>
+                  <option key={idx} value={a} className="dark:bg-zinc-900">
                     {a}
                   </option>
                 ))}

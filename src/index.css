@@ -42,6 +42,10 @@
   --color-mac-sidebar-item: #e8e8ed;
   --color-mac-sidebar-active: rgba(0, 122, 255, 0.12);
   --color-mac-toolbar: rgba(255, 255, 255, 0.85);
+
+  /* Custom dark zinc shades */
+  --color-zinc-750: #232326;
+  --color-zinc-850: #18181b;
 }
 
 /* ===========================

@@ -853,15 +853,15 @@ export default function App() {
                         placeholder="Cari judul rapat, tanggal, peserta, notulen..."
                         value={searchQuery}
                         onChange={(e) => setSearchQuery(e.target.value)}
-                        className="w-full bg-gray-50 dark:bg-zinc-750/70 rounded-full pl-11 pr-4 py-2.5 text-xs sm:text-sm font-semibold text-gray-900 dark:text-white placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-black dark:focus:ring-white border border-transparent"
+                        className="w-full bg-gray-50 dark:bg-zinc-900/90 rounded-full pl-11 pr-4 py-2.5 text-xs sm:text-sm font-semibold text-gray-900 dark:text-white placeholder:text-gray-400 dark:placeholder:text-zinc-500 focus:outline-none focus:ring-2 focus:ring-black dark:focus:ring-white border border-gray-200/40 dark:border-zinc-700/60"
                       />
                     </div>
 
-                    <div className="flex items-center gap-2 text-xs font-bold text-gray-500 dark:text-zinc-400">
-                      <span className="px-3 py-1.5 rounded-full bg-gray-50 dark:bg-zinc-750">
+                    <div className="flex items-center gap-2 text-xs font-bold text-gray-500 dark:text-zinc-300">
+                      <span className="px-3 py-1.5 rounded-full bg-gray-50 dark:bg-zinc-900/90 dark:text-zinc-300 border border-gray-200/40 dark:border-zinc-700/60">
                         {totalMeetings} Total Rapat
                       </span>
-                      <span className="px-3 py-1.5 rounded-full bg-gray-50 dark:bg-zinc-750">
+                      <span className="px-3 py-1.5 rounded-full bg-gray-50 dark:bg-zinc-900/90 dark:text-zinc-300 border border-gray-200/40 dark:border-zinc-700/60">
                         {totalTasks} Action Items
                       </span>
                     </div>
@@ -987,7 +987,7 @@ export default function App() {
                               </div>
 
                               {/* Bottom Stats: Progress bar + Meet button */}
-                              <div className="pt-3.5 border-t border-gray-100 dark:border-zinc-750 flex items-center justify-between">
+                              <div className="pt-3.5 border-t border-gray-100 dark:border-zinc-700/60 flex items-center justify-between">
                                 <div className="flex-1 mr-4">
                                   <div className="flex items-center justify-between text-xs font-bold mb-1">
                                     <span className="text-gray-400">

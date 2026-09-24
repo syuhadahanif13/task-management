@@ -374,7 +374,7 @@ export const MeetingDetailView: React.FC<MeetingDetailViewProps> = ({
                 </div>
 
                 {isAddingParticipant && (
-                  <div className="p-3.5 bg-white dark:bg-zinc-750 border border-gray-200 dark:border-zinc-700 rounded-2xl space-y-2 pt-2 shadow-sm">
+                  <div className="p-3.5 bg-white dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 rounded-2xl space-y-2 pt-2 shadow-sm">
                     <div className="flex items-center justify-between">
                       <span className="text-xs font-bold text-gray-800 dark:text-white">Tambah Peserta:</span>
                       <button
@@ -517,7 +517,7 @@ export const MeetingDetailView: React.FC<MeetingDetailViewProps> = ({
             </div>
 
             {/* Progress */}
-            <div className="mb-5 bg-white dark:bg-zinc-750 p-4 rounded-2xl border border-gray-200/60 dark:border-zinc-700/60">
+            <div className="mb-5 bg-white dark:bg-zinc-800 p-4 rounded-2xl border border-gray-200/60 dark:border-zinc-700/60">
               <div className="flex items-center justify-between text-xs font-bold text-gray-600 dark:text-zinc-300 mb-1.5">
                 <span>Progres Tindak Lanjut</span>
                 <span className="text-emerald-600 font-extrabold">{completionRate}% ({doneCount}/{tasks.length} selesai)</span>
@@ -547,7 +547,7 @@ export const MeetingDetailView: React.FC<MeetingDetailViewProps> = ({
                     className={`px-3.5 py-1.5 rounded-full text-xs font-bold transition-all shrink-0 flex items-center gap-1.5 ${
                       isActive
                         ? 'bg-[#c5e848] text-gray-950 shadow-xs'
-                        : 'bg-white dark:bg-zinc-750 text-gray-600 dark:text-zinc-400 border border-gray-200/60 dark:border-zinc-700 hover:bg-gray-50'
+                        : 'bg-white dark:bg-zinc-800 text-gray-600 dark:text-zinc-400 border border-gray-200/60 dark:border-zinc-700 hover:bg-gray-50 dark:hover:bg-zinc-700/50'
                     }`}
                   >
                     <span>{tab.label}</span>
