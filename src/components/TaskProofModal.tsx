@@ -1,7 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Task, TaskSubmission, TaskAttachment } from '../types';
-import { api, getCachedTaskSubmissions } from '../api/client';
-import { extractTaskDescription, extractTaskSubmissionFromDescription } from '../utils/submissionUtils';
+import { api, getCachedTaskSubmissions, saveCachedTaskSubmission } from '../api/client';
+import { extractTaskDescription, extractTaskSubmissionFromDescription, embedTaskSubmissionIntoDescription, compressImageFile } from '../utils/submissionUtils';
 import {
   X,
   Paperclip,
@@ -17,7 +17,10 @@ import {
   ZoomIn,
   FileSpreadsheet,
   FileArchive,
-  Image as ImageIcon
+  Image as ImageIcon,
+  Plus,
+  UploadCloud,
+  Send
 } from 'lucide-react';
 
 interface TaskProofModalProps {
@@ -35,6 +38,13 @@ export const TaskProofModal: React.FC<TaskProofModalProps> = ({
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [errorMsg, setErrorMsg] = useState<string>('');
   const [previewImage, setPreviewImage] = useState<TaskAttachment | null>(null);
+
+  const [isUploadOpen, setIsUploadOpen] = useState<boolean>(false);
+  const [uploadNotes, setUploadNotes] = useState<string>('');
+  const [uploadAttachments, setUploadAttachments] = useState<TaskAttachment[]>([]);
+  const [isUploading, setIsUploading] = useState<boolean>(false);
+  const [uploadError, setUploadError] = useState<string>('');
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (!isOpen || !task) {
@@ -172,6 +182,96 @@ export const TaskProofModal: React.FC<TaskProofModalProps> = ({
     return <FileText className="w-5 h-5 text-zinc-500 shrink-0" />;
   };
 
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files) return;
+    setUploadError('');
+    const newAttachments: TaskAttachment[] = [];
+    for (const file of Array.from(files) as File[]) {
+      if (file.size > 15 * 1024 * 1024) {
+        setUploadError(`File ${file.name} terlalu besar (>15MB).`);
+        continue;
+      }
+      try {
+        const dataUrl = await compressImageFile(file);
+        const approxSize = Math.round((dataUrl.length * 3) / 4);
+        newAttachments.push({
+          name: file.name,
+          type: file.type.startsWith('image/') ? 'image/jpeg' : file.type,
+          size: approxSize || file.size,
+          data: dataUrl,
+        });
+      } catch (err: any) {
+        console.warn('Error reading file:', err);
+      }
+    }
+    setUploadAttachments((prev) => [...prev, ...newAttachments]);
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+  };
+
+  const handleUploadSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!task) return;
+    if (uploadAttachments.length === 0) {
+      setUploadError('Pilih minimal satu file bukti kerja.');
+      return;
+    }
+    setIsUploading(true);
+    setUploadError('');
+    try {
+      const nowIso = new Date().toISOString();
+      const newSub: TaskSubmission = {
+        id: 'sub-' + Date.now() + '-' + Math.random().toString(36).substr(2, 6),
+        taskId: task.id,
+        taskTitle: task.title,
+        assignee: task.assignee || 'User',
+        notes: uploadNotes.trim() || 'Lampiran bukti kerja',
+        attachments: uploadAttachments,
+        status: task.status === 'Done' ? 'approved' : 'pending',
+        submittedAt: nowIso,
+        reviewedBy: task.status === 'Done' ? 'admin' : undefined,
+        reviewedAt: task.status === 'Done' ? nowIso : undefined,
+      };
+
+      // 1. Save locally
+      saveCachedTaskSubmission(newSub);
+
+      // 2. Submit to API / Supabase
+      try {
+        await api.submitTask(task.id, {
+          notes: newSub.notes,
+          attachments: newSub.attachments,
+          taskTitle: task.title,
+        });
+      } catch (apiErr) {
+        console.warn('API submit in TaskProofModal warning:', apiErr);
+      }
+
+      // 3. Update task description in background
+      try {
+        const newDesc = embedTaskSubmissionIntoDescription(task.description || '', newSub);
+        await api.updateTask(task.id, { description: newDesc, title: task.title });
+        task.description = newDesc;
+      } catch {}
+
+      // 4. Update modal state
+      setSubmissions((prev) => [newSub, ...prev]);
+      setUploadNotes('');
+      setUploadAttachments([]);
+      setIsUploadOpen(false);
+
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('tasksUpdated'));
+      }
+    } catch (err: any) {
+      setUploadError(err.message || 'Gagal mengunggah bukti.');
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
   return (
     <>
       <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 animate-in fade-in duration-200">
@@ -186,18 +286,31 @@ export const TaskProofModal: React.FC<TaskProofModalProps> = ({
                 <h2 className="text-base font-bold text-zinc-900 dark:text-zinc-100 truncate">
                   Bukti Kerja &amp; Lampiran
                 </h2>
-                <p className="text-xs text-zinc-500 dark:text-zinc-400 truncate max-w-[320px] sm:max-w-[450px]">
+                <p className="text-xs text-zinc-500 dark:text-zinc-400 truncate max-w-[280px] sm:max-w-[400px]">
                   {task.title}
                 </p>
               </div>
             </div>
-            <button
-              onClick={onClose}
-              className="p-2 text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 rounded-xl hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
-              title="Tutup"
-            >
-              <X className="w-4 h-4" />
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setIsUploadOpen(!isUploadOpen);
+                  setUploadError('');
+                }}
+                className="px-3 py-1.5 rounded-xl bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-950/50 dark:hover:bg-indigo-900/60 text-indigo-600 dark:text-indigo-400 text-xs font-semibold flex items-center gap-1.5 transition-colors shadow-2xs"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                {isUploadOpen ? 'Batal' : 'Tambah Bukti'}
+              </button>
+              <button
+                onClick={onClose}
+                className="p-2 text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 rounded-xl hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
+                title="Tutup"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
           </div>
 
           {/* Body */}
@@ -237,6 +350,116 @@ export const TaskProofModal: React.FC<TaskProofModalProps> = ({
               </div>
             </div>
 
+            {/* Inline Upload Form */}
+            {isUploadOpen && (
+              <form onSubmit={handleUploadSubmit} className="p-4 bg-indigo-50/50 dark:bg-indigo-950/20 border border-indigo-200/80 dark:border-indigo-800/60 rounded-2xl space-y-3.5 animate-in fade-in duration-200">
+                <div className="flex items-center justify-between">
+                  <h4 className="text-xs font-bold text-indigo-950 dark:text-indigo-200 flex items-center gap-1.5">
+                    <UploadCloud className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
+                    Unggah Bukti Baru
+                  </h4>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsUploadOpen(false);
+                      setUploadAttachments([]);
+                      setUploadNotes('');
+                      setUploadError('');
+                    }}
+                    className="text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+
+                {uploadError && (
+                  <div className="p-2.5 rounded-lg bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 text-rose-700 dark:text-rose-300 text-[11px] flex items-center gap-1.5">
+                    <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+                    <span>{uploadError}</span>
+                  </div>
+                )}
+
+                <div>
+                  <label className="block text-[11px] font-semibold text-zinc-600 dark:text-zinc-300 mb-1">
+                    Catatan Bukti / Keterangan
+                  </label>
+                  <textarea
+                    rows={2}
+                    value={uploadNotes}
+                    onChange={(e) => setUploadNotes(e.target.value)}
+                    placeholder="Contoh: Bukti live streaming telah dijalankan dan akun REI aktif."
+                    className="w-full px-3 py-2 text-xs bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-xl focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all resize-none"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-semibold text-zinc-600 dark:text-zinc-300 mb-1">
+                    File Lampiran (Gambar / PDF / Dokumen)
+                  </label>
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    multiple
+                    accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.zip"
+                    onChange={handleFileChange}
+                    className="hidden"
+                  />
+                  <div className="flex flex-wrap gap-2 items-center">
+                    <button
+                      type="button"
+                      onClick={() => fileInputRef.current?.click()}
+                      className="px-3 py-2 border-2 border-dashed border-indigo-300 dark:border-indigo-700 hover:border-indigo-500 rounded-xl bg-white dark:bg-zinc-900 text-xs font-semibold text-indigo-600 dark:text-indigo-400 flex items-center gap-1.5 transition-colors cursor-pointer"
+                    >
+                      <Paperclip className="w-3.5 h-3.5" />
+                      Pilih File / Foto
+                    </button>
+                    {uploadAttachments.map((f, i) => (
+                      <div
+                        key={i}
+                        className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 text-[11px] text-zinc-700 dark:text-zinc-300 max-w-[200px]"
+                      >
+                        <span className="truncate">{f.name}</span>
+                        <button
+                          type="button"
+                          onClick={() => setUploadAttachments(prev => prev.filter((_, idx) => idx !== i))}
+                          className="text-zinc-400 hover:text-rose-500 ml-1"
+                        >
+                          <X className="w-3 h-3" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-end gap-2 pt-1">
+                  <button
+                    type="button"
+                    onClick={() => setIsUploadOpen(false)}
+                    className="px-3 py-1.5 text-xs text-zinc-600 dark:text-zinc-400 hover:bg-zinc-200/50 rounded-lg transition-colors"
+                  >
+                    Batal
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={isUploading || uploadAttachments.length === 0}
+                    className="px-4 py-1.5 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white text-xs font-semibold rounded-xl flex items-center gap-1.5 transition-all shadow-xs cursor-pointer"
+                  >
+                    {isUploading ? (
+                      <>
+                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                        Mengunggah...
+                      </>
+                    ) : (
+                      <>
+                        <Send className="w-3.5 h-3.5" />
+                        Simpan Bukti
+                      </>
+                    )}
+                  </button>
+                </div>
+              </form>
+            )}
+
             {/* Loading State */}
             {isLoading && (
               <div className="py-12 flex flex-col items-center justify-center text-zinc-400 space-y-3">
@@ -254,17 +477,29 @@ export const TaskProofModal: React.FC<TaskProofModalProps> = ({
             )}
 
             {/* Empty State */}
-            {!isLoading && !errorMsg && submissions.length === 0 && (
-              <div className="py-10 text-center space-y-2">
+            {!isLoading && !errorMsg && submissions.length === 0 && !isUploadOpen && (
+              <div className="py-10 text-center space-y-3">
                 <div className="w-12 h-12 mx-auto rounded-2xl bg-zinc-100 dark:bg-zinc-800 flex items-center justify-center text-zinc-400">
                   <Paperclip className="w-6 h-6" />
                 </div>
-                <h4 className="text-sm font-semibold text-zinc-800 dark:text-zinc-200">
-                  Belum Ada Bukti Kerja
-                </h4>
-                <p className="text-xs text-zinc-500 dark:text-zinc-400 max-w-sm mx-auto">
-                  Belum ada laporan atau file lampiran yang diunggah untuk tugas ini.
-                </p>
+                <div className="space-y-1">
+                  <h4 className="text-sm font-semibold text-zinc-800 dark:text-zinc-200">
+                    Belum Ada Bukti Kerja
+                  </h4>
+                  <p className="text-xs text-zinc-500 dark:text-zinc-400 max-w-sm mx-auto">
+                    Belum ada laporan atau file lampiran yang tersimpan untuk tugas ini.
+                  </p>
+                </div>
+                <div>
+                  <button
+                    type="button"
+                    onClick={() => setIsUploadOpen(true)}
+                    className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold inline-flex items-center gap-2 transition-all shadow-sm active:scale-95 cursor-pointer"
+                  >
+                    <Plus className="w-4 h-4" />
+                    Unggah Bukti Sekarang
+                  </button>
+                </div>
               </div>
             )}
 

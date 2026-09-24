@@ -112,10 +112,19 @@ export function getCachedTaskSubmissions(taskId: string, taskTitle?: string): Ta
     if (!raw) return [];
     const list: TaskSubmission[] = JSON.parse(raw);
     if (!Array.isArray(list)) return [];
-    return list.filter(s => (taskId && s.taskId === taskId) || (taskTitle && s.taskTitle === taskTitle));
+    const targetTitle = (taskTitle || '').trim().toLowerCase();
+    return list.filter(s =>
+      (taskId && s.taskId === taskId) ||
+      (targetTitle && s.taskTitle && s.taskTitle.trim().toLowerCase() === targetTitle)
+    );
   } catch {
     return [];
   }
+}
+
+function isValidUuid(id?: string): boolean {
+  if (!id || typeof id !== 'string') return false;
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id.trim());
 }
 
 const SYSTEM_SUBMISSIONS_MEETING_ID = 'system-task-submissions';
@@ -129,22 +138,37 @@ function getValidSystemMeetingUuid(): string {
   return 'a0000000-0000-0000-0000-000000000001';
 }
 
-async function updateTaskStatusInSupabaseClient(sbClient: any, taskId: string, status: string, description?: string) {
+async function updateTaskStatusInSupabaseClient(sbClient: any, taskId: string, status: string, description?: string, taskTitle?: string) {
   const now = new Date().toISOString();
   const updatePayload: any = { updated_at: now };
   if (description !== undefined) updatePayload.description = description;
 
-  if (status === 'Pending Approval') {
-    updatePayload.status = 'Pending Approval';
-    const { error: err1 } = await sbClient.from('tasks').update(updatePayload).eq('id', taskId);
-    if (err1) {
-      console.warn('Supabase update Pending Approval failed, using Blocked constraint fallback:', err1.message);
-      updatePayload.status = 'Blocked';
-      await sbClient.from('tasks').update(updatePayload).eq('id', taskId);
+  if (!isValidUuid(taskId) && taskTitle) {
+    try {
+      const { data } = await sbClient.from('tasks').select('id').eq('title', taskTitle).limit(1).maybeSingle();
+      if (data && data.id) {
+        taskId = data.id;
+      }
+    } catch {}
+  }
+
+  if (isValidUuid(taskId)) {
+    try {
+      if (status === 'Pending Approval') {
+        updatePayload.status = 'Pending Approval';
+        const { error: err1 } = await sbClient.from('tasks').update(updatePayload).eq('id', taskId);
+        if (err1) {
+          console.warn('Supabase update Pending Approval failed, using Blocked constraint fallback:', err1.message);
+          updatePayload.status = 'Blocked';
+          await sbClient.from('tasks').update(updatePayload).eq('id', taskId);
+        }
+      } else {
+        updatePayload.status = status;
+        await sbClient.from('tasks').update(updatePayload).eq('id', taskId);
+      }
+    } catch (e) {
+      console.warn('updateTaskStatusInSupabaseClient notice:', e);
     }
-  } else {
-    updatePayload.status = status;
-    await sbClient.from('tasks').update(updatePayload).eq('id', taskId);
   }
 }
 
@@ -474,37 +498,48 @@ export const api = {
         if (updates.title !== undefined) updateData.title = updates.title;
         if (updates.assignee !== undefined) updateData.assignee = updates.assignee;
         if (updates.dueDate !== undefined) updateData.due_date = updates.dueDate;
+        if (updates.description !== undefined) updateData.description = updates.description;
 
-        let { data: sbTask, error: sbErr } = await sbClient
-          .from('tasks')
-          .update(updateData)
-          .eq('id', id)
-          .select()
-          .maybeSingle();
-
-        // If check constraint blocked 'Pending Approval', retry without status column but keep in local cache
-        if (sbErr && updates.status === 'Pending Approval') {
-          delete updateData.status;
-          const retry = await sbClient.from('tasks').update(updateData).eq('id', id).select().maybeSingle();
-          if (!retry.error && retry.data) {
-            sbTask = retry.data;
-            sbErr = null;
-          }
+        let targetId = isValidUuid(id) ? id : null;
+        if (!targetId && updates.title) {
+          try {
+            const { data: found } = await sbClient.from('tasks').select('id').eq('title', updates.title).limit(1).maybeSingle();
+            if (found && found.id) targetId = found.id;
+          } catch {}
         }
 
-        if (sbTask && !sbErr) {
-          return {
-            id: sbTask.id,
-            meetingId: sbTask.meeting_id,
-            title: sbTask.title,
-            assignee: sbTask.assignee,
-            dueDate: sbTask.due_date,
-            status: updates.status || sbTask.status,
-            priority: (updates.priority || sbTask.priority || 'Medium') as any,
-            description: updates.description !== undefined ? updates.description : sbTask.description,
-            createdAt: sbTask.created_at,
-            updatedAt: sbTask.updated_at,
-          };
+        if (targetId) {
+          let { data: sbTask, error: sbErr } = await sbClient
+            .from('tasks')
+            .update(updateData)
+            .eq('id', targetId)
+            .select()
+            .maybeSingle();
+
+          // If check constraint blocked 'Pending Approval', retry without status column but keep in local cache
+          if (sbErr && updates.status === 'Pending Approval') {
+            delete updateData.status;
+            const retry = await sbClient.from('tasks').update(updateData).eq('id', targetId).select().maybeSingle();
+            if (!retry.error && retry.data) {
+              sbTask = retry.data;
+              sbErr = null;
+            }
+          }
+
+          if (sbTask && !sbErr) {
+            return {
+              id: sbTask.id,
+              meetingId: sbTask.meeting_id,
+              title: sbTask.title,
+              assignee: sbTask.assignee,
+              dueDate: sbTask.due_date,
+              status: updates.status || sbTask.status,
+              priority: (updates.priority || sbTask.priority || 'Medium') as any,
+              description: updates.description !== undefined ? updates.description : sbTask.description,
+              createdAt: sbTask.created_at,
+              updatedAt: sbTask.updated_at,
+            };
+          }
         }
       }
       throw new Error(err.error || `Gagal memperbarui status tugas (${res.status})`);
@@ -517,36 +552,47 @@ export const api = {
         if (updates.title !== undefined) updateData.title = updates.title;
         if (updates.assignee !== undefined) updateData.assignee = updates.assignee;
         if (updates.dueDate !== undefined) updateData.due_date = updates.dueDate;
+        if (updates.description !== undefined) updateData.description = updates.description;
 
-        let { data: sbTask, error: sbErr } = await sbClient
-          .from('tasks')
-          .update(updateData)
-          .eq('id', id)
-          .select()
-          .maybeSingle();
-
-        if (sbErr && updates.status === 'Pending Approval') {
-          delete updateData.status;
-          const retry = await sbClient.from('tasks').update(updateData).eq('id', id).select().maybeSingle();
-          if (!retry.error && retry.data) {
-            sbTask = retry.data;
-            sbErr = null;
-          }
+        let targetId = isValidUuid(id) ? id : null;
+        if (!targetId && updates.title) {
+          try {
+            const { data: found } = await sbClient.from('tasks').select('id').eq('title', updates.title).limit(1).maybeSingle();
+            if (found && found.id) targetId = found.id;
+          } catch {}
         }
 
-        if (sbTask && !sbErr) {
-          return {
-            id: sbTask.id,
-            meetingId: sbTask.meeting_id,
-            title: sbTask.title,
-            assignee: sbTask.assignee,
-            dueDate: sbTask.due_date,
-            status: updates.status || sbTask.status,
-            priority: (updates.priority || sbTask.priority || 'Medium') as any,
-            description: updates.description !== undefined ? updates.description : sbTask.description,
-            createdAt: sbTask.created_at,
-            updatedAt: sbTask.updated_at,
-          };
+        if (targetId) {
+          let { data: sbTask, error: sbErr } = await sbClient
+            .from('tasks')
+            .update(updateData)
+            .eq('id', targetId)
+            .select()
+            .maybeSingle();
+
+          if (sbErr && updates.status === 'Pending Approval') {
+            delete updateData.status;
+            const retry = await sbClient.from('tasks').update(updateData).eq('id', targetId).select().maybeSingle();
+            if (!retry.error && retry.data) {
+              sbTask = retry.data;
+              sbErr = null;
+            }
+          }
+
+          if (sbTask && !sbErr) {
+            return {
+              id: sbTask.id,
+              meetingId: sbTask.meeting_id,
+              title: sbTask.title,
+              assignee: sbTask.assignee,
+              dueDate: sbTask.due_date,
+              status: updates.status || sbTask.status,
+              priority: (updates.priority || sbTask.priority || 'Medium') as any,
+              description: updates.description !== undefined ? updates.description : sbTask.description,
+              createdAt: sbTask.created_at,
+              updatedAt: sbTask.updated_at,
+            };
+          }
         }
       }
       throw fetchErr;
@@ -695,76 +741,93 @@ export const api = {
     const sbClient = getSupabaseClient();
     if (sbClient) {
       // 2. Direct Supabase tasks table description embedding (fastest & most reliable)
+      let taskRecord: any = null;
       try {
-        const { data: taskRecord } = await sbClient.from('tasks').select('*').eq('id', taskId).maybeSingle();
+        if (isValidUuid(taskId)) {
+          try {
+            const { data } = await sbClient.from('tasks').select('*').eq('id', taskId).maybeSingle();
+            taskRecord = data;
+          } catch {}
+        }
+        if (!taskRecord && taskTitle) {
+          try {
+            const { data } = await sbClient.from('tasks').select('*').eq('title', taskTitle).limit(1).maybeSingle();
+            taskRecord = data;
+          } catch {}
+        }
         if (taskRecord && taskRecord.description) {
           const emb = extractTaskSubmissionFromDescription(taskRecord.description);
           if (emb) {
-            if (!emb.taskId) emb.taskId = taskId;
+            if (!emb.taskId) emb.taskId = taskRecord.id;
             if (!emb.taskTitle && taskRecord.title) emb.taskTitle = taskRecord.title;
             result.push(emb);
           }
         }
         // Also check by taskTitle in tasks table if available
         if (taskTitle && (!result.length || !result.some(r => Array.isArray(r.attachments) && r.attachments.length > 0))) {
-          const { data: titleTasks } = await sbClient.from('tasks').select('*').eq('title', taskTitle).limit(5);
-          if (Array.isArray(titleTasks)) {
-            for (const tt of titleTasks) {
-              if (tt.description) {
-                const emb = extractTaskSubmissionFromDescription(tt.description);
-                if (emb) {
-                  if (!emb.taskId) emb.taskId = tt.id;
-                  if (!emb.taskTitle) emb.taskTitle = tt.title;
-                  result.push(emb);
+          try {
+            const { data: titleTasks } = await sbClient.from('tasks').select('*').eq('title', taskTitle).limit(5);
+            if (Array.isArray(titleTasks)) {
+              for (const tt of titleTasks) {
+                if (tt.description) {
+                  const emb = extractTaskSubmissionFromDescription(tt.description);
+                  if (emb) {
+                    if (!emb.taskId) emb.taskId = tt.id;
+                    if (!emb.taskTitle) emb.taskTitle = tt.title;
+                    result.push(emb);
+                  }
                 }
               }
             }
-          }
+          } catch {}
         }
       } catch (embErr) {
         console.warn('Direct Supabase task description check error:', embErr);
       }
 
       // 3. Direct Supabase task_submissions table
-      try {
-        const { data, error } = await sbClient
-          .from('task_submissions')
-          .select('*')
-          .eq('task_id', taskId)
-          .order('submitted_at', { ascending: false });
+      const validQueryId = isValidUuid(taskId) ? taskId : (taskRecord?.id && isValidUuid(taskRecord.id) ? taskRecord.id : null);
+      if (validQueryId) {
+        try {
+          const { data, error } = await sbClient
+            .from('task_submissions')
+            .select('*')
+            .eq('task_id', validQueryId)
+            .order('submitted_at', { ascending: false });
 
-        if (!error && Array.isArray(data) && data.length > 0) {
-          const directSubs: TaskSubmission[] = data.map((s: any) => ({
-            id: s.id,
-            taskId: s.task_id,
-            taskTitle: s.task_title || taskTitle,
-            assignee: s.assignee,
-            notes: s.notes || '',
-            attachments: Array.isArray(s.attachments) ? s.attachments : [],
-            status: s.status || 'pending',
-            submittedAt: s.submitted_at,
-            reviewedBy: s.reviewed_by,
-            reviewedAt: s.reviewed_at,
-            reviewNote: s.review_note,
-          }));
+          if (!error && Array.isArray(data) && data.length > 0) {
+            const directSubs: TaskSubmission[] = data.map((s: any) => ({
+              id: s.id,
+              taskId: s.task_id,
+              taskTitle: s.task_title || taskTitle,
+              assignee: s.assignee,
+              notes: s.notes || '',
+              attachments: Array.isArray(s.attachments) ? s.attachments : [],
+              status: s.status || 'pending',
+              submittedAt: s.submitted_at,
+              reviewedBy: s.reviewed_by,
+              reviewedAt: s.reviewed_at,
+              reviewNote: s.review_note,
+            }));
 
-          for (const ds of directSubs) {
-            const idx = result.findIndex(r => r.id === ds.id || r.taskId === ds.taskId);
-            if (idx >= 0) {
-              const resAtt = Array.isArray(result[idx].attachments) ? result[idx].attachments : [];
-              const dsAtt = Array.isArray(ds.attachments) ? ds.attachments : [];
-              result[idx] = {
-                ...result[idx],
-                ...ds,
-                attachments: dsAtt.length > 0 ? dsAtt : resAtt,
-              };
-            } else {
-              result.push(ds);
+            for (const ds of directSubs) {
+              const idx = result.findIndex(r => r.id === ds.id || r.taskId === ds.taskId);
+              if (idx >= 0) {
+                const resAtt = Array.isArray(result[idx].attachments) ? result[idx].attachments : [];
+                const dsAtt = Array.isArray(ds.attachments) ? ds.attachments : [];
+                result[idx] = {
+                  ...result[idx],
+                  ...ds,
+                  attachments: dsAtt.length > 0 ? dsAtt : resAtt,
+                };
+              } else {
+                result.push(ds);
+              }
             }
           }
+        } catch (sbErr) {
+          console.warn('Direct Supabase getTaskSubmissions warning:', sbErr);
         }
-      } catch (sbErr) {
-        console.warn('Direct Supabase getTaskSubmissions warning:', sbErr);
       }
 
       // 4. Direct Supabase system meeting store

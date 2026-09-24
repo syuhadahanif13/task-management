@@ -140,6 +140,20 @@ router.get('/schema', (req, res) => {
 const SYSTEM_SUBMISSIONS_MEETING_ID = 'system-task-submissions';
 const SUBMISSION_DELIMITER = '__SUBMISSION_DATA__';
 
+function isValidUuid(id?: string): boolean {
+  if (!id || typeof id !== 'string') return false;
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id.trim());
+}
+
+function generateSafeUuid(): string {
+  try {
+    if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+      return crypto.randomUUID();
+    }
+  } catch {}
+  return 'a0000000-0000-0000-0000-000000000001';
+}
+
 function extractTaskDescription(desc?: string): string {
   if (!desc) return '';
   const idx = desc.indexOf(SUBMISSION_DELIMITER);
@@ -356,6 +370,7 @@ async function saveSubmissionsToSupabase(sb: SupabaseClient, subs: TaskSubmissio
       }).eq('id', existingMeeting.id);
     } else {
       await sb.from('meetings').insert([{
+        id: generateSafeUuid(),
         title: '__SYSTEM_TASK_SUBMISSIONS__',
         meeting_date: '2000-01-01',
         participants: ['system'],
@@ -371,13 +386,20 @@ async function saveSubmissionsToSupabase(sb: SupabaseClient, subs: TaskSubmissio
   // 2. Embed submissions directly into tasks.description in Supabase for 100% resilient access
   for (const sub of subs) {
     try {
-      let q = sb.from('tasks').select('id, description, title');
-      if (sub.taskId) {
-        q = q.eq('id', sub.taskId);
-      } else if (sub.taskTitle) {
-        q = q.eq('title', sub.taskTitle);
+      let currTask: any = null;
+      if (isValidUuid(sub.taskId)) {
+        try {
+          const { data } = await sb.from('tasks').select('id, description, title').eq('id', sub.taskId).maybeSingle();
+          currTask = data;
+        } catch {}
       }
-      const { data: currTask } = await q.maybeSingle();
+      if (!currTask && (sub.taskTitle || sub.taskId)) {
+        try {
+          const searchTitle = sub.taskTitle || sub.taskId;
+          const { data } = await sb.from('tasks').select('id, description, title').eq('title', searchTitle).limit(1).maybeSingle();
+          currTask = data;
+        } catch {}
+      }
       if (currTask) {
         const updatedDesc = embedTaskSubmissionIntoDescription(currTask.description || '', sub);
         await sb.from('tasks').update({ description: updatedDesc, updated_at: nowIso }).eq('id', currTask.id);
@@ -389,10 +411,10 @@ async function saveSubmissionsToSupabase(sb: SupabaseClient, subs: TaskSubmissio
 
   // 3. Try saving to task_submissions table if it exists
   for (const sub of subs) {
-    if (sub.taskId && Array.isArray(sub.attachments) && sub.attachments.length > 0) {
+    if (isValidUuid(sub.taskId) && Array.isArray(sub.attachments) && sub.attachments.length > 0) {
       try {
         await sb.from('task_submissions').upsert({
-          id: sub.id,
+          id: isValidUuid(sub.id) ? sub.id : generateSafeUuid(),
           task_id: sub.taskId,
           assignee: sub.assignee || 'User',
           notes: sub.notes || '',
@@ -410,22 +432,28 @@ async function updateTaskStatusInSupabase(sb: SupabaseClient, taskId: string, st
   const updatePayload: any = { updated_at: now };
   if (description !== undefined) updatePayload.description = description;
 
-  if (status === 'Pending Approval') {
-    updatePayload.status = 'Pending Approval';
-    const { error: err1 } = await sb.from('tasks').update(updatePayload).eq('id', taskId);
-    if (err1) {
-      console.warn('Supabase update Pending Approval rejected by constraint, using Blocked fallback:', err1.message);
-      updatePayload.status = 'Blocked';
-      const { error: err2 } = await sb.from('tasks').update(updatePayload).eq('id', taskId);
-      if (err2) {
-        console.warn('Supabase update Blocked fallback failed:', err2.message);
+  if (isValidUuid(taskId)) {
+    try {
+      if (status === 'Pending Approval') {
+        updatePayload.status = 'Pending Approval';
+        const { error: err1 } = await sb.from('tasks').update(updatePayload).eq('id', taskId);
+        if (err1) {
+          console.warn('Supabase update Pending Approval rejected by constraint, using Blocked fallback:', err1.message);
+          updatePayload.status = 'Blocked';
+          const { error: err2 } = await sb.from('tasks').update(updatePayload).eq('id', taskId);
+          if (err2) {
+            console.warn('Supabase update Blocked fallback failed:', err2.message);
+          }
+        }
+      } else {
+        updatePayload.status = status;
+        const { error } = await sb.from('tasks').update(updatePayload).eq('id', taskId);
+        if (error) {
+          console.warn(`Supabase update task status ${status} warning:`, error.message);
+        }
       }
-    }
-  } else {
-    updatePayload.status = status;
-    const { error } = await sb.from('tasks').update(updatePayload).eq('id', taskId);
-    if (error) {
-      console.warn(`Supabase update task status ${status} warning:`, error.message);
+    } catch (err: any) {
+      console.warn('Supabase updateTaskStatus error:', err?.message);
     }
   }
 }
@@ -1151,46 +1179,52 @@ router.get('/tasks/:taskId/submissions', async (req, res) => {
       await loadSubmissionsFromSupabase(supabase);
 
       if (!targetTask) {
-        let q = supabase.from('tasks').select('*');
-        if (taskId) {
-          const { data: sbTask } = await q.eq('id', taskId).maybeSingle();
-          if (sbTask) {
-            targetTask = {
-              id: sbTask.id,
-              meetingId: sbTask.meeting_id,
-              title: sbTask.title,
-              assignee: sbTask.assignee,
-              dueDate: sbTask.due_date,
-              status: sbTask.status,
-              description: sbTask.description,
-              createdAt: sbTask.created_at,
-              updatedAt: sbTask.updated_at,
-            };
-          }
+        if (isValidUuid(taskId)) {
+          try {
+            const { data: sbTask } = await supabase.from('tasks').select('*').eq('id', taskId).maybeSingle();
+            if (sbTask) {
+              targetTask = {
+                id: sbTask.id,
+                meetingId: sbTask.meeting_id,
+                title: sbTask.title,
+                assignee: sbTask.assignee,
+                dueDate: sbTask.due_date,
+                status: sbTask.status,
+                description: sbTask.description,
+                createdAt: sbTask.created_at,
+                updatedAt: sbTask.updated_at,
+              };
+            }
+          } catch {}
         }
         if (!targetTask && queryTitle) {
-          const { data: sbTaskByTitle } = await supabase.from('tasks').select('*').eq('title', queryTitle).limit(1).maybeSingle();
-          if (sbTaskByTitle) {
-            targetTask = {
-              id: sbTaskByTitle.id,
-              meetingId: sbTaskByTitle.meeting_id,
-              title: sbTaskByTitle.title,
-              assignee: sbTaskByTitle.assignee,
-              dueDate: sbTaskByTitle.due_date,
-              status: sbTaskByTitle.status,
-              description: sbTaskByTitle.description,
-              createdAt: sbTaskByTitle.created_at,
-              updatedAt: sbTaskByTitle.updated_at,
-            };
-          }
+          try {
+            const { data: sbTaskByTitle } = await supabase.from('tasks').select('*').eq('title', queryTitle).limit(1).maybeSingle();
+            if (sbTaskByTitle) {
+              targetTask = {
+                id: sbTaskByTitle.id,
+                meetingId: sbTaskByTitle.meeting_id,
+                title: sbTaskByTitle.title,
+                assignee: sbTaskByTitle.assignee,
+                dueDate: sbTaskByTitle.due_date,
+                status: sbTaskByTitle.status,
+                description: sbTaskByTitle.description,
+                createdAt: sbTaskByTitle.created_at,
+                updatedAt: sbTaskByTitle.updated_at,
+              };
+            }
+          } catch {}
         }
       }
 
-      const { data, error } = await supabase
-        .from('task_submissions')
-        .select('*')
-        .or(`task_id.eq.${taskId}${targetTask ? `,task_id.eq.${targetTask.id}` : ''}`)
-        .order('submitted_at', { ascending: false });
+      const validId = isValidUuid(taskId) ? taskId : (targetTask && isValidUuid(targetTask.id) ? targetTask.id : null);
+      if (validId) {
+        try {
+          const { data, error } = await supabase
+            .from('task_submissions')
+            .select('*')
+            .eq('task_id', validId)
+            .order('submitted_at', { ascending: false });
 
       if (!error && Array.isArray(data) && data.length > 0) {
         for (const s of data) {

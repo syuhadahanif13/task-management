@@ -422,15 +422,21 @@ export default function App() {
       // 2. Submit to API / Supabase
       await api.submitTask(taskId, { ...input, taskTitle: targetTitle });
 
-      // 3. Ensure task status update is sent to tasks table
-      api.updateTask(taskId, { status: 'Pending Approval' }).catch(() => {});
+      // 3. Ensure task status and embedded description are updated in tasks table
+      let currentDesc = '';
+      for (const m of meetings) {
+        const found = (m.tasks || []).find(t => t.id === taskId);
+        if (found) { currentDesc = found.description || ''; break; }
+      }
+      const fullUpdatedDesc = embedTaskSubmissionIntoDescription(currentDesc, optimisticSub);
+      api.updateTask(taskId, { status: 'Pending Approval', description: fullUpdatedDesc, title: targetTitle }).catch(() => {});
 
       // 4. Re-enforce local state so any concurrent loadMeetings won't revert
       setMeetings((prev) =>
         prev.map((m) => ({
           ...m,
           tasks: (m.tasks || []).map((t) =>
-            t.id === taskId ? { ...t, status: 'Pending Approval' as const } : t
+            t.id === taskId ? { ...t, status: 'Pending Approval' as const, description: fullUpdatedDesc } : t
           ),
         }))
       );
@@ -449,14 +455,20 @@ export default function App() {
   ) => {
     try {
       if (reviewSubmission) {
-        saveCachedTaskSubmission({
+        const appSub: TaskSubmission = {
           ...reviewSubmission,
           taskTitle: reviewingTask?.title,
           status: 'approved',
           reviewedBy: 'admin',
           reviewedAt: new Date().toISOString(),
           reviewNote: reviewNote || reviewSubmission.reviewNote,
-        });
+        };
+        saveCachedTaskSubmission(appSub);
+
+        if (reviewingTask) {
+          const updatedDesc = embedTaskSubmissionIntoDescription(reviewingTask.description || '', appSub);
+          api.updateTask(taskId, { status: 'Done', description: updatedDesc, title: reviewingTask.title }).catch(() => {});
+        }
       }
       await api.approveTaskSubmission(taskId, submissionId, reviewNote, reviewingTask?.title);
       setMeetings((prev) =>
