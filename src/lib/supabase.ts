@@ -9,29 +9,196 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 
 let supabaseClient: SupabaseClient | null = null;
+let isFetchingServerConfig = false;
+
+export function getSupabaseConfig(): {
+  url: string | null;
+  anonKey: string | null;
+  isConfigured: boolean;
+  source: 'env' | 'localStorage' | 'window' | 'none';
+} {
+  const metaEnv = typeof import.meta !== 'undefined' ? (import.meta as any).env : undefined;
+  const procEnv = typeof process !== 'undefined' ? process.env : undefined;
+
+  const envUrl = metaEnv?.VITE_SUPABASE_URL || procEnv?.VITE_SUPABASE_URL || procEnv?.SUPABASE_URL;
+  const envKey = metaEnv?.VITE_SUPABASE_ANON_KEY || procEnv?.VITE_SUPABASE_ANON_KEY || procEnv?.SUPABASE_ANON_KEY;
+
+  if (envUrl && envKey) {
+    return { url: envUrl, anonKey: envKey, isConfigured: true, source: 'env' };
+  }
+
+  const localUrl = typeof localStorage !== 'undefined' ? localStorage.getItem('supabase_url') : null;
+  const localKey = typeof localStorage !== 'undefined' ? localStorage.getItem('supabase_anon_key') : null;
+
+  if (localUrl && localKey) {
+    return { url: localUrl, anonKey: localKey, isConfigured: true, source: 'localStorage' };
+  }
+
+  const winUrl = typeof window !== 'undefined' ? (window as any).__SUPABASE_URL__ : null;
+  const winKey = typeof window !== 'undefined' ? (window as any).__SUPABASE_ANON_KEY__ : null;
+
+  if (winUrl && winKey) {
+    return { url: winUrl, anonKey: winKey, isConfigured: true, source: 'window' };
+  }
+
+  return { url: null, anonKey: null, isConfigured: false, source: 'none' };
+}
 
 export function getSupabaseClient(): SupabaseClient | null {
   if (supabaseClient) return supabaseClient;
 
-  // Cek env client (VITE_) atau runtime window config
-  const metaEnv = typeof import.meta !== 'undefined' ? (import.meta as any).env : undefined;
-  const procEnv = typeof process !== 'undefined' ? process.env : undefined;
-
-  const supabaseUrl = metaEnv?.VITE_SUPABASE_URL ||
-                      procEnv?.VITE_SUPABASE_URL ||
-                      procEnv?.SUPABASE_URL ||
-                      (typeof window !== 'undefined' && (window as any).__SUPABASE_URL__);
-
-  const supabaseAnonKey = metaEnv?.VITE_SUPABASE_ANON_KEY ||
-                          procEnv?.VITE_SUPABASE_ANON_KEY ||
-                          procEnv?.SUPABASE_ANON_KEY ||
-                          (typeof window !== 'undefined' && (window as any).__SUPABASE_ANON_KEY__);
-
-  if (supabaseUrl && supabaseAnonKey) {
-    supabaseClient = createClient(supabaseUrl, supabaseAnonKey);
+  const config = getSupabaseConfig();
+  if (config.url && config.anonKey) {
+    try {
+      supabaseClient = createClient(config.url, config.anonKey, {
+        auth: {
+          persistSession: true,
+          autoRefreshToken: true,
+        },
+      });
+    } catch (err) {
+      console.warn('Failed to create Supabase client:', err);
+    }
   }
 
   return supabaseClient;
+}
+
+export function setSupabaseCredentials(url: string, anonKey: string): SupabaseClient | null {
+  const trimmedUrl = url.trim().replace(/\/$/, '');
+  const trimmedKey = anonKey.trim();
+
+  if (!trimmedUrl || !trimmedKey) {
+    clearSupabaseCredentials();
+    return null;
+  }
+
+  try {
+    if (typeof localStorage !== 'undefined') {
+      localStorage.setItem('supabase_url', trimmedUrl);
+      localStorage.setItem('supabase_anon_key', trimmedKey);
+    }
+    supabaseClient = createClient(trimmedUrl, trimmedKey, {
+      auth: {
+        persistSession: true,
+        autoRefreshToken: true,
+      },
+    });
+
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('supabaseConfigUpdated', { detail: { url: trimmedUrl } }));
+    }
+
+    return supabaseClient;
+  } catch (err) {
+    console.error('Error creating Supabase client with provided credentials:', err);
+    throw err;
+  }
+}
+
+export function clearSupabaseCredentials(): void {
+  if (typeof localStorage !== 'undefined') {
+    localStorage.removeItem('supabase_url');
+    localStorage.removeItem('supabase_anon_key');
+  }
+  supabaseClient = null;
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('supabaseConfigUpdated', { detail: { url: null } }));
+  }
+}
+
+/**
+ * Asynchronously initialize Supabase from backend /api/supabase/config if client env was missing
+ */
+export async function initSupabaseClient(): Promise<SupabaseClient | null> {
+  const existing = getSupabaseClient();
+  if (existing) return existing;
+
+  if (isFetchingServerConfig) return null;
+  isFetchingServerConfig = true;
+
+  try {
+    const res = await fetch('/api/supabase/config');
+    if (res.ok) {
+      const data = await res.json();
+      if (data && data.supabaseUrl && data.supabaseAnonKey) {
+        return setSupabaseCredentials(data.supabaseUrl, data.supabaseAnonKey);
+      }
+    }
+  } catch (err) {
+    console.warn('Could not auto-fetch Supabase configuration from server:', err);
+  } finally {
+    isFetchingServerConfig = false;
+  }
+
+  return null;
+}
+
+export async function testSupabaseConnection(
+  customUrl?: string,
+  customKey?: string
+): Promise<{ success: boolean; message: string; tables: { meetings: boolean; tasks: boolean } }> {
+  try {
+    let client: SupabaseClient | null = null;
+    if (customUrl && customKey) {
+      client = createClient(customUrl.trim().replace(/\/$/, ''), customKey.trim());
+    } else {
+      client = getSupabaseClient();
+    }
+
+    if (!client) {
+      return {
+        success: false,
+        message: 'Klien Supabase belum dikonfigurasi. Masukkan URL dan Kunci Anon.',
+        tables: { meetings: false, tasks: false },
+      };
+    }
+
+    // Test meetings table
+    const [meetingsRes, tasksRes] = await Promise.all([
+      client.from('meetings').select('count', { count: 'exact', head: true }),
+      client.from('tasks').select('count', { count: 'exact', head: true }),
+    ]);
+
+    const meetingsOk = !meetingsRes.error;
+    const tasksOk = !tasksRes.error;
+
+    if (meetingsOk && tasksOk) {
+      return {
+        success: true,
+        message: `Koneksi berhasil! Ditemukan tabel meetings dan tasks.`,
+        tables: { meetings: true, tasks: true },
+      };
+    }
+
+    if (meetingsOk && !tasksOk) {
+      return {
+        success: true,
+        message: `Koneksi berhasil terhubung, namun tabel 'tasks' belum ditemukan. Jalankan skrip SQL migrasi.`,
+        tables: { meetings: true, tasks: false },
+      };
+    }
+
+    if (!meetingsOk && tasksOk) {
+      return {
+        success: true,
+        message: `Koneksi berhasil terhubung, namun tabel 'meetings' belum ditemukan. Jalankan skrip SQL migrasi.`,
+        tables: { meetings: false, tasks: true },
+      };
+    }
+
+    return {
+      success: false,
+      message: `Gagal mengakses tabel Supabase: ${meetingsRes.error?.message || tasksRes.error?.message || 'Akses ditolak (RLS) atau tabel belum dibuat.'}`,
+      tables: { meetings: false, tasks: false },
+    };
+  } catch (err: any) {
+    return {
+      success: false,
+      message: `Error koneksi: ${err?.message || 'Tidak dapat terhubung ke server Supabase.'}`,
+      tables: { meetings: false, tasks: false },
+    };
+  }
 }
 
 export const SUPABASE_SQL_MIGRATION = `-- ==========================================================

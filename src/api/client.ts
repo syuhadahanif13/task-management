@@ -1,5 +1,5 @@
 import { Meeting, Task, CreateMeetingInput, CreateTaskInput, AIParseResult, TaskSubmission, SubmitTaskInput, Division, User, CreateDivisionInput, CreateUserInput } from '../types';
-import { getSupabaseClient } from '../lib/supabase';
+import { getSupabaseClient, initSupabaseClient } from '../lib/supabase';
 import { embedTaskSubmissionIntoDescription, extractTaskSubmissionFromDescription, extractTaskDescription } from '../utils/submissionUtils';
 
 const API_BASE = (((import.meta as any).env?.VITE_API_URL as string) || '').replace(/\/$/, '');
@@ -314,19 +314,75 @@ export const api = {
       console.warn('API getMeetings failed, checking Supabase client:', err);
     }
 
-    const sbClient = getSupabaseClient();
+    let sbClient = getSupabaseClient();
+    if (!sbClient) {
+      sbClient = await initSupabaseClient();
+    }
 
     // Direct Supabase fallback if API failed or returned empty
     if (!meetingsData || meetingsData.length === 0) {
       if (sbClient) {
         try {
+          let rawMeetings: any[] = [];
           const { data, error } = await sbClient
             .from('meetings')
             .select('*, tasks(*)')
             .order('meeting_date', { ascending: false });
+
           if (!error && Array.isArray(data) && data.length > 0) {
+            rawMeetings = data;
+          } else {
+            // Independent query fallback (doesn't require PostgREST foreign key relationship)
+            const [mRes, tRes] = await Promise.all([
+              sbClient.from('meetings').select('*').order('meeting_date', { ascending: false }),
+              sbClient.from('tasks').select('*'),
+            ]);
+
+            if (!mRes.error && Array.isArray(mRes.data)) {
+              const tasksByMeeting: Record<string, any[]> = {};
+              if (!tRes.error && Array.isArray(tRes.data)) {
+                for (const t of tRes.data) {
+                  const mId = t.meeting_id || 'general-tasks';
+                  if (!tasksByMeeting[mId]) tasksByMeeting[mId] = [];
+                  tasksByMeeting[mId].push(t);
+                }
+              }
+              rawMeetings = mRes.data.map((m: any) => ({
+                ...m,
+                tasks: tasksByMeeting[m.id] || [],
+              }));
+
+              const mIds = new Set(mRes.data.map((m: any) => m.id));
+              const orphaned = (Array.isArray(tRes.data) ? tRes.data : []).filter((t: any) => !t.meeting_id || !mIds.has(t.meeting_id));
+              if (orphaned.length > 0) {
+                rawMeetings.push({
+                  id: 'general-tasks',
+                  title: 'Tugas Mandiri',
+                  meeting_date: new Date().toISOString().split('T')[0],
+                  participants: [],
+                  meeting_notes: 'Tugas umum tanpa rapat',
+                  tasks: orphaned,
+                  created_at: new Date().toISOString(),
+                  updated_at: new Date().toISOString(),
+                });
+              }
+            } else if (!tRes.error && Array.isArray(tRes.data) && tRes.data.length > 0) {
+              rawMeetings = [{
+                id: 'general-tasks',
+                title: 'Tugas Mandiri',
+                meeting_date: new Date().toISOString().split('T')[0],
+                participants: [],
+                meeting_notes: 'Tugas tersimpan di Supabase',
+                tasks: tRes.data,
+                created_at: new Date().toISOString(),
+                updated_at: new Date().toISOString(),
+              }];
+            }
+          }
+
+          if (rawMeetings.length > 0) {
             // Check system submissions store in meetings table
-            const sysMeeting = data.find((m: any) => m.title === '__SYSTEM_TASK_SUBMISSIONS__' || m.id === SYSTEM_SUBMISSIONS_MEETING_ID);
+            const sysMeeting = rawMeetings.find((m: any) => m.title === '__SYSTEM_TASK_SUBMISSIONS__' || m.id === SYSTEM_SUBMISSIONS_MEETING_ID);
             if (sysMeeting && sysMeeting.meeting_notes) {
               try {
                 const parsedSubs: TaskSubmission[] = JSON.parse(sysMeeting.meeting_notes);
@@ -341,29 +397,29 @@ export const api = {
               } catch {}
             }
 
-            meetingsData = data.map((m: any) => ({
+            meetingsData = rawMeetings.map((m: any) => ({
               id: m.id,
-              title: m.title,
+              title: m.title || `Meeting ${m.meeting_date || ''}`,
               meetingDate: m.meeting_date,
-              participants: m.participants || [],
-              meetingNotes: m.meeting_notes,
+              participants: Array.isArray(m.participants) ? m.participants : [],
+              meetingNotes: m.meeting_notes || '',
               createdAt: m.created_at,
               updatedAt: m.updated_at,
               tasks: (m.tasks || []).map((t: any) => ({
                 id: t.id,
                 meetingId: t.meeting_id,
                 title: t.title,
-                assignee: t.assignee,
+                assignee: t.assignee || 'Unassigned',
                 assignees: t.assignees || (t.assignee ? String(t.assignee).split(',').map((s: string) => s.trim()).filter(Boolean) : []),
                 dueDate: t.due_date,
                 dueTime: t.due_time,
                 status: t.status === 'Blocked' ? 'Pending Approval' : t.status,
-                priority: t.priority,
-                description: t.description,
+                priority: t.priority || 'Medium',
+                description: t.description || '',
                 tags: t.tags || [],
                 createdAt: t.created_at,
-                updatedAt: t.updated_at
-              }))
+                updatedAt: t.updated_at,
+              })),
             }));
           }
         } catch (sbErr) {
@@ -612,9 +668,66 @@ export const api = {
     if (params?.assignee) searchParams.append('assignee', params.assignee);
     if (params?.search) searchParams.append('search', params.search);
 
-    const res = await apiFetch(`/api/tasks?${searchParams.toString()}`);
-    if (!res.ok) throw new Error('Failed to fetch tasks');
-    return res.json();
+    try {
+      const res = await apiFetch(`/api/tasks?${searchParams.toString()}`);
+      if (res.ok) {
+        const tasks = await res.json();
+        if (Array.isArray(tasks) && tasks.length > 0) {
+          return tasks;
+        }
+      }
+    } catch {}
+
+    let sbClient = getSupabaseClient();
+    if (!sbClient) {
+      sbClient = await initSupabaseClient();
+    }
+
+    if (sbClient) {
+      try {
+        let query = sbClient.from('tasks').select('*');
+        if (params?.meetingId) query = query.eq('meeting_id', params.meetingId);
+        if (params?.status) query = query.eq('status', params.status);
+        if (params?.assignee) query = query.ilike('assignee', `%${params.assignee}%`);
+        if (params?.search) query = query.ilike('title', `%${params.search}%`);
+
+        const [tRes, mRes] = await Promise.all([
+          query,
+          sbClient.from('meetings').select('id, title, meeting_date')
+        ]);
+
+        if (!tRes.error && Array.isArray(tRes.data)) {
+          const mMap = new Map<string, any>();
+          if (Array.isArray(mRes.data)) {
+            for (const m of mRes.data) mMap.set(m.id, m);
+          }
+          return tRes.data.map((t: any) => {
+            const m = mMap.get(t.meeting_id);
+            return {
+              id: t.id,
+              meetingId: t.meeting_id,
+              title: t.title,
+              assignee: t.assignee || 'Unassigned',
+              assignees: t.assignees || (t.assignee ? String(t.assignee).split(',').map((s: string) => s.trim()).filter(Boolean) : []),
+              dueDate: t.due_date,
+              dueTime: t.due_time,
+              status: t.status === 'Blocked' ? 'Pending Approval' : t.status,
+              priority: t.priority || 'Medium',
+              description: t.description || '',
+              tags: t.tags || [],
+              createdAt: t.created_at,
+              updatedAt: t.updated_at,
+              meetingTitle: m?.title || (m?.meeting_date ? `Meeting ${m.meeting_date}` : 'Tugas Mandiri'),
+              meetingDate: m?.meeting_date || '',
+            };
+          });
+        }
+      } catch (sbErr) {
+        console.warn('Direct Supabase getTasks warning:', sbErr);
+      }
+    }
+
+    return [];
   },
 
   async submitTask(taskId: string, input: SubmitTaskInput): Promise<TaskSubmission> {

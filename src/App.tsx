@@ -31,6 +31,8 @@ import { AddTaskModal } from './components/AddTaskModal';
 import { LoginPage } from './components/LoginPage';
 import { PwaInstallBanner } from './components/PwaInstallBanner';
 import { PwaSettingsCard } from './components/PwaSettingsCard';
+import { SupabaseConfigModal } from './components/SupabaseConfigModal';
+import { getSupabaseConfig } from './lib/supabase';
 
 import {
   Check,
@@ -41,6 +43,7 @@ import {
   CheckSquare,
   Users,
   Settings as SettingsIcon,
+  Database,
 } from 'lucide-react';
 
 export default function App() {
@@ -95,6 +98,7 @@ export default function App() {
   const [isUserManagerOpen, setIsUserManagerOpen] = useState(false);
   const [isAddTaskOpen, setIsAddTaskOpen] = useState(false);
   const [newMeetingDefaultDate, setNewMeetingDefaultDate] = useState('');
+  const [isSupabaseConfigOpen, setIsSupabaseConfigOpen] = useState(false);
 
   // ─── Effects ───
   useEffect(() => {
@@ -896,19 +900,26 @@ export default function App() {
                           <p className="text-xs text-gray-500 dark:text-zinc-400 max-w-sm mx-auto mb-5">
                             {searchQuery ? 'Coba cari dengan kata kunci lain.' : 'Buat jadwal rapat baru untuk mulai mencatat notulen dan action items.'}
                           </p>
-                          <div className="flex items-center justify-center gap-3">
+                          <div className="flex flex-wrap items-center justify-center gap-3">
                             <button
                               onClick={() => setIsNewMeetingOpen(true)}
-                              className="px-5 py-2.5 rounded-full bg-[#18191d] hover:bg-black text-white text-xs font-bold shadow-md"
+                              className="px-5 py-2.5 rounded-full bg-[#18191d] hover:bg-black text-white text-xs font-bold shadow-md transition active:scale-95"
                             >
                               <Plus className="w-3.5 h-3.5 inline mr-1" />
                               Tambah Manual
                             </button>
                             <button
                               onClick={() => setIsAiExtractOpen(true)}
-                              className="px-5 py-2.5 rounded-full bg-indigo-50 text-indigo-700 text-xs font-bold hover:bg-indigo-100"
+                              className="px-5 py-2.5 rounded-full bg-indigo-50 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300 text-xs font-bold hover:bg-indigo-100 dark:hover:bg-indigo-900/50 transition"
                             >
                               ✨ Ekstrak AI
+                            </button>
+                            <button
+                              onClick={() => setIsSupabaseConfigOpen(true)}
+                              className="px-4 py-2.5 rounded-full bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 text-xs font-bold hover:bg-emerald-100 dark:hover:bg-emerald-900/50 border border-emerald-200 dark:border-emerald-800 transition"
+                            >
+                              <Database className="w-3.5 h-3.5 inline mr-1" />
+                              Koneksi Supabase
                             </button>
                           </div>
                         </div>
@@ -1195,6 +1206,73 @@ export default function App() {
                     </div>
                   </div>
 
+                  {/* Supabase Database Settings */}
+                  <div className="ios-card p-5">
+                    <div className="flex items-center justify-between mb-4">
+                      <div className="flex items-center gap-2">
+                        <div className={`w-8 h-8 rounded-xl flex items-center justify-center ${
+                          getSupabaseConfig().isConfigured 
+                            ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400' 
+                            : 'bg-amber-500/10 text-amber-600 dark:text-amber-400'
+                        }`}>
+                          <Database className="w-4 h-4" />
+                        </div>
+                        <div>
+                          <h3 className="text-sm font-semibold text-notion-text">Database Supabase (PostgreSQL)</h3>
+                          <p className="text-xs text-notion-text-secondary">Penyimpanan cloud terpusat untuk Data Rapat dan Action Items</p>
+                        </div>
+                      </div>
+                      <span className={`text-[11px] font-bold px-2.5 py-1 rounded-full ${
+                        getSupabaseConfig().isConfigured 
+                          ? 'bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300' 
+                          : 'bg-amber-100 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300'
+                      }`}>
+                        {getSupabaseConfig().isConfigured ? '● Terkonfigurasi' : '○ Belum Dikonfigurasi'}
+                      </span>
+                    </div>
+
+                    <div className="p-4 rounded-2xl bg-notion-sidebar space-y-3">
+                      <div className="text-xs text-notion-text-secondary flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                        <span>
+                          Sumber:{' '}
+                          <strong>
+                            {getSupabaseConfig().source === 'env'
+                              ? 'Environment Variable (.env)'
+                              : getSupabaseConfig().source === 'localStorage'
+                              ? 'Browser Storage (Tersimpan Lokal)'
+                              : 'Belum Ada'}
+                          </strong>
+                        </span>
+                        {getSupabaseConfig().url && (
+                          <span className="font-mono text-[11px] truncate max-w-xs text-notion-text">
+                            {getSupabaseConfig().url}
+                          </span>
+                        )}
+                      </div>
+
+                      <div className="flex flex-wrap items-center gap-2 pt-1">
+                        <button
+                          onClick={() => setIsSupabaseConfigOpen(true)}
+                          className="notion-btn notion-btn-primary text-xs py-1.5 px-3 flex items-center gap-1.5"
+                        >
+                          <Database className="w-3.5 h-3.5" />
+                          <span>Kelola & Uji Koneksi Supabase</span>
+                        </button>
+
+                        <button
+                          onClick={() => {
+                            loadMeetings(false);
+                            showToast('Menyinkronkan data dari Supabase...');
+                          }}
+                          className="notion-btn text-xs py-1.5 px-3 flex items-center gap-1.5 bg-white dark:bg-zinc-800 text-notion-text border border-notion-border hover:bg-zinc-50 dark:hover:bg-zinc-700 transition"
+                        >
+                          <RefreshCw className="w-3.5 h-3.5" />
+                          <span>Sinkronkan Ulang</span>
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+
                   {/* PWA Application Settings */}
                   <PwaSettingsCard />
                 </div>
@@ -1292,6 +1370,16 @@ export default function App() {
         onClose={() => setIsAddTaskOpen(false)}
         onAddTask={handleAddTaskToMeeting}
         currentUser={currentUser}
+      />
+
+      <SupabaseConfigModal
+        isOpen={isSupabaseConfigOpen}
+        onClose={() => setIsSupabaseConfigOpen(false)}
+        meetings={meetings}
+        onConnectSuccess={() => {
+          loadMeetings(false);
+          showToast('Koneksi Supabase diperbarui & data disinkronkan.');
+        }}
       />
 
       {/* Progressive Web App (PWA) Install Prompt */}

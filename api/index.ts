@@ -124,6 +124,49 @@ router.get('/health', (req, res) => {
   });
 });
 
+router.get('/supabase/config', (req, res) => {
+  const url = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || '';
+  const anonKey = process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY || '';
+  res.json({
+    configured: Boolean(url && (anonKey || process.env.SUPABASE_SERVICE_ROLE_KEY)),
+    supabaseUrl: url,
+    supabaseAnonKey: anonKey,
+    hasServerClient: Boolean(supabase),
+  });
+});
+
+router.get('/supabase/test', async (req, res) => {
+  if (!supabase) {
+    return res.json({
+      connected: false,
+      message: 'Supabase belum dikonfigurasi di server environment.',
+      meetingsCount: 0,
+      tasksCount: 0,
+    });
+  }
+
+  try {
+    const [mRes, tRes] = await Promise.all([
+      supabase.from('meetings').select('count', { count: 'exact', head: true }),
+      supabase.from('tasks').select('count', { count: 'exact', head: true }),
+    ]);
+
+    res.json({
+      connected: !mRes.error || !tRes.error,
+      meetingsCount: mRes.count ?? 0,
+      tasksCount: tRes.count ?? 0,
+      meetingsError: mRes.error ? mRes.error.message : null,
+      tasksError: tRes.error ? tRes.error.message : null,
+      message: (!mRes.error && !tRes.error) ? 'Terhubung normal ke tabel meetings dan tasks' : 'Terhubung sebagian / terdapat error tabel',
+    });
+  } catch (err: any) {
+    res.status(500).json({
+      connected: false,
+      error: err?.message || 'Error saat menghubungi Supabase',
+    });
+  }
+});
+
 router.get('/schema', (req, res) => {
   res.json({
     architecture: 'Meeting-Driven Action Item Management System',
@@ -462,24 +505,87 @@ async function syncMeetingsFromSupabase(): Promise<Meeting[]> {
   if (!supabase) return meetings;
   try {
     // Sync submissions from Supabase system store and task_submissions table
-    await loadSubmissionsFromSupabase(supabase);
+    try {
+      await loadSubmissionsFromSupabase(supabase);
+    } catch (subErr: any) {
+      console.warn('loadSubmissionsFromSupabase non-fatal warning:', subErr?.message);
+    }
 
-    const { data: dbMeetings, error } = await supabase
+    let rawMeetings: any[] = [];
+    let rawTasks: any[] = [];
+
+    // Attempt 1: Try joined query (faster if foreign key exists)
+    const { data: dbMeetings, error: joinErr } = await supabase
       .from('meetings')
       .select('*, tasks(*)')
       .order('meeting_date', { ascending: false });
 
+    if (!joinErr && Array.isArray(dbMeetings) && dbMeetings.length > 0) {
+      rawMeetings = dbMeetings;
+    } else {
+      if (joinErr) {
+        console.warn('Supabase join query error (likely no foreign key constraint), falling back to independent queries:', joinErr.message);
+      }
+      // Attempt 2: Independent queries (100% resilient, independent of foreign key constraint!)
+      const [mRes, tRes] = await Promise.all([
+        supabase.from('meetings').select('*').order('meeting_date', { ascending: false }),
+        supabase.from('tasks').select('*'),
+      ]);
+
+      if (!mRes.error && Array.isArray(mRes.data)) {
+        const tasksByMeeting: Record<string, any[]> = {};
+        if (!tRes.error && Array.isArray(tRes.data)) {
+          rawTasks = tRes.data;
+          for (const t of tRes.data) {
+            const mId = t.meeting_id || 'general-tasks';
+            if (!tasksByMeeting[mId]) tasksByMeeting[mId] = [];
+            tasksByMeeting[mId].push(t);
+          }
+        }
+        rawMeetings = mRes.data.map((m: any) => ({
+          ...m,
+          tasks: tasksByMeeting[m.id] || [],
+        }));
+
+        // Handle orphaned tasks
+        const mIds = new Set(mRes.data.map((m: any) => m.id));
+        const orphaned = rawTasks.filter((t: any) => !t.meeting_id || !mIds.has(t.meeting_id));
+        if (orphaned.length > 0) {
+          rawMeetings.push({
+            id: 'general-tasks',
+            title: 'Tugas Mandiri',
+            meeting_date: new Date().toISOString().split('T')[0],
+            participants: [],
+            meeting_notes: 'Tugas umum tanpa rapat',
+            tasks: orphaned,
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+          });
+        }
+      } else if (mRes.error) {
+        console.warn('Supabase meetings independent query failed:', mRes.error.message);
+        if (!tRes.error && Array.isArray(tRes.data) && tRes.data.length > 0) {
+          rawMeetings = [{
+            id: 'general-tasks',
+            title: 'Tugas Mandiri',
+            meeting_date: new Date().toISOString().split('T')[0],
+            participants: [],
+            meeting_notes: 'Tugas tersimpan di Supabase',
+            tasks: tRes.data,
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+          }];
+        }
+      }
+    }
+
     // Collect all task IDs that have pending submissions
     const pendingTaskIdSet = new Set<string>();
-
-    // Add pending tasks from submissions store
     for (const s of submissions) {
       if (s.status === 'pending') {
         pendingTaskIdSet.add(s.taskId);
       }
     }
-
-    // Retain Pending Approval status currently in memory to prevent race condition reversion
     for (const m of meetings) {
       for (const t of m.tasks || []) {
         if (t.status === 'Pending Approval') {
@@ -488,18 +594,17 @@ async function syncMeetingsFromSupabase(): Promise<Meeting[]> {
       }
     }
 
-    if (!error && Array.isArray(dbMeetings)) {
-      // Exclude system meetings
-      const cleanDbMeetings = dbMeetings.filter(
-        (m: any) => m.id !== SYSTEM_SUBMISSIONS_MEETING_ID && !String(m.id).startsWith('system-')
+    if (Array.isArray(rawMeetings) && rawMeetings.length > 0) {
+      const cleanDbMeetings = rawMeetings.filter(
+        (m: any) => m.id !== SYSTEM_SUBMISSIONS_MEETING_ID && !String(m.id).startsWith('system-') && m.title !== '__SYSTEM_TASK_SUBMISSIONS__'
       );
 
       const formatted: Meeting[] = cleanDbMeetings.map((m: any) => ({
         id: m.id,
-        title: m.title,
+        title: m.title || `Meeting ${m.meeting_date || ''}`,
         meetingDate: m.meeting_date,
-        participants: m.participants || [],
-        meetingNotes: m.meeting_notes,
+        participants: Array.isArray(m.participants) ? m.participants : [],
+        meetingNotes: m.meeting_notes || '',
         createdAt: m.created_at,
         updatedAt: m.updated_at,
         tasks: (m.tasks || []).map((t: any) => {
@@ -508,18 +613,18 @@ async function syncMeetingsFromSupabase(): Promise<Meeting[]> {
             id: t.id,
             meetingId: t.meeting_id,
             title: t.title,
-            assignee: t.assignee,
+            assignee: t.assignee || 'Unassigned',
             assignees: t.assignees || (t.assignee ? String(t.assignee).split(',').map((s: string) => s.trim()).filter(Boolean) : []),
             dueDate: t.due_date,
             dueTime: t.due_time,
             status: isPending ? ('Pending Approval' as TaskStatus) : (t.status as TaskStatus),
-            priority: t.priority,
-            description: t.description,
+            priority: t.priority || 'Medium',
+            description: t.description || '',
             tags: t.tags || [],
             createdAt: t.created_at,
-            updatedAt: t.updated_at
+            updatedAt: t.updated_at,
           };
-        })
+        }),
       }));
       meetings = formatted;
       return formatted;
@@ -725,12 +830,59 @@ router.get('/tasks', async (req, res) => {
           assignees: t.assignees || (t.assignee ? String(t.assignee).split(',').map((s: string) => s.trim()).filter(Boolean) : []),
           dueDate: t.due_date,
           status: t.status,
+          priority: t.priority || 'Medium',
+          description: t.description || '',
+          tags: t.tags || [],
           createdAt: t.created_at,
           updatedAt: t.updated_at,
-          meetingTitle: t.meetings?.title || `Meeting ${t.meetings?.meeting_date || ''}`,
+          meetingTitle: t.meetings?.title || (t.meetings?.meeting_date ? `Meeting ${t.meetings.meeting_date}` : 'Tugas Mandiri'),
           meetingDate: t.meetings?.meeting_date || '',
         }));
         return res.json(formatted);
+      } else {
+        // Fallback: Query tasks and meetings independently without foreign key requirement
+        let fallbackQuery = supabase
+          .from('tasks')
+          .select('*')
+          .order('due_date', { ascending: true });
+
+        if (meetingId) fallbackQuery = fallbackQuery.eq('meeting_id', String(meetingId));
+        if (status) fallbackQuery = fallbackQuery.eq('status', String(status));
+        if (assignee) fallbackQuery = fallbackQuery.ilike('assignee', `%${assignee}%`);
+        if (search) fallbackQuery = fallbackQuery.ilike('title', `%${search}%`);
+
+        const [tRes, mRes] = await Promise.all([
+          fallbackQuery,
+          supabase.from('meetings').select('id, title, meeting_date'),
+        ]);
+
+        if (!tRes.error && Array.isArray(tRes.data)) {
+          const mMap = new Map<string, any>();
+          if (Array.isArray(mRes.data)) {
+            for (const m of mRes.data) mMap.set(m.id, m);
+          }
+
+          const formatted = tRes.data.map((t: any) => {
+            const m = mMap.get(t.meeting_id);
+            return {
+              id: t.id,
+              meetingId: t.meeting_id,
+              title: t.title,
+              assignee: t.assignee,
+              assignees: t.assignees || (t.assignee ? String(t.assignee).split(',').map((s: string) => s.trim()).filter(Boolean) : []),
+              dueDate: t.due_date,
+              status: t.status,
+              priority: t.priority || 'Medium',
+              description: t.description || '',
+              tags: t.tags || [],
+              createdAt: t.created_at,
+              updatedAt: t.updated_at,
+              meetingTitle: m?.title || (m?.meeting_date ? `Meeting ${m.meeting_date}` : 'Tugas Mandiri'),
+              meetingDate: m?.meeting_date || '',
+            };
+          });
+          return res.json(formatted);
+        }
       }
     } catch (err: any) {
       console.warn('Supabase get tasks error:', err?.message);
