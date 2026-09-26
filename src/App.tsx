@@ -1034,6 +1034,7 @@ export default function App() {
               {/* TAB: ACTIVE MEETING */}
               {currentTab === 'active-meeting' && selectedMeeting && (
                 <MeetingDetailView
+                  key={selectedMeeting.id}
                   meeting={selectedMeeting}
                   onBack={() => setCurrentTab('meetings')}
                   onUpdateMeeting={handleUpdateMeeting}

@@ -71,9 +71,18 @@ export const MeetingDetailView: React.FC<MeetingDetailViewProps> = ({
   const [editParticipants, setEditParticipants] = useState(meeting.participants.join(', '));
   const [newParticipantInput, setNewParticipantInput] = useState('');
   const [isAddingParticipant, setIsAddingParticipant] = useState(false);
+  const [notesViewMode, setNotesViewMode] = useState<'structured' | 'raw'>('structured');
 
   const [users, setUsers] = useState<Omit<User, 'password'>[]>([]);
   const [divisions, setDivisions] = useState<Division[]>([]);
+
+  // Synchronize edit fields when meeting prop changes
+  useEffect(() => {
+    setEditTitle(meeting.title || '');
+    setEditDate(meeting.meetingDate);
+    setEditNotes(meeting.meetingNotes || '');
+    setEditParticipants(meeting.participants ? meeting.participants.join(', ') : '');
+  }, [meeting.id, meeting.meetingNotes, meeting.title, meeting.meetingDate, meeting.participants]);
 
   useEffect(() => {
     Promise.all([api.getUsers(), api.getDivisions()])
@@ -437,74 +446,101 @@ export const MeetingDetailView: React.FC<MeetingDetailViewProps> = ({
 
           {/* Meeting Notes */}
           <div className="bg-[#f8f9fa] dark:bg-zinc-800/60 rounded-[26px] p-5 border border-gray-200/50 dark:border-zinc-700/50">
-            <div className="flex items-center justify-between mb-3">
-              <div className="flex items-center gap-2">
-                <FileText className="h-4 w-4 text-emerald-500" />
-                <h3 className="text-xs font-bold text-gray-500 dark:text-zinc-400 uppercase tracking-wider">
-                  Catatan Rapat
-                </h3>
-              </div>
-              {!isEditingMeeting && onAiExtractNotes && (
-                <button
-                  onClick={() => onAiExtractNotes(meeting.meetingNotes, meeting.meetingDate)}
-                  className="px-3 py-1 rounded-full bg-indigo-50 dark:bg-indigo-950/40 text-indigo-600 dark:text-indigo-300 text-xs font-bold flex items-center gap-1 hover:bg-indigo-100"
-                >
-                  <Sparkles className="h-3 w-3" />
-                  <span>AI Parse</span>
-                </button>
-              )}
-            </div>
-            {isEditingMeeting ? (
-              <textarea
-                value={editNotes}
-                onChange={(e) => setEditNotes(e.target.value)}
-                rows={10}
-                className="w-full bg-white dark:bg-zinc-700/80 rounded-2xl p-3.5 text-xs text-gray-800 dark:text-white border border-gray-200 resize-none leading-relaxed"
-                placeholder="Tuliskan poin-poin pembahasan rapat di sini..."
-              />
-            ) : (() => {
+            {(() => {
               const parsed = parseMeetingNotes(meeting.meetingNotes);
-              if (parsed.isStructured && parsed.divisionNotes.length > 0) {
-                return (
-                  <div className="space-y-3 max-h-[380px] overflow-y-auto pr-1">
-                    {parsed.divisionNotes.map((dNote) => (
-                      <div
-                        key={dNote.id}
-                        className="p-3.5 bg-white dark:bg-zinc-800 rounded-2xl border border-gray-200/70 dark:border-zinc-700/60 shadow-2xs space-y-1.5"
+              return (
+                <>
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="flex items-center gap-2">
+                      <FileText className="h-4 w-4 text-emerald-500" />
+                      <h3 className="text-xs font-bold text-gray-500 dark:text-zinc-400 uppercase tracking-wider">
+                        Catatan Rapat
+                      </h3>
+                      {parsed.isStructured && parsed.divisionNotes.length > 0 && !isEditingMeeting && (
+                        <div className="flex items-center bg-gray-200/70 dark:bg-zinc-700/60 p-0.5 rounded-lg text-[10px] ml-1">
+                          <button
+                            type="button"
+                            onClick={() => setNotesViewMode('structured')}
+                            className={`px-2 py-0.5 rounded-md font-medium transition ${
+                              notesViewMode === 'structured'
+                                ? 'bg-white dark:bg-zinc-800 text-emerald-700 dark:text-emerald-400 shadow-2xs font-bold'
+                                : 'text-gray-500 dark:text-zinc-400 hover:text-gray-800 dark:hover:text-zinc-200'
+                            }`}
+                          >
+                            Per Divisi
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setNotesViewMode('raw')}
+                            className={`px-2 py-0.5 rounded-md font-medium transition ${
+                              notesViewMode === 'raw'
+                                ? 'bg-white dark:bg-zinc-800 text-gray-900 dark:text-white shadow-2xs font-bold'
+                                : 'text-gray-500 dark:text-zinc-400 hover:text-gray-800 dark:hover:text-zinc-200'
+                            }`}
+                          >
+                            Teks Penuh
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                    {!isEditingMeeting && onAiExtractNotes && (
+                      <button
+                        onClick={() => onAiExtractNotes(meeting.meetingNotes, meeting.meetingDate)}
+                        className="px-3 py-1 rounded-full bg-indigo-50 dark:bg-indigo-950/40 text-indigo-600 dark:text-indigo-300 text-xs font-bold flex items-center gap-1 hover:bg-indigo-100"
                       >
-                        <div className="flex items-center gap-1.5">
-                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-md text-[11px] font-bold bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
-                            <Building className="w-3 h-3 text-emerald-600 dark:text-emerald-400" />
-                            <span>Divisi {dNote.divisionName}</span>
-                          </span>
-                        </div>
-                        <div className="text-xs sm:text-sm text-gray-800 dark:text-zinc-200 whitespace-pre-wrap leading-relaxed pl-0.5">
-                          {dNote.notes || <span className="text-gray-400 italic">Tidak ada catatan khusus.</span>}
-                        </div>
-                      </div>
-                    ))}
-
-                    {parsed.generalNotes && (
-                      <div className="p-3.5 bg-white dark:bg-zinc-800 rounded-2xl border border-dashed border-gray-300 dark:border-zinc-700 shadow-2xs space-y-1.5">
-                        <div className="flex items-center gap-1.5">
-                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-md text-[11px] font-bold bg-blue-50 dark:bg-blue-950/40 text-ios-blue border border-blue-200 dark:border-blue-800">
-                            <FileText className="w-3 h-3" />
-                            <span>Catatan Umum / Pleno</span>
-                          </span>
-                        </div>
-                        <div className="text-xs sm:text-sm text-gray-800 dark:text-zinc-200 whitespace-pre-wrap leading-relaxed pl-0.5">
-                          {parsed.generalNotes}
-                        </div>
-                      </div>
+                        <Sparkles className="h-3 w-3" />
+                        <span>AI Parse</span>
+                      </button>
                     )}
                   </div>
-                );
-              }
 
-              return (
-                <div className="text-xs sm:text-sm text-gray-800 dark:text-zinc-200 whitespace-pre-wrap leading-relaxed max-h-[380px] overflow-y-auto">
-                  {meeting.meetingNotes || 'Tidak ada catatan tertulis.'}
-                </div>
+                  {isEditingMeeting ? (
+                    <textarea
+                      value={editNotes}
+                      onChange={(e) => setEditNotes(e.target.value)}
+                      rows={10}
+                      className="w-full bg-white dark:bg-zinc-700/80 rounded-2xl p-3.5 text-xs text-gray-800 dark:text-white border border-gray-200 resize-none leading-relaxed"
+                      placeholder="Tuliskan poin-poin pembahasan rapat di sini..."
+                    />
+                  ) : parsed.isStructured && parsed.divisionNotes.length > 0 && notesViewMode === 'structured' ? (
+                    <div className="space-y-3 max-h-[380px] overflow-y-auto pr-1">
+                      {parsed.divisionNotes.map((dNote) => (
+                        <div
+                          key={dNote.id}
+                          className="p-3.5 bg-white dark:bg-zinc-800 rounded-2xl border border-gray-200/70 dark:border-zinc-700/60 shadow-2xs space-y-1.5"
+                        >
+                          <div className="flex items-center gap-1.5">
+                            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-md text-[11px] font-bold bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
+                              <Building className="w-3 h-3 text-emerald-600 dark:text-emerald-400" />
+                              <span>Divisi {dNote.divisionName}</span>
+                            </span>
+                          </div>
+                          <div className="text-xs sm:text-sm text-gray-800 dark:text-zinc-200 whitespace-pre-wrap leading-relaxed pl-0.5">
+                            {dNote.notes || <span className="text-gray-400 italic">Tidak ada catatan khusus.</span>}
+                          </div>
+                        </div>
+                      ))}
+
+                      {parsed.generalNotes && (
+                        <div className="p-3.5 bg-white dark:bg-zinc-800 rounded-2xl border border-dashed border-gray-300 dark:border-zinc-700 shadow-2xs space-y-1.5">
+                          <div className="flex items-center gap-1.5">
+                            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-md text-[11px] font-bold bg-blue-50 dark:bg-blue-950/40 text-ios-blue border border-blue-200 dark:border-blue-800">
+                              <FileText className="w-3 h-3" />
+                              <span>Catatan Umum / Pleno</span>
+                            </span>
+                          </div>
+                          <div className="text-xs sm:text-sm text-gray-800 dark:text-zinc-200 whitespace-pre-wrap leading-relaxed pl-0.5">
+                            {parsed.generalNotes}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="text-xs sm:text-sm text-gray-800 dark:text-zinc-200 whitespace-pre-wrap leading-relaxed max-h-[380px] overflow-y-auto">
+                      {meeting.meetingNotes || 'Tidak ada catatan tertulis.'}
+                    </div>
+                  )}
+                </>
               );
             })()}
           </div>

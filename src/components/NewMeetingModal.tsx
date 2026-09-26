@@ -194,7 +194,7 @@ export const NewMeetingModal: React.FC<NewMeetingModalProps> = ({
   const handleToggleMode = (newMode: 'division' | 'raw') => {
     if (newMode === 'raw') {
       const combined = formatMeetingNotes(divisionNotes, generalNotes);
-      setRawNotes(combined);
+      setRawNotes(combined.trim() || rawNotes);
       setNoteMode('raw');
     } else {
       const parsed = parseMeetingNotes(rawNotes);
@@ -286,8 +286,12 @@ export const NewMeetingModal: React.FC<NewMeetingModalProps> = ({
     if (noteMode === 'division') {
       finalNotes = formatMeetingNotes(divisionNotes, generalNotes).trim();
       if (!finalNotes) {
-        setErrorMsg('Catatan Notula Rapat wajib diisi (minimal satu divisi atau catatan umum).');
-        return;
+        if (rawNotes.trim()) {
+          finalNotes = rawNotes.trim();
+        } else {
+          setErrorMsg('Catatan Notula Rapat wajib diisi (minimal satu divisi atau catatan umum).');
+          return;
+        }
       }
     } else {
       finalNotes = rawNotes.trim();
