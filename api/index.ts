@@ -1378,36 +1378,40 @@ router.get('/tasks/:taskId/submissions', async (req, res) => {
             .eq('task_id', validId)
             .order('submitted_at', { ascending: false });
 
-      if (!error && Array.isArray(data) && data.length > 0) {
-        for (const s of data) {
-          const item: TaskSubmission = {
-            id: s.id,
-            taskId: s.task_id,
-            taskTitle: targetTask?.title,
-            assignee: s.assignee,
-            notes: s.notes || '',
-            attachments: Array.isArray(s.attachments) ? s.attachments : [],
-            status: s.status || 'pending',
-            submittedAt: s.submitted_at,
-            reviewedBy: s.reviewed_by,
-            reviewedAt: s.reviewed_at,
-            reviewNote: s.review_note
-          };
-          const existingIdx = submissions.findIndex(x => x.id === item.id || x.taskId === item.taskId || (targetTask && x.taskTitle === targetTask.title));
-          if (existingIdx >= 0) {
-            const existingAtt = Array.isArray(submissions[existingIdx].attachments) ? submissions[existingIdx].attachments : [];
-            submissions[existingIdx] = {
-              ...submissions[existingIdx],
-              ...item,
-              attachments: item.attachments.length > 0 ? item.attachments : existingAtt,
-            };
-          } else {
-            submissions.push(item);
+          if (!error && Array.isArray(data) && data.length > 0) {
+            for (const s of data) {
+              const item: TaskSubmission = {
+                id: s.id,
+                taskId: s.task_id,
+                taskTitle: targetTask?.title,
+                assignee: s.assignee,
+                notes: s.notes || '',
+                attachments: Array.isArray(s.attachments) ? s.attachments : [],
+                status: s.status || 'pending',
+                submittedAt: s.submitted_at,
+                reviewedBy: s.reviewed_by,
+                reviewedAt: s.reviewed_at,
+                reviewNote: s.review_note
+              };
+              const existingIdx = submissions.findIndex(x => x.id === item.id || x.taskId === item.taskId || (targetTask && x.taskTitle === targetTask.title));
+              if (existingIdx >= 0) {
+                const existingAtt = Array.isArray(submissions[existingIdx].attachments) ? submissions[existingIdx].attachments : [];
+                submissions[existingIdx] = {
+                  ...submissions[existingIdx],
+                  ...item,
+                  attachments: item.attachments.length > 0 ? item.attachments : existingAtt,
+                };
+              } else {
+                submissions.push(item);
+              }
+            }
           }
+        } catch (err: any) {
+          console.warn('Supabase read task_submissions warning:', err?.message);
         }
       }
     } catch (err: any) {
-      console.warn('Supabase read task_submissions warning:', err?.message);
+      console.warn('Supabase load submissions warning:', err?.message);
     }
   }
 

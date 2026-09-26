@@ -449,7 +449,7 @@ export const api = {
                 if (!embeddedSub.taskId) embeddedSub.taskId = t.id;
                 if (!embeddedSub.taskTitle) embeddedSub.taskTitle = t.title;
                 saveCachedTaskSubmission(embeddedSub);
-                if (embeddedSub.status === 'pending' || t.status === 'Pending Approval' || t.status === 'Blocked') {
+                if (embeddedSub.status === 'pending' || (t.status as string) === 'Pending Approval' || (t.status as string) === 'Blocked') {
                   addCachedPendingTaskId(t.id);
                 }
               }
@@ -469,7 +469,7 @@ export const api = {
             if (pendingIds.has(t.id)) removeCachedPendingTaskId(t.id);
             return t;
           }
-          if (t.status === 'Blocked' || t.status === 'Pending Approval' || pendingIds.has(t.id)) {
+          if ((t.status as string) === 'Blocked' || t.status === 'Pending Approval' || pendingIds.has(t.id)) {
             return { ...t, status: 'Pending Approval' as const };
           }
           return t;
@@ -1016,10 +1016,12 @@ export const api = {
         }).catch(() => {});
         if (sbClient) {
           saveSubmissionToSupabaseSystemMeeting(sbClient, localSubWithAtt).catch(() => {});
-          sbClient.from('tasks').select('description').eq('id', taskId).maybeSingle().then(({ data }: any) => {
+          Promise.resolve(
+            sbClient.from('tasks').select('description').eq('id', taskId).maybeSingle()
+          ).then(({ data }: any) => {
             if (data) {
               const nd = embedTaskSubmissionIntoDescription(data.description || '', localSubWithAtt!);
-              sbClient.from('tasks').update({ description: nd }).eq('id', taskId).then(() => {});
+              sbClient.from('tasks').update({ description: nd }).eq('id', taskId);
             }
           }).catch(() => {});
         }

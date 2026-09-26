@@ -76,8 +76,10 @@ export const SupabaseConfigModal: React.FC<SupabaseConfigModalProps> = ({
     setTimeout(() => setCopied(null), 2000);
   };
 
-  const handleTestConnection = async () => {
-    if (!url.trim() || !anonKey.trim()) {
+  const handleTestConnection = async (targetUrl?: string, targetKey?: string) => {
+    const testUrl = targetUrl !== undefined ? targetUrl : url;
+    const testKey = targetKey !== undefined ? targetKey : anonKey;
+    if (!testUrl.trim() || !testKey.trim()) {
       setTestResult({
         success: false,
         message: 'Masukkan Project URL dan Anon Key terlebih dahulu.',
@@ -87,7 +89,7 @@ export const SupabaseConfigModal: React.FC<SupabaseConfigModalProps> = ({
     setIsTesting(true);
     setTestResult(null);
     try {
-      const res = await testSupabaseConnection(url, anonKey);
+      const res = await testSupabaseConnection(testUrl, testKey);
       setTestResult(res);
     } catch (err: any) {
       setTestResult({
