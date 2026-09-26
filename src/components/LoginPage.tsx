@@ -107,7 +107,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({
                 type="text"
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
-                placeholder="admin"
+                placeholder={currentLang === 'en' ? 'Enter username' : 'Masukkan username'}
                 autoComplete="username"
                 className="notion-input"
               />
@@ -136,59 +136,6 @@ export const LoginPage: React.FC<LoginPageProps> = ({
               {isSubmitting ? t.auth.loggingIn : t.auth.loginButton}
             </button>
           </form>
-
-          {/* Quick Login / Testing Accounts */}
-          <div className="pt-3 border-t border-notion-border space-y-2">
-            <p className="text-[11px] font-semibold text-notion-text-secondary text-center">
-              Akun Percobaan (Testing & Debugging):
-            </p>
-            <div className="grid grid-cols-2 gap-1.5">
-              <button
-                type="button"
-                onClick={() => {
-                  setUsername('admin');
-                  setPassword('r@jaemasmantab');
-                  setErrorMsg('');
-                }}
-                className="px-2.5 py-1.5 text-[11px] font-semibold rounded-lg bg-indigo-50 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300 hover:bg-indigo-100 transition-colors text-center border border-indigo-200/50"
-              >
-                👑 Admin
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setUsername('rizki');
-                  setPassword('r@jaemas123');
-                  setErrorMsg('');
-                }}
-                className="px-2.5 py-1.5 text-[11px] font-semibold rounded-lg bg-zinc-100 dark:bg-zinc-800 text-zinc-800 dark:text-zinc-200 hover:bg-zinc-200 transition-colors text-center border border-zinc-200 dark:border-zinc-700"
-              >
-                👤 User (Rizki)
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setUsername('ajeng');
-                  setPassword('r@jaemas123');
-                  setErrorMsg('');
-                }}
-                className="px-2.5 py-1.5 text-[11px] font-semibold rounded-lg bg-zinc-100 dark:bg-zinc-800 text-zinc-800 dark:text-zinc-200 hover:bg-zinc-200 transition-colors text-center border border-zinc-200 dark:border-zinc-700"
-              >
-                👤 User (Ajeng)
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setUsername('Hanif');
-                  setPassword('r@jaemas123');
-                  setErrorMsg('');
-                }}
-                className="px-2.5 py-1.5 text-[11px] font-semibold rounded-lg bg-zinc-100 dark:bg-zinc-800 text-zinc-800 dark:text-zinc-200 hover:bg-zinc-200 transition-colors text-center border border-zinc-200 dark:border-zinc-700"
-              >
-                👤 User (Hanif)
-              </button>
-            </div>
-          </div>
         </div>
       </div>
     </div>
