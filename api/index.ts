@@ -910,7 +910,7 @@ router.get('/tasks', async (req, res) => {
 
         const [tRes, mRes] = await Promise.all([
           fallbackQuery,
-          supabase.from('meetings').select('id, title, meeting_date'),
+          supabase.from('meetings').select('*'),
         ]);
 
         if (!tRes.error && Array.isArray(tRes.data)) {
@@ -921,21 +921,23 @@ router.get('/tasks', async (req, res) => {
 
           const formatted = tRes.data.map((t: any) => {
             const m = mMap.get(t.meeting_id);
+            const mTitle = m?.title || (m?.meeting_date ? `Meeting ${m.meeting_date}` : (m?.meetingDate ? `Meeting ${m.meetingDate}` : 'Tugas Mandiri'));
+            const mDate = m?.meeting_date || m?.meetingDate || m?.date || '';
             return {
               id: t.id,
               meetingId: t.meeting_id,
               title: t.title,
               assignee: t.assignee,
               assignees: t.assignees || (t.assignee ? String(t.assignee).split(',').map((s: string) => s.trim()).filter(Boolean) : []),
-              dueDate: t.due_date,
+              dueDate: t.due_date || t.dueDate,
               status: t.status,
               priority: t.priority || 'Medium',
               description: t.description || '',
               tags: t.tags || [],
               createdAt: t.created_at,
               updatedAt: t.updated_at,
-              meetingTitle: m?.title || (m?.meeting_date ? `Meeting ${m.meeting_date}` : 'Tugas Mandiri'),
-              meetingDate: m?.meeting_date || '',
+              meetingTitle: mTitle,
+              meetingDate: mDate,
             };
           });
           return res.json(formatted);
