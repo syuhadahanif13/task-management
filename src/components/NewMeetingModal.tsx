@@ -321,10 +321,10 @@ export const NewMeetingModal: React.FC<NewMeetingModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm overflow-y-auto">
-      <div className="notion-card w-full max-w-3xl my-8 overflow-hidden">
-        {/* Header */}
-        <div className="px-6 py-4 border-b border-notion-border flex items-center justify-between">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 md:p-8 bg-black/60 backdrop-blur-xs">
+      <div className="bg-white dark:bg-zinc-900 rounded-3xl border border-zinc-200/80 dark:border-zinc-800 shadow-2xl w-full max-w-3xl flex flex-col max-h-[88vh] overflow-hidden">
+        {/* Header (Fixed / Sticky at Top) */}
+        <div className="px-6 py-4 border-b border-zinc-200/80 dark:border-zinc-800 flex items-center justify-between shrink-0 bg-white dark:bg-zinc-900 z-10">
           <div>
             <h3 className="text-base font-bold text-notion-text">Buat Rapat & Notula Baru</h3>
             <p className="text-xs text-notion-text-secondary">
@@ -332,20 +332,22 @@ export const NewMeetingModal: React.FC<NewMeetingModalProps> = ({
             </p>
           </div>
           <button
+            type="button"
             onClick={onClose}
-            className="rounded-md p-1.5 text-notion-text-secondary hover:bg-notion-hover"
+            className="rounded-lg p-1.5 text-notion-text-secondary hover:text-notion-text hover:bg-notion-hover transition-colors"
           >
             <X className="w-5 h-5" />
           </button>
         </div>
 
-        {/* Form Body */}
-        <form onSubmit={handleSubmit} className="p-6 space-y-5">
-          {errorMsg && (
-            <div className="p-3 text-xs bg-rose-50 border border-rose-200 text-rose-700 rounded-lg">
-              {errorMsg}
-            </div>
-          )}
+        {/* Form Body with scrollable content & fixed footer */}
+        <form onSubmit={handleSubmit} className="flex flex-col flex-1 min-h-0 overflow-hidden">
+          <div className="p-5 sm:p-6 overflow-y-auto flex-1 space-y-5">
+            {errorMsg && (
+              <div className="p-3 text-xs bg-rose-50 border border-rose-200 text-rose-700 rounded-lg">
+                {errorMsg}
+              </div>
+            )}
 
           {/* Meeting Title */}
           <div>
@@ -766,11 +768,11 @@ export const NewMeetingModal: React.FC<NewMeetingModalProps> = ({
                           </div>
 
                           <textarea
-                            rows={3}
+                            rows={2}
                             placeholder={`Tuliskan capaian, progres program, kendala, atau notula untuk Divisi ${dNote.divisionName}...`}
                             value={dNote.notes}
                             onChange={(e) => handleUpdateDivisionNote(dNote.id, e.target.value)}
-                            className="w-full notion-input text-xs bg-notion-bg leading-relaxed resize-y"
+                            className="w-full notion-input text-xs bg-notion-bg leading-relaxed resize-y min-h-[58px]"
                           />
                         </div>
                       );
@@ -919,22 +921,29 @@ export const NewMeetingModal: React.FC<NewMeetingModalProps> = ({
             </div>
           </div>
 
-          {/* Action Buttons */}
-          <div className="pt-4 border-t border-notion-border flex items-center justify-end gap-2">
-            <button
-              type="button"
-              onClick={onClose}
-              className="notion-btn notion-btn-ghost text-xs"
-            >
-              Batal
-            </button>
-            <button
-              type="submit"
-              disabled={isSubmitting}
-              className="notion-btn notion-btn-primary text-xs"
-            >
-              {isSubmitting ? 'Menyimpan...' : 'Simpan Rapat & Tugas'}
-            </button>
+          </div>
+
+          {/* Action Buttons (Sticky Footer) */}
+          <div className="px-6 py-3.5 border-t border-zinc-200/80 dark:border-zinc-800 bg-zinc-50/90 dark:bg-zinc-950/90 flex items-center justify-between shrink-0">
+            <span className="text-xs text-notion-text-secondary hidden sm:inline">
+              * Kolom bertanda bintang wajib diisi
+            </span>
+            <div className="flex items-center gap-2 ml-auto">
+              <button
+                type="button"
+                onClick={onClose}
+                className="notion-btn notion-btn-ghost text-xs"
+              >
+                Batal
+              </button>
+              <button
+                type="submit"
+                disabled={isSubmitting}
+                className="notion-btn notion-btn-primary text-xs"
+              >
+                {isSubmitting ? 'Menyimpan...' : 'Simpan Rapat & Tugas'}
+              </button>
+            </div>
           </div>
         </form>
       </div>
