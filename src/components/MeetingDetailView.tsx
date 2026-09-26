@@ -22,8 +22,10 @@ import {
   FileText,
   CheckSquare,
   Filter,
-  User as UserIcon
+  User as UserIcon,
+  Building,
 } from 'lucide-react';
+import { parseMeetingNotes } from '../utils/divisionNotesUtils';
 
 interface MeetingDetailViewProps {
   meeting: Meeting;
@@ -460,11 +462,51 @@ export const MeetingDetailView: React.FC<MeetingDetailViewProps> = ({
                 className="w-full bg-white dark:bg-zinc-700/80 rounded-2xl p-3.5 text-xs text-gray-800 dark:text-white border border-gray-200 resize-none leading-relaxed"
                 placeholder="Tuliskan poin-poin pembahasan rapat di sini..."
               />
-            ) : (
-              <div className="text-xs sm:text-sm text-gray-800 dark:text-zinc-200 whitespace-pre-wrap leading-relaxed max-h-[380px] overflow-y-auto">
-                {meeting.meetingNotes || 'Tidak ada catatan tertulis.'}
-              </div>
-            )}
+            ) : (() => {
+              const parsed = parseMeetingNotes(meeting.meetingNotes);
+              if (parsed.isStructured && parsed.divisionNotes.length > 0) {
+                return (
+                  <div className="space-y-3 max-h-[380px] overflow-y-auto pr-1">
+                    {parsed.divisionNotes.map((dNote) => (
+                      <div
+                        key={dNote.id}
+                        className="p-3.5 bg-white dark:bg-zinc-800 rounded-2xl border border-gray-200/70 dark:border-zinc-700/60 shadow-2xs space-y-1.5"
+                      >
+                        <div className="flex items-center gap-1.5">
+                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-md text-[11px] font-bold bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
+                            <Building className="w-3 h-3 text-emerald-600 dark:text-emerald-400" />
+                            <span>Divisi {dNote.divisionName}</span>
+                          </span>
+                        </div>
+                        <div className="text-xs sm:text-sm text-gray-800 dark:text-zinc-200 whitespace-pre-wrap leading-relaxed pl-0.5">
+                          {dNote.notes || <span className="text-gray-400 italic">Tidak ada catatan khusus.</span>}
+                        </div>
+                      </div>
+                    ))}
+
+                    {parsed.generalNotes && (
+                      <div className="p-3.5 bg-white dark:bg-zinc-800 rounded-2xl border border-dashed border-gray-300 dark:border-zinc-700 shadow-2xs space-y-1.5">
+                        <div className="flex items-center gap-1.5">
+                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-md text-[11px] font-bold bg-blue-50 dark:bg-blue-950/40 text-ios-blue border border-blue-200 dark:border-blue-800">
+                            <FileText className="w-3 h-3" />
+                            <span>Catatan Umum / Pleno</span>
+                          </span>
+                        </div>
+                        <div className="text-xs sm:text-sm text-gray-800 dark:text-zinc-200 whitespace-pre-wrap leading-relaxed pl-0.5">
+                          {parsed.generalNotes}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              }
+
+              return (
+                <div className="text-xs sm:text-sm text-gray-800 dark:text-zinc-200 whitespace-pre-wrap leading-relaxed max-h-[380px] overflow-y-auto">
+                  {meeting.meetingNotes || 'Tidak ada catatan tertulis.'}
+                </div>
+              );
+            })()}
           </div>
         </div>
 

@@ -15,6 +15,13 @@ import {
   Check,
 } from 'lucide-react';
 
+import {
+  parseMeetingNotes,
+  formatMeetingNotes,
+  DivisionNoteItem,
+  DEFAULT_DIVISIONS,
+} from '../utils/divisionNotesUtils';
+
 interface NewMeetingModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -34,7 +41,14 @@ export const NewMeetingModal: React.FC<NewMeetingModalProps> = ({
   const [meetingDate, setMeetingDate] = useState(initialData?.meetingDate || todayStr);
   const [participants, setParticipants] = useState<string[]>(initialData?.participants || []);
   const [manualParticipantInput, setManualParticipantInput] = useState('');
-  const [meetingNotes, setMeetingNotes] = useState(initialData?.meetingNotes || '');
+
+  // Meeting notes (Per Divisi & Raw)
+  const [noteMode, setNoteMode] = useState<'division' | 'raw'>('division');
+  const [divisionNotes, setDivisionNotes] = useState<DivisionNoteItem[]>([]);
+  const [generalNotes, setGeneralNotes] = useState('');
+  const [rawNotes, setRawNotes] = useState(initialData?.meetingNotes || '');
+  const [customDivisionInput, setCustomDivisionInput] = useState('');
+  const [isAddingCustomDiv, setIsAddingCustomDiv] = useState(false);
 
   // Registered users & divisions
   const [users, setUsers] = useState<Omit<User, 'password'>[]>([]);
@@ -68,6 +82,20 @@ export const NewMeetingModal: React.FC<NewMeetingModalProps> = ({
   // Load registered users and divisions on modal open
   useEffect(() => {
     if (isOpen) {
+      if (initialData?.meetingNotes) {
+        const parsed = parseMeetingNotes(initialData.meetingNotes);
+        if (parsed.isStructured && parsed.divisionNotes.length > 0) {
+          setDivisionNotes(parsed.divisionNotes);
+          setGeneralNotes(parsed.generalNotes);
+          setNoteMode('division');
+        } else {
+          setRawNotes(initialData.meetingNotes);
+          setGeneralNotes(initialData.meetingNotes);
+          setDivisionNotes([]);
+          setNoteMode('raw');
+        }
+      }
+
       Promise.all([api.getUsers(), api.getDivisions()])
         .then(([usersData, divisionsData]) => {
           setUsers(usersData);
@@ -75,12 +103,27 @@ export const NewMeetingModal: React.FC<NewMeetingModalProps> = ({
           if (divisionsData.length > 0 && !newUserDivisionId) {
             setNewUserDivisionId(divisionsData[0].id);
           }
+
+          // If brand new meeting without existing notes, seed initial division cards
+          if (!initialData?.meetingNotes) {
+            setDivisionNotes((prev) => {
+              if (prev.length > 0) return prev;
+              const names = divisionsData.length > 0
+                ? divisionsData.map((d) => d.name)
+                : DEFAULT_DIVISIONS;
+              return names.slice(0, 3).map((name, idx) => ({
+                id: `div-note-${Date.now()}-${idx}`,
+                divisionName: name,
+                notes: '',
+              }));
+            });
+          }
         })
         .catch((err) => {
           console.warn('Gagal memuat pengguna / divisi:', err);
         });
     }
-  }, [isOpen]);
+  }, [isOpen, initialData]);
 
   if (!isOpen) return null;
 
@@ -96,6 +139,73 @@ export const NewMeetingModal: React.FC<NewMeetingModalProps> = ({
 
   const handleRemoveParticipant = (index: number) => {
     setParticipants(participants.filter((_, idx) => idx !== index));
+  };
+
+  // Division Notes Management
+  const allAvailableDivisionNames = Array.from(
+    new Set([
+      ...divisions.map((d) => d.name),
+      ...DEFAULT_DIVISIONS,
+    ])
+  );
+
+  const handleAddDivisionNote = (divName: string) => {
+    const trimmed = divName.trim();
+    if (!trimmed) return;
+    if (divisionNotes.some((d) => d.divisionName.toLowerCase() === trimmed.toLowerCase())) {
+      return;
+    }
+    const newItem: DivisionNoteItem = {
+      id: `div-note-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+      divisionName: trimmed,
+      notes: '',
+    };
+    setDivisionNotes((prev) => [...prev, newItem]);
+  };
+
+  const handleRemoveDivisionNote = (id: string) => {
+    setDivisionNotes((prev) => prev.filter((d) => d.id !== id));
+  };
+
+  const handleUpdateDivisionNote = (id: string, notes: string) => {
+    setDivisionNotes((prev) =>
+      prev.map((d) => (d.id === id ? { ...d, notes } : d))
+    );
+  };
+
+  const handleAppendBullet = (id: string) => {
+    setDivisionNotes((prev) =>
+      prev.map((d) => {
+        if (d.id !== id) return d;
+        const current = d.notes;
+        const addition = !current ? '- ' : current.endsWith('\n') ? '- ' : '\n- ';
+        return { ...d, notes: current + addition };
+      })
+    );
+  };
+
+  const handleAppendGeneralBullet = () => {
+    setGeneralNotes((prev) => {
+      const addition = !prev ? '- ' : prev.endsWith('\n') ? '- ' : '\n- ';
+      return prev + addition;
+    });
+  };
+
+  const handleToggleMode = (newMode: 'division' | 'raw') => {
+    if (newMode === 'raw') {
+      const combined = formatMeetingNotes(divisionNotes, generalNotes);
+      setRawNotes(combined);
+      setNoteMode('raw');
+    } else {
+      const parsed = parseMeetingNotes(rawNotes);
+      if (parsed.isStructured && parsed.divisionNotes.length > 0) {
+        setDivisionNotes(parsed.divisionNotes);
+        setGeneralNotes(parsed.generalNotes);
+      } else if (rawNotes.trim()) {
+        setGeneralNotes(rawNotes.trim());
+      }
+      setNoteMode('division');
+    }
   };
 
   // Quick Create User handler
@@ -172,9 +282,19 @@ export const NewMeetingModal: React.FC<NewMeetingModalProps> = ({
       setErrorMsg('Peserta (Participants) minimal 1 orang. Tambahkan dari pengguna atau input manual.');
       return;
     }
-    if (!meetingNotes.trim()) {
-      setErrorMsg('Catatan Notula Rapat (Meeting Notes) wajib diisi.');
-      return;
+    let finalNotes = '';
+    if (noteMode === 'division') {
+      finalNotes = formatMeetingNotes(divisionNotes, generalNotes).trim();
+      if (!finalNotes) {
+        setErrorMsg('Catatan Notula Rapat wajib diisi (minimal satu divisi atau catatan umum).');
+        return;
+      }
+    } else {
+      finalNotes = rawNotes.trim();
+      if (!finalNotes) {
+        setErrorMsg('Catatan Notula Rapat (Meeting Notes) wajib diisi.');
+        return;
+      }
     }
 
     const validTasks = tasks.filter((t) => t.title.trim().length > 0);
@@ -185,7 +305,7 @@ export const NewMeetingModal: React.FC<NewMeetingModalProps> = ({
         title: title.trim() || `Rapat ${meetingDate}`,
         meetingDate,
         participants,
-        meetingNotes: meetingNotes.trim(),
+        meetingNotes: finalNotes,
         tasks: validTasks,
       });
       onClose();
@@ -452,20 +572,247 @@ export const NewMeetingModal: React.FC<NewMeetingModalProps> = ({
             </div>
           </div>
 
-          {/* Meeting Notes */}
-          <div>
-            <label className="text-xs font-semibold text-notion-text flex items-center gap-1.5 mb-1">
-              <FileText className="w-3.5 h-3.5 text-notion-text-secondary" />
-              <span>Catatan Notula Rapat (Meeting Notes/Minutes) *</span>
-            </label>
-            <textarea
-              required
-              rows={5}
-              placeholder="Tuliskan poin-poin pembahasan, hasil keputusan, dan konteks diskusi..."
-              value={meetingNotes}
-              onChange={(e) => setMeetingNotes(e.target.value)}
-              className="notion-input leading-relaxed"
-            />
+          {/* Meeting Notes per Division */}
+          <div className="space-y-3">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+              <div>
+                <label className="text-xs font-semibold text-notion-text flex items-center gap-1.5">
+                  <Building className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
+                  <span>Catatan Notula Rapat (Per Divisi) *</span>
+                </label>
+                <p className="text-[11px] text-notion-text-secondary mt-0.5">
+                  Pencatatan notula terstruktur per divisi untuk kejelasan tindak lanjut
+                </p>
+              </div>
+
+              {/* Mode Switcher */}
+              <div className="flex items-center bg-notion-sidebar p-0.5 rounded-lg border border-notion-border self-start sm:self-auto text-xs">
+                <button
+                  type="button"
+                  onClick={() => handleToggleMode('division')}
+                  className={`px-2.5 py-1 rounded-md font-medium flex items-center gap-1.5 transition-all ${
+                    noteMode === 'division'
+                      ? 'bg-notion-bg text-emerald-700 dark:text-emerald-400 shadow-2xs font-semibold'
+                      : 'text-notion-text-secondary hover:text-notion-text'
+                  }`}
+                >
+                  <Building className="w-3 h-3" />
+                  <span>Per Divisi</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleToggleMode('raw')}
+                  className={`px-2.5 py-1 rounded-md font-medium flex items-center gap-1.5 transition-all ${
+                    noteMode === 'raw'
+                      ? 'bg-notion-bg text-notion-text shadow-2xs font-semibold'
+                      : 'text-notion-text-secondary hover:text-notion-text'
+                  }`}
+                >
+                  <FileText className="w-3 h-3" />
+                  <span>Teks Bebas</span>
+                </button>
+              </div>
+            </div>
+
+            {noteMode === 'division' ? (
+              <div className="space-y-3">
+                {/* Division Picker Pills */}
+                <div className="p-3 bg-notion-sidebar/40 border border-notion-border rounded-xl space-y-2">
+                  <div className="flex items-center justify-between text-[11px] font-medium text-notion-text-secondary">
+                    <span>Pilih divisi untuk ditambahkan catatannya:</span>
+                    <button
+                      type="button"
+                      onClick={() => setIsAddingCustomDiv(!isAddingCustomDiv)}
+                      className="text-ios-blue hover:underline flex items-center gap-1 text-[11px]"
+                    >
+                      <Plus className="w-3 h-3" />
+                      <span>Divisi Baru / Kustom</span>
+                    </button>
+                  </div>
+
+                  {/* Pills List */}
+                  <div className="flex flex-wrap gap-1.5">
+                    {allAvailableDivisionNames.map((divName) => {
+                      const isAdded = divisionNotes.some(
+                        (d) => d.divisionName.toLowerCase() === divName.toLowerCase()
+                      );
+                      return (
+                        <button
+                          key={divName}
+                          type="button"
+                          onClick={() => {
+                            if (!isAdded) handleAddDivisionNote(divName);
+                          }}
+                          disabled={isAdded}
+                          className={`text-xs px-2.5 py-1 rounded-lg border flex items-center gap-1.5 transition-all ${
+                            isAdded
+                              ? 'bg-emerald-50 dark:bg-emerald-950/30 border-emerald-300 dark:border-emerald-800 text-emerald-700 dark:text-emerald-400 font-semibold cursor-default'
+                              : 'bg-notion-bg border-notion-border text-notion-text hover:bg-notion-hover hover:border-emerald-400'
+                          }`}
+                        >
+                          {isAdded ? (
+                            <Check className="w-3 h-3 text-emerald-600 dark:text-emerald-400" />
+                          ) : (
+                            <Plus className="w-3 h-3 text-notion-text-secondary" />
+                          )}
+                          <span>{divName}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  {/* Custom division input */}
+                  {isAddingCustomDiv && (
+                    <div className="flex items-center gap-2 pt-1">
+                      <input
+                        type="text"
+                        placeholder="Ketik nama divisi baru..."
+                        value={customDivisionInput}
+                        onChange={(e) => setCustomDivisionInput(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault();
+                            if (customDivisionInput.trim()) {
+                              handleAddDivisionNote(customDivisionInput.trim());
+                              setCustomDivisionInput('');
+                              setIsAddingCustomDiv(false);
+                            }
+                          }
+                        }}
+                        className="notion-input text-xs py-1.5 flex-1"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (customDivisionInput.trim()) {
+                            handleAddDivisionNote(customDivisionInput.trim());
+                            setCustomDivisionInput('');
+                            setIsAddingCustomDiv(false);
+                          }
+                        }}
+                        className="notion-btn notion-btn-primary text-xs py-1.5 px-3 shrink-0"
+                      >
+                        Tambah
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setCustomDivisionInput('');
+                          setIsAddingCustomDiv(false);
+                        }}
+                        className="text-notion-text-secondary hover:text-notion-text text-xs p-1"
+                      >
+                        Batal
+                      </button>
+                    </div>
+                  )}
+                </div>
+
+                {/* Division Notes Cards List */}
+                <div className="space-y-3 max-h-96 overflow-y-auto pr-1">
+                  {divisionNotes.length === 0 ? (
+                    <div className="p-6 text-center border border-dashed border-notion-border rounded-xl">
+                      <Building className="w-8 h-8 text-notion-text-secondary mx-auto mb-2 opacity-50" />
+                      <p className="text-xs text-notion-text font-medium">Belum ada divisi dipilih</p>
+                      <p className="text-[11px] text-notion-text-secondary mt-0.5">
+                        Klik tombol nama divisi di atas untuk mulai mencatat notula divisi tersebut.
+                      </p>
+                    </div>
+                  ) : (
+                    divisionNotes.map((dNote) => {
+                      const matchingParticipants = participants.filter((p) => {
+                        const u = users.find((usr) => usr.username === p);
+                        if (!u) return false;
+                        const div = divisions.find((d) => d.id === u.divisionId);
+                        return div && div.name.toLowerCase() === dNote.divisionName.toLowerCase();
+                      });
+
+                      return (
+                        <div
+                          key={dNote.id}
+                          className="p-3.5 bg-notion-sidebar/60 border border-notion-border rounded-xl space-y-2 focus-within:border-emerald-500/50 focus-within:bg-notion-bg transition-all"
+                        >
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                              <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-md text-xs font-bold bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
+                                <Building className="w-3 h-3 text-emerald-600 dark:text-emerald-400" />
+                                <span>Divisi {dNote.divisionName}</span>
+                              </span>
+                              {matchingParticipants.length > 0 && (
+                                <span className="text-[10px] text-notion-text-secondary bg-notion-bg px-2 py-0.5 rounded-full border border-notion-border hidden sm:inline-block">
+                                  👥 {matchingParticipants.length} Peserta
+                                </span>
+                              )}
+                            </div>
+
+                            <div className="flex items-center gap-1">
+                              <button
+                                type="button"
+                                onClick={() => handleAppendBullet(dNote.id)}
+                                className="text-[11px] text-notion-text-secondary hover:text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-950/30 px-2 py-0.5 rounded transition-colors"
+                                title="Tambah poin (- )"
+                              >
+                                + Poin
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleRemoveDivisionNote(dNote.id)}
+                                className="text-notion-text-secondary hover:text-rose-600 p-1 rounded hover:bg-rose-50 dark:hover:bg-rose-950/30 transition-colors"
+                                title="Hapus catatan divisi ini"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          </div>
+
+                          <textarea
+                            rows={3}
+                            placeholder={`Tuliskan capaian, progres program, kendala, atau notula untuk Divisi ${dNote.divisionName}...`}
+                            value={dNote.notes}
+                            onChange={(e) => handleUpdateDivisionNote(dNote.id, e.target.value)}
+                            className="w-full notion-input text-xs bg-notion-bg leading-relaxed resize-y"
+                          />
+                        </div>
+                      );
+                    })
+                  )}
+
+                  {/* General / Plenary Notes Card */}
+                  <div className="p-3.5 bg-notion-sidebar/40 border border-dashed border-notion-border rounded-xl space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-bold text-notion-text flex items-center gap-1.5">
+                        <FileText className="w-3.5 h-3.5 text-ios-blue" />
+                        <span>Catatan Umum / Pleno / Kesimpulan Rapat</span>
+                        <span className="text-[10px] text-notion-text-secondary font-normal">(Opsional)</span>
+                      </span>
+                      <button
+                        type="button"
+                        onClick={handleAppendGeneralBullet}
+                        className="text-[11px] text-notion-text-secondary hover:text-ios-blue px-2 py-0.5 rounded"
+                      >
+                        + Poin
+                      </button>
+                    </div>
+                    <textarea
+                      rows={2}
+                      placeholder="Tuliskan keputusan bersama, pengumuman pleno, atau kesimpulan lintas divisi..."
+                      value={generalNotes}
+                      onChange={(e) => setGeneralNotes(e.target.value)}
+                      className="w-full notion-input text-xs bg-notion-bg leading-relaxed resize-y"
+                    />
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <textarea
+                required
+                rows={6}
+                placeholder="Tuliskan poin-poin pembahasan, hasil keputusan, dan konteks diskusi..."
+                value={rawNotes}
+                onChange={(e) => setRawNotes(e.target.value)}
+                className="notion-input leading-relaxed text-xs"
+              />
+            )}
           </div>
 
           {/* Tasks Builder */}
