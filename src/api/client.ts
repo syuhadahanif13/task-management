@@ -1,4 +1,4 @@
-import { Meeting, Task, CreateMeetingInput, CreateTaskInput, AIParseResult, TaskSubmission, SubmitTaskInput, Division, User, CreateDivisionInput, CreateUserInput } from '../types';
+import { Meeting, Task, TaskStatus, CreateMeetingInput, CreateTaskInput, AIParseResult, TaskSubmission, SubmitTaskInput, Division, User, CreateDivisionInput, CreateUserInput } from '../types';
 import { getSupabaseClient, initSupabaseClient } from '../lib/supabase';
 import { embedTaskSubmissionIntoDescription, extractTaskSubmissionFromDescription, extractTaskDescription } from '../utils/submissionUtils';
 
@@ -36,6 +36,50 @@ export function removeCachedPendingTaskId(taskId: string): void {
     const set = getCachedPendingTaskIds();
     set.delete(taskId);
     localStorage.setItem('cached_pending_tasks', JSON.stringify(Array.from(set)));
+  } catch {}
+}
+
+export function getCachedMeetings(): Meeting[] {
+  try {
+    if (typeof localStorage === 'undefined') return [];
+    const raw = localStorage.getItem('cached_meetings');
+    if (!raw) return [];
+    const list = JSON.parse(raw);
+    return Array.isArray(list) ? list : [];
+  } catch {
+    return [];
+  }
+}
+
+export function saveCachedMeetings(meetings: Meeting[]): void {
+  try {
+    if (typeof localStorage === 'undefined') return;
+    localStorage.setItem('cached_meetings', JSON.stringify(meetings));
+  } catch {}
+}
+
+export function saveSingleCachedMeeting(meeting: Meeting): void {
+  try {
+    if (typeof localStorage === 'undefined') return;
+    const current = getCachedMeetings();
+    const idx = current.findIndex((m) => m.id === meeting.id);
+    let updated: Meeting[];
+    if (idx >= 0) {
+      updated = [...current];
+      updated[idx] = { ...updated[idx], ...meeting };
+    } else {
+      updated = [meeting, ...current];
+    }
+    localStorage.setItem('cached_meetings', JSON.stringify(updated));
+  } catch {}
+}
+
+export function removeCachedMeeting(meetingId: string): void {
+  try {
+    if (typeof localStorage === 'undefined') return;
+    const current = getCachedMeetings();
+    const filtered = current.filter((m) => m.id !== meetingId);
+    localStorage.setItem('cached_meetings', JSON.stringify(filtered));
   } catch {}
 }
 
@@ -302,157 +346,286 @@ export async function syncAllCachedSubmissions(): Promise<void> {
   }
 }
 
+function normalizeMeetingRecord(m: any): Meeting {
+  const meetingDate =
+    m.meeting_date ||
+    m.meetingDate ||
+    m.date ||
+    (m.created_at ? String(m.created_at).split('T')[0] : '') ||
+    new Date().toISOString().split('T')[0];
+
+  const meetingNotes =
+    m.meeting_notes ||
+    m.meetingNotes ||
+    m.notes ||
+    m.catatan ||
+    m.description ||
+    '';
+
+  let participants: string[] = [];
+  if (Array.isArray(m.participants)) {
+    participants = m.participants.map((p: any) => String(p).trim()).filter(Boolean);
+  } else if (typeof m.participants === 'string') {
+    try {
+      const parsed = JSON.parse(m.participants);
+      if (Array.isArray(parsed)) {
+        participants = parsed.map((p: any) => String(p).trim()).filter(Boolean);
+      } else {
+        participants = [m.participants.trim()];
+      }
+    } catch {
+      participants = m.participants.split(',').map((s: string) => s.trim()).filter(Boolean);
+    }
+  } else if (Array.isArray(m.peserta)) {
+    participants = m.peserta.map((p: any) => String(p).trim()).filter(Boolean);
+  }
+
+  const title =
+    m.title ||
+    m.judul ||
+    `Rapat ${meetingDate}`;
+
+  return {
+    id: String(m.id),
+    title,
+    meetingDate,
+    participants,
+    meetingNotes: String(meetingNotes),
+    createdAt: m.created_at || m.createdAt || new Date().toISOString(),
+    updatedAt: m.updated_at || m.updatedAt || new Date().toISOString(),
+    tasks: [],
+  };
+}
+
+function normalizeTaskRecord(t: any): Task {
+  const assignees = Array.isArray(t.assignees)
+    ? t.assignees.map((a: any) => String(a).trim()).filter(Boolean)
+    : (t.assignee ? String(t.assignee).split(',').map((s: string) => s.trim()).filter(Boolean) : []);
+  const resolvedAssignee = assignees.length > 0 ? assignees.join(', ') : String(t.assignee || 'Unassigned').trim();
+
+  return {
+    id: String(t.id),
+    meetingId: t.meeting_id || t.meetingId || 'general-tasks',
+    title: String(t.title || 'Untitled Action Item').trim(),
+    assignee: resolvedAssignee,
+    assignees: assignees.length > 0 ? assignees : [resolvedAssignee],
+    dueDate: t.due_date || t.dueDate || new Date().toISOString().split('T')[0],
+    dueTime: t.due_time || t.dueTime,
+    status: (t.status === 'Blocked' ? 'Pending Approval' : (t.status || 'To Do')),
+    priority: t.priority || 'Medium',
+    description: t.description || '',
+    tags: Array.isArray(t.tags) ? t.tags : [],
+    createdAt: t.created_at || t.createdAt || new Date().toISOString(),
+    updatedAt: t.updated_at || t.updatedAt || new Date().toISOString(),
+  };
+}
+
 export const api = {
   async getMeetings(): Promise<Meeting[]> {
-    let meetingsData: Meeting[] = [];
+    // 1. Fetch from backend Express server
+    let serverMeetings: Meeting[] = [];
     try {
       const res = await apiFetch('/api/meetings');
       if (res.ok) {
-        meetingsData = await res.json();
+        const data = await res.json();
+        if (Array.isArray(data)) {
+          serverMeetings = data;
+        }
       }
     } catch (err) {
-      console.warn('API getMeetings failed, checking Supabase client:', err);
+      console.warn('API getMeetings failed, checking Supabase & cache:', err);
     }
 
+    // 2. Fetch from Supabase direct client if available
+    let sbMeetings: any[] = [];
+    let sbTasks: any[] = [];
     let sbClient = getSupabaseClient();
     if (!sbClient) {
       sbClient = await initSupabaseClient();
     }
 
-    // Direct Supabase fallback if API failed or returned empty
-    if (!meetingsData || meetingsData.length === 0) {
-      if (sbClient) {
-        try {
-          let rawMeetings: any[] = [];
-          const { data, error } = await sbClient
-            .from('meetings')
-            .select('*, tasks(*)')
-            .order('meeting_date', { ascending: false });
+    if (sbClient) {
+      try {
+        const [mRes, tRes] = await Promise.all([
+          sbClient.from('meetings').select('*'),
+          sbClient.from('tasks').select('*'),
+        ]);
 
-          if (!error && Array.isArray(data) && data.length > 0) {
-            rawMeetings = data;
-          } else {
-            // Independent query fallback (doesn't require PostgREST foreign key relationship)
-            const [mRes, tRes] = await Promise.all([
-              sbClient.from('meetings').select('*').order('meeting_date', { ascending: false }),
-              sbClient.from('tasks').select('*'),
-            ]);
-
-            if (!mRes.error && Array.isArray(mRes.data)) {
-              const tasksByMeeting: Record<string, any[]> = {};
-              if (!tRes.error && Array.isArray(tRes.data)) {
-                for (const t of tRes.data) {
-                  const mId = t.meeting_id || 'general-tasks';
-                  if (!tasksByMeeting[mId]) tasksByMeeting[mId] = [];
-                  tasksByMeeting[mId].push(t);
-                }
-              }
-              rawMeetings = mRes.data.map((m: any) => ({
-                ...m,
-                tasks: tasksByMeeting[m.id] || [],
-              }));
-
-              const mIds = new Set(mRes.data.map((m: any) => m.id));
-              const orphaned = (Array.isArray(tRes.data) ? tRes.data : []).filter((t: any) => !t.meeting_id || !mIds.has(t.meeting_id));
-              if (orphaned.length > 0) {
-                rawMeetings.push({
-                  id: 'general-tasks',
-                  title: 'Tugas Mandiri',
-                  meeting_date: new Date().toISOString().split('T')[0],
-                  participants: [],
-                  meeting_notes: 'Tugas umum tanpa rapat',
-                  tasks: orphaned,
-                  created_at: new Date().toISOString(),
-                  updated_at: new Date().toISOString(),
-                });
-              }
-            } else if (!tRes.error && Array.isArray(tRes.data) && tRes.data.length > 0) {
-              rawMeetings = [{
-                id: 'general-tasks',
-                title: 'Tugas Mandiri',
-                meeting_date: new Date().toISOString().split('T')[0],
-                participants: [],
-                meeting_notes: 'Tugas tersimpan di Supabase',
-                tasks: tRes.data,
-                created_at: new Date().toISOString(),
-                updated_at: new Date().toISOString(),
-              }];
-            }
-          }
-
-          if (rawMeetings.length > 0) {
-            // Check system submissions store in meetings table
-            const sysMeeting = rawMeetings.find((m: any) => m.title === '__SYSTEM_TASK_SUBMISSIONS__' || m.id === SYSTEM_SUBMISSIONS_MEETING_ID);
-            if (sysMeeting && sysMeeting.meeting_notes) {
-              try {
-                const parsedSubs: TaskSubmission[] = JSON.parse(sysMeeting.meeting_notes);
-                if (Array.isArray(parsedSubs)) {
-                  for (const s of parsedSubs) {
-                    saveCachedTaskSubmission(s);
-                    if (s.status === 'pending') {
-                      addCachedPendingTaskId(s.taskId);
-                    }
-                  }
-                }
-              } catch {}
-            }
-
-            meetingsData = rawMeetings.map((m: any) => ({
-              id: m.id,
-              title: m.title || `Meeting ${m.meeting_date || ''}`,
-              meetingDate: m.meeting_date,
-              participants: Array.isArray(m.participants) ? m.participants : [],
-              meetingNotes: m.meeting_notes || '',
-              createdAt: m.created_at,
-              updatedAt: m.updated_at,
-              tasks: (m.tasks || []).map((t: any) => ({
-                id: t.id,
-                meetingId: t.meeting_id,
-                title: t.title,
-                assignee: t.assignee || 'Unassigned',
-                assignees: t.assignees || (t.assignee ? String(t.assignee).split(',').map((s: string) => s.trim()).filter(Boolean) : []),
-                dueDate: t.due_date,
-                dueTime: t.due_time,
-                status: t.status === 'Blocked' ? 'Pending Approval' : t.status,
-                priority: t.priority || 'Medium',
-                description: t.description || '',
-                tags: t.tags || [],
-                createdAt: t.created_at,
-                updatedAt: t.updated_at,
-              })),
-            }));
-          }
-        } catch (sbErr) {
-          console.warn('Direct Supabase getMeetings error:', sbErr);
+        if (!mRes.error && Array.isArray(mRes.data)) {
+          sbMeetings = mRes.data;
+        } else if (mRes.error) {
+          console.warn('Direct Supabase meetings query failed:', mRes.error.message);
         }
+
+        if (!tRes.error && Array.isArray(tRes.data)) {
+          sbTasks = tRes.data;
+        } else if (tRes.error) {
+          console.warn('Direct Supabase tasks query failed:', tRes.error.message);
+        }
+      } catch (err) {
+        console.warn('Supabase fetch error:', err);
       }
     }
 
-    // Always filter out system meetings
-    if (Array.isArray(meetingsData)) {
-      meetingsData = meetingsData.filter(
-        (m: any) => m.id !== SYSTEM_SUBMISSIONS_MEETING_ID && !String(m.id).startsWith('system-') && m.title !== '__SYSTEM_TASK_SUBMISSIONS__'
-      );
+    // 3. Load locally cached meetings from localStorage
+    const localCachedMeetings = getCachedMeetings();
+
+    // Map all tasks by meeting_id
+    const tasksByMeetingId: Record<string, Task[]> = {};
+    for (const rawT of sbTasks) {
+      const normT = normalizeTaskRecord(rawT);
+      const mId = normT.meetingId || 'general-tasks';
+      if (!tasksByMeetingId[mId]) tasksByMeetingId[mId] = [];
+      tasksByMeetingId[mId].push(normT);
     }
+
+    // Process system submissions meeting if present
+    const sysMeeting = sbMeetings.find((m: any) => m.title === '__SYSTEM_TASK_SUBMISSIONS__' || m.id === SYSTEM_SUBMISSIONS_MEETING_ID);
+    if (sysMeeting && (sysMeeting.meeting_notes || sysMeeting.meetingNotes)) {
+      try {
+        const parsedSubs: TaskSubmission[] = JSON.parse(sysMeeting.meeting_notes || sysMeeting.meetingNotes);
+        if (Array.isArray(parsedSubs)) {
+          for (const s of parsedSubs) {
+            saveCachedTaskSubmission(s);
+            if (s.status === 'pending') {
+              addCachedPendingTaskId(s.taskId);
+            }
+          }
+        }
+      } catch {}
+    }
+
+    // Master map to merge meetings from all 3 tiers (Supabase, LocalStorage, Express API)
+    const meetingsMap = new Map<string, Meeting>();
+
+    // A. Populate from Supabase records
+    for (const rawM of sbMeetings) {
+      if (rawM.id === SYSTEM_SUBMISSIONS_MEETING_ID || String(rawM.id).startsWith('system-') || rawM.title === '__SYSTEM_TASK_SUBMISSIONS__') {
+        continue;
+      }
+      const normM = normalizeMeetingRecord(rawM);
+      normM.tasks = tasksByMeetingId[normM.id] || [];
+      meetingsMap.set(normM.id, normM);
+    }
+
+    // B. Reconstruct meetings from tasks that have a meeting_id not found in meetings table!
+    for (const [mId, mTasks] of Object.entries(tasksByMeetingId)) {
+      if (mId === 'general-tasks' || mId === 'undefined' || !mId) continue;
+      if (!meetingsMap.has(mId)) {
+        const first = mTasks[0];
+        const uniqueAssignees = Array.from(
+          new Set(mTasks.flatMap((t) => t.assignees || (t.assignee ? [t.assignee] : [])))
+        ).filter(Boolean);
+
+        const recoveredTitle = first.title ? `Rapat Tindak Lanjut (${first.title.slice(0, 30)})` : `Rapat (${mId.slice(-6)})`;
+        const recovered: Meeting = {
+          id: mId,
+          title: recoveredTitle,
+          meetingDate: first.dueDate || new Date().toISOString().split('T')[0],
+          participants: uniqueAssignees.length > 0 ? uniqueAssignees : ['Peserta Rapat'],
+          meetingNotes: first.description ? `Catatan Agenda Tindak Lanjut:\n${first.description}` : 'Catatan rapat otomatis dipulihkan dari action items terdaftar.',
+          createdAt: first.createdAt || new Date().toISOString(),
+          updatedAt: first.updatedAt || new Date().toISOString(),
+          tasks: mTasks,
+        };
+        meetingsMap.set(mId, recovered);
+      }
+    }
+
+    // C. Merge with LocalStorage cached meetings
+    for (const cached of localCachedMeetings) {
+      if (!cached.id || cached.id.startsWith('system-')) continue;
+      const existing = meetingsMap.get(cached.id);
+      if (existing) {
+        // Keep non-empty meeting notes
+        if (!existing.meetingNotes && cached.meetingNotes) {
+          existing.meetingNotes = cached.meetingNotes;
+        }
+        if ((!existing.participants || existing.participants.length === 0) && cached.participants?.length) {
+          existing.participants = cached.participants;
+        }
+        // Merge tasks
+        const existingTaskIds = new Set((existing.tasks || []).map(t => t.id));
+        for (const ct of cached.tasks || []) {
+          if (!existingTaskIds.has(ct.id)) {
+            existing.tasks.push(ct);
+          }
+        }
+      } else {
+        meetingsMap.set(cached.id, {
+          ...cached,
+          tasks: tasksByMeetingId[cached.id] || cached.tasks || [],
+        });
+      }
+    }
+
+    // D. Merge with Server meetings
+    for (const srv of serverMeetings) {
+      if (!srv.id || srv.id.startsWith('system-')) continue;
+      const existing = meetingsMap.get(srv.id);
+      if (existing) {
+        if (!existing.meetingNotes && srv.meetingNotes) existing.meetingNotes = srv.meetingNotes;
+        if ((!existing.participants || existing.participants.length === 0) && srv.participants?.length) existing.participants = srv.participants;
+        const existingTaskIds = new Set((existing.tasks || []).map(t => t.id));
+        for (const st of srv.tasks || []) {
+          if (!existingTaskIds.has(st.id)) existing.tasks.push(st);
+        }
+      } else {
+        meetingsMap.set(srv.id, {
+          ...srv,
+          tasks: tasksByMeetingId[srv.id] || srv.tasks || [],
+        });
+      }
+    }
+
+    // E. Handle general-tasks container
+    if (tasksByMeetingId['general-tasks'] && tasksByMeetingId['general-tasks'].length > 0) {
+      const existingGen = meetingsMap.get('general-tasks');
+      if (existingGen) {
+        existingGen.tasks = tasksByMeetingId['general-tasks'];
+      } else {
+        meetingsMap.set('general-tasks', {
+          id: 'general-tasks',
+          title: 'Tugas Mandiri',
+          meetingDate: new Date().toISOString().split('T')[0],
+          participants: [],
+          meetingNotes: 'Tugas umum tanpa rapat tertulis.',
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+          tasks: tasksByMeetingId['general-tasks'],
+        });
+      }
+    }
+
+    // Convert map to list and exclude internal system meetings
+    let mergedList = Array.from(meetingsMap.values()).filter(
+      (m) => m.id !== SYSTEM_SUBMISSIONS_MEETING_ID && !String(m.id).startsWith('system-') && m.title !== '__SYSTEM_TASK_SUBMISSIONS__'
+    );
+
+    // Save consolidated meetings to localStorage immediately for offline safety
+    saveCachedMeetings(mergedList);
+
+    // Sort by meetingDate descending
+    mergedList.sort((a, b) => {
+      const dateA = new Date(a.meetingDate || a.createdAt || 0).getTime();
+      const dateB = new Date(b.meetingDate || b.createdAt || 0).getTime();
+      return dateB - dateA;
+    });
 
     // Background sync of any locally cached submissions to database/server
     syncAllCachedSubmissions().catch(() => {});
 
     // Extract any embedded submissions from task descriptions into cache and pending set
-    if (Array.isArray(meetingsData)) {
-      for (const m of meetingsData) {
-        if (Array.isArray(m.tasks)) {
-          for (const t of m.tasks) {
-            if (t.description) {
-              const embeddedSub = extractTaskSubmissionFromDescription(t.description);
-              if (embeddedSub) {
-                if (!embeddedSub.taskId) embeddedSub.taskId = t.id;
-                if (!embeddedSub.taskTitle) embeddedSub.taskTitle = t.title;
-                saveCachedTaskSubmission(embeddedSub);
-                if (embeddedSub.status === 'pending' || (t.status as string) === 'Pending Approval' || (t.status as string) === 'Blocked') {
-                  addCachedPendingTaskId(t.id);
-                }
-              }
+    for (const m of mergedList) {
+      for (const t of m.tasks || []) {
+        if (t.description) {
+          const embeddedSub = extractTaskSubmissionFromDescription(t.description);
+          if (embeddedSub) {
+            if (!embeddedSub.taskId) embeddedSub.taskId = t.id;
+            if (!embeddedSub.taskTitle) embeddedSub.taskTitle = t.title;
+            saveCachedTaskSubmission(embeddedSub);
+            if (embeddedSub.status === 'pending' || (t.status as string) === 'Pending Approval' || (t.status as string) === 'Blocked') {
+              addCachedPendingTaskId(t.id);
             }
           }
         }
@@ -461,58 +634,199 @@ export const api = {
 
     // Merge cached pending tasks so status 'Pending Approval' is preserved
     const pendingIds = getCachedPendingTaskIds();
-    if (Array.isArray(meetingsData)) {
-      meetingsData = meetingsData.map((m) => ({
-        ...m,
-        tasks: (m.tasks || []).map((t) => {
-          if (t.status === 'Done') {
-            if (pendingIds.has(t.id)) removeCachedPendingTaskId(t.id);
-            return t;
-          }
-          if ((t.status as string) === 'Blocked' || t.status === 'Pending Approval' || pendingIds.has(t.id)) {
-            return { ...t, status: 'Pending Approval' as const };
-          }
+    mergedList = mergedList.map((m) => ({
+      ...m,
+      tasks: (m.tasks || []).map((t) => {
+        if (t.status === 'Done') {
+          if (pendingIds.has(t.id)) removeCachedPendingTaskId(t.id);
           return t;
-        }),
-      }));
-    }
+        }
+        if ((t.status as string) === 'Blocked' || t.status === 'Pending Approval' || pendingIds.has(t.id)) {
+          return { ...t, status: 'Pending Approval' as const };
+        }
+        return t;
+      }),
+    }));
 
-    return meetingsData;
+    return mergedList;
   },
 
   async getMeeting(id: string): Promise<Meeting> {
+    const cached = getCachedMeetings().find(m => m.id === id);
+    if (cached) return cached;
     const res = await apiFetch(`/api/meetings/${id}`);
     if (!res.ok) throw new Error('Failed to fetch meeting');
     return res.json();
   },
 
   async createMeeting(input: CreateMeetingInput): Promise<Meeting> {
-    const res = await apiFetch('/api/meetings', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(input),
-    });
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({}));
-      throw new Error(err.error || 'Failed to create meeting');
+    const meetingId = `meet-${Date.now().toString(36)}-${Math.random().toString(36).substring(2, 6)}`;
+    const now = new Date().toISOString();
+
+    const createdMeeting: Meeting = {
+      id: meetingId,
+      title: input.title ? String(input.title).trim() : `Rapat ${input.meetingDate}`,
+      meetingDate: String(input.meetingDate).trim(),
+      participants: Array.isArray(input.participants) ? input.participants.map(p => String(p).trim()).filter(Boolean) : [String(input.participants)],
+      meetingNotes: String(input.meetingNotes || '').trim(),
+      createdAt: now,
+      updatedAt: now,
+      tasks: (input.tasks || []).map((t, idx) => {
+        const rawAssignees = Array.isArray(t.assignees)
+          ? t.assignees
+          : (t.assignee ? String(t.assignee).split(',').map((s: string) => s.trim()).filter(Boolean) : []);
+        const resolvedAssignee = rawAssignees.length > 0 ? rawAssignees.join(', ') : String(t.assignee || 'Unassigned').trim();
+        return {
+          id: `task-${Date.now().toString(36)}-${idx}-${Math.random().toString(36).substring(2, 6)}`,
+          meetingId,
+          title: String(t.title || 'Untitled Action Item').trim(),
+          assignee: resolvedAssignee,
+          assignees: rawAssignees.length > 0 ? rawAssignees : [resolvedAssignee],
+          dueDate: String(t.dueDate || new Date(Date.now() + 7 * 86400000).toISOString().split('T')[0]),
+          dueTime: t.dueTime,
+          status: (t.status || 'To Do') as TaskStatus,
+          priority: t.priority || 'Medium',
+          description: t.description || '',
+          tags: Array.isArray(t.tags) ? t.tags : [],
+          createdAt: now,
+          updatedAt: now,
+        };
+      }),
+    };
+
+    // 1. Immediately cache in localStorage for instant availability & offline resilience
+    saveSingleCachedMeeting(createdMeeting);
+
+    // 2. Direct Supabase upsert from client if configured
+    let sbClient = getSupabaseClient();
+    if (!sbClient) {
+      sbClient = await initSupabaseClient();
     }
-    return res.json();
+    if (sbClient) {
+      try {
+        await sbClient.from('meetings').upsert([{
+          id: createdMeeting.id,
+          title: createdMeeting.title,
+          meeting_date: createdMeeting.meetingDate,
+          participants: createdMeeting.participants,
+          meeting_notes: createdMeeting.meetingNotes,
+          created_at: createdMeeting.createdAt,
+          updated_at: createdMeeting.updatedAt,
+        }]);
+
+        if (createdMeeting.tasks.length > 0) {
+          await sbClient.from('tasks').upsert(createdMeeting.tasks.map(t => ({
+            id: t.id,
+            meeting_id: createdMeeting.id,
+            title: t.title,
+            assignee: t.assignee,
+            due_date: t.dueDate,
+            status: t.status,
+            priority: t.priority,
+            description: t.description,
+            created_at: t.createdAt,
+            updated_at: t.updatedAt,
+          })));
+        }
+      } catch (sbErr) {
+        console.warn('Client direct Supabase meeting creation notice:', sbErr);
+      }
+    }
+
+    // 3. Post to backend server
+    try {
+      const res = await apiFetch('/api/meetings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...input, id: createdMeeting.id, tasks: createdMeeting.tasks }),
+      });
+      if (res.ok) {
+        const srvMeeting = await res.json();
+        saveSingleCachedMeeting(srvMeeting);
+        return srvMeeting;
+      }
+    } catch (err) {
+      console.warn('Backend server createMeeting notice:', err);
+    }
+
+    return createdMeeting;
   },
 
   async updateMeeting(id: string, input: Partial<CreateMeetingInput>): Promise<Meeting> {
-    const res = await apiFetch(`/api/meetings/${id}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(input),
-    });
-    if (!res.ok) throw new Error('Failed to update meeting');
-    return res.json();
+    const cached = getCachedMeetings().find(m => m.id === id);
+    const updatedMeeting: Meeting = {
+      ...(cached || {
+        id,
+        title: input.title || `Rapat ${input.meetingDate || ''}`,
+        meetingDate: input.meetingDate || new Date().toISOString().split('T')[0],
+        participants: input.participants || [],
+        meetingNotes: input.meetingNotes || '',
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        tasks: [],
+      }),
+      ...(input.title !== undefined ? { title: String(input.title).trim() } : {}),
+      ...(input.meetingDate !== undefined ? { meetingDate: String(input.meetingDate).trim() } : {}),
+      ...(input.participants !== undefined ? { participants: input.participants } : {}),
+      ...(input.meetingNotes !== undefined ? { meetingNotes: String(input.meetingNotes).trim() } : {}),
+      updatedAt: new Date().toISOString(),
+    };
+
+    saveSingleCachedMeeting(updatedMeeting);
+
+    let sbClient = getSupabaseClient();
+    if (!sbClient) {
+      sbClient = await initSupabaseClient();
+    }
+    if (sbClient) {
+      try {
+        await sbClient.from('meetings').upsert([{
+          id: updatedMeeting.id,
+          title: updatedMeeting.title,
+          meeting_date: updatedMeeting.meetingDate,
+          participants: updatedMeeting.participants,
+          meeting_notes: updatedMeeting.meetingNotes,
+          updated_at: updatedMeeting.updatedAt,
+        }]);
+      } catch (sbErr) {
+        console.warn('Client direct Supabase meeting update notice:', sbErr);
+      }
+    }
+
+    try {
+      const res = await apiFetch(`/api/meetings/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(input),
+      });
+      if (res.ok) {
+        const srv = await res.json();
+        saveSingleCachedMeeting(srv);
+        return srv;
+      }
+    } catch (err) {
+      console.warn('Backend server updateMeeting notice:', err);
+    }
+
+    return updatedMeeting;
   },
 
   async deleteMeeting(id: string): Promise<{ message: string; id: string }> {
-    const res = await apiFetch(`/api/meetings/${id}`, { method: 'DELETE' });
-    if (!res.ok) throw new Error('Failed to delete meeting');
-    return res.json();
+    removeCachedMeeting(id);
+
+    const sbClient = getSupabaseClient();
+    if (sbClient) {
+      try {
+        await sbClient.from('tasks').delete().eq('meeting_id', id);
+        await sbClient.from('meetings').delete().eq('id', id);
+      } catch {}
+    }
+
+    try {
+      await apiFetch(`/api/meetings/${id}`, { method: 'DELETE' });
+    } catch {}
+
+    return { message: 'Meeting deleted successfully', id };
   },
 
   async createTask(meetingId: string | undefined | null, task: CreateTaskInput): Promise<Task> {
@@ -693,7 +1007,7 @@ export const api = {
 
         const [tRes, mRes] = await Promise.all([
           query,
-          sbClient.from('meetings').select('id, title, meeting_date')
+          sbClient.from('meetings').select('*'),
         ]);
 
         if (!tRes.error && Array.isArray(tRes.data)) {
@@ -701,8 +1015,15 @@ export const api = {
           if (Array.isArray(mRes.data)) {
             for (const m of mRes.data) mMap.set(m.id, m);
           }
+          // Also fallback to cached meetings in localStorage
+          for (const m of getCachedMeetings()) {
+            if (!mMap.has(m.id)) mMap.set(m.id, m);
+          }
+
           return tRes.data.map((t: any) => {
             const m = mMap.get(t.meeting_id);
+            const mTitle = m?.title || m?.judul || (m?.meeting_date ? `Rapat ${m.meeting_date}` : (m?.meetingDate ? `Rapat ${m.meetingDate}` : ''));
+            const mDate = m?.meeting_date || m?.meetingDate || m?.date || '';
             return {
               id: t.id,
               meetingId: t.meeting_id,
@@ -717,8 +1038,8 @@ export const api = {
               tags: t.tags || [],
               createdAt: t.created_at,
               updatedAt: t.updated_at,
-              meetingTitle: m?.title || (m?.meeting_date ? `Meeting ${m.meeting_date}` : 'Tugas Mandiri'),
-              meetingDate: m?.meeting_date || '',
+              meetingTitle: mTitle || 'Tugas Mandiri',
+              meetingDate: mDate,
             };
           });
         }

@@ -56,6 +56,15 @@ export function getSupabaseClient(): SupabaseClient | null {
           autoRefreshToken: true,
         },
       });
+
+      // Sync to server in background if from localStorage
+      if (config.source === 'localStorage') {
+        fetch('/api/supabase/config', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ supabaseUrl: config.url, supabaseAnonKey: config.anonKey }),
+        }).catch(() => {});
+      }
     } catch (err) {
       console.warn('Failed to create Supabase client:', err);
     }
@@ -88,6 +97,13 @@ export function setSupabaseCredentials(url: string, anonKey: string): SupabaseCl
     if (typeof window !== 'undefined') {
       window.dispatchEvent(new CustomEvent('supabaseConfigUpdated', { detail: { url: trimmedUrl } }));
     }
+
+    // Sync credentials to backend Express server so server is also connected to Supabase
+    fetch('/api/supabase/config', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ supabaseUrl: trimmedUrl, supabaseAnonKey: trimmedKey }),
+    }).catch(() => {});
 
     return supabaseClient;
   } catch (err) {

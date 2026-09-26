@@ -70,7 +70,11 @@ export interface CreateMeetingInput {
     assignee: string;
     assignees?: string[];
     dueDate: string;
+    dueTime?: string;
     status: TaskStatus;
+    priority?: TaskPriority;
+    description?: string;
+    tags?: string[];
   }>;
 }
 

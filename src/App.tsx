@@ -631,7 +631,10 @@ export default function App() {
   const scopedTasksWithOrigin = filterTasksForUser(allTasksWithOrigin, currentUser);
 
   const selectedMeeting = validMeetings.find((m) => m.id === selectedMeetingId);
-  const totalMeetings = validMeetings.filter((m) => m.id !== 'general-tasks').length;
+  const hasRegularMeetings = validMeetings.some((m) => m.id !== 'general-tasks');
+  const totalMeetings = hasRegularMeetings
+    ? validMeetings.filter((m) => m.id !== 'general-tasks').length
+    : validMeetings.length;
   const totalTasks = scopedTasksWithOrigin.length;
   const userOverdueCount = scopedTasksWithOrigin.filter(
     (task) => task.status !== 'Done' && task.dueDate && task.dueDate < new Date().toISOString().split('T')[0]
@@ -873,19 +876,21 @@ export default function App() {
 
                   {/* Meeting Grid */}
                   {(() => {
+                    const hasRegularMeetings = meetings.some((x) => x.id !== 'general-tasks' && !x.id.startsWith('system-'));
                     const filtered = meetings.filter((m) => {
-                      if (m.id === 'general-tasks') return false;
+                      if (m.id.startsWith('system-')) return false;
+                      if (m.id === 'general-tasks' && hasRegularMeetings) return false;
                       if (!searchQuery.trim()) return true;
                       const q = searchQuery.toLowerCase();
                       return (
-                        m.title?.toLowerCase().includes(q) ||
-                        m.meetingDate.includes(q) ||
-                        m.meetingNotes.toLowerCase().includes(q) ||
-                        m.participants.some((p) => p.toLowerCase().includes(q)) ||
-                        m.tasks?.some(
+                        (m.title || '').toLowerCase().includes(q) ||
+                        (m.meetingDate || '').toLowerCase().includes(q) ||
+                        (m.meetingNotes || '').toLowerCase().includes(q) ||
+                        (m.participants || []).some((p) => (p || '').toLowerCase().includes(q)) ||
+                        (m.tasks || []).some(
                           (t) =>
-                            t.title.toLowerCase().includes(q) ||
-                            t.assignee.toLowerCase().includes(q)
+                            (t.title || '').toLowerCase().includes(q) ||
+                            (t.assignee || '').toLowerCase().includes(q)
                         )
                       );
                     });

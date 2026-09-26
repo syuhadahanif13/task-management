@@ -135,6 +135,21 @@ router.get('/supabase/config', (req, res) => {
   });
 });
 
+router.post('/supabase/config', (req, res) => {
+  const { supabaseUrl, supabaseAnonKey } = req.body;
+  if (supabaseUrl && supabaseAnonKey) {
+    try {
+      supabase = createClient(supabaseUrl.trim(), supabaseAnonKey.trim());
+      console.log('Server Supabase client connected dynamically from client credentials');
+      return res.json({ success: true, message: 'Server Supabase client connected successfully' });
+    } catch (err: any) {
+      console.warn('Failed to dynamically connect server Supabase client:', err?.message);
+      return res.status(400).json({ error: err?.message });
+    }
+  }
+  res.status(400).json({ error: 'supabaseUrl and supabaseAnonKey are required' });
+});
+
 router.get('/supabase/test', async (req, res) => {
   if (!supabase) {
     return res.json({
@@ -514,69 +529,29 @@ async function syncMeetingsFromSupabase(): Promise<Meeting[]> {
     let rawMeetings: any[] = [];
     let rawTasks: any[] = [];
 
-    // Attempt 1: Try joined query (faster if foreign key exists)
-    const { data: dbMeetings, error: joinErr } = await supabase
-      .from('meetings')
-      .select('*, tasks(*)')
-      .order('meeting_date', { ascending: false });
+    // Parallel fetch meetings and tasks without SQL ordering constraint
+    const [mRes, tRes] = await Promise.all([
+      supabase.from('meetings').select('*'),
+      supabase.from('tasks').select('*'),
+    ]);
 
-    if (!joinErr && Array.isArray(dbMeetings) && dbMeetings.length > 0) {
-      rawMeetings = dbMeetings;
-    } else {
-      if (joinErr) {
-        console.warn('Supabase join query error (likely no foreign key constraint), falling back to independent queries:', joinErr.message);
-      }
-      // Attempt 2: Independent queries (100% resilient, independent of foreign key constraint!)
-      const [mRes, tRes] = await Promise.all([
-        supabase.from('meetings').select('*').order('meeting_date', { ascending: false }),
-        supabase.from('tasks').select('*'),
-      ]);
+    if (!mRes.error && Array.isArray(mRes.data)) {
+      rawMeetings = mRes.data;
+    } else if (mRes.error) {
+      console.warn('Supabase meetings query failed:', mRes.error.message);
+    }
 
-      if (!mRes.error && Array.isArray(mRes.data)) {
-        const tasksByMeeting: Record<string, any[]> = {};
-        if (!tRes.error && Array.isArray(tRes.data)) {
-          rawTasks = tRes.data;
-          for (const t of tRes.data) {
-            const mId = t.meeting_id || 'general-tasks';
-            if (!tasksByMeeting[mId]) tasksByMeeting[mId] = [];
-            tasksByMeeting[mId].push(t);
-          }
-        }
-        rawMeetings = mRes.data.map((m: any) => ({
-          ...m,
-          tasks: tasksByMeeting[m.id] || [],
-        }));
+    if (!tRes.error && Array.isArray(tRes.data)) {
+      rawTasks = tRes.data;
+    } else if (tRes.error) {
+      console.warn('Supabase tasks query failed:', tRes.error.message);
+    }
 
-        // Handle orphaned tasks
-        const mIds = new Set(mRes.data.map((m: any) => m.id));
-        const orphaned = rawTasks.filter((t: any) => !t.meeting_id || !mIds.has(t.meeting_id));
-        if (orphaned.length > 0) {
-          rawMeetings.push({
-            id: 'general-tasks',
-            title: 'Tugas Mandiri',
-            meeting_date: new Date().toISOString().split('T')[0],
-            participants: [],
-            meeting_notes: 'Tugas umum tanpa rapat',
-            tasks: orphaned,
-            created_at: new Date().toISOString(),
-            updated_at: new Date().toISOString(),
-          });
-        }
-      } else if (mRes.error) {
-        console.warn('Supabase meetings independent query failed:', mRes.error.message);
-        if (!tRes.error && Array.isArray(tRes.data) && tRes.data.length > 0) {
-          rawMeetings = [{
-            id: 'general-tasks',
-            title: 'Tugas Mandiri',
-            meeting_date: new Date().toISOString().split('T')[0],
-            participants: [],
-            meeting_notes: 'Tugas tersimpan di Supabase',
-            tasks: tRes.data,
-            created_at: new Date().toISOString(),
-            updated_at: new Date().toISOString(),
-          }];
-        }
-      }
+    const tasksByMeeting: Record<string, any[]> = {};
+    for (const t of rawTasks) {
+      const mId = t.meeting_id || t.meetingId || 'general-tasks';
+      if (!tasksByMeeting[mId]) tasksByMeeting[mId] = [];
+      tasksByMeeting[mId].push(t);
     }
 
     // Collect all task IDs that have pending submissions
@@ -586,49 +561,131 @@ async function syncMeetingsFromSupabase(): Promise<Meeting[]> {
         pendingTaskIdSet.add(s.taskId);
       }
     }
-    for (const m of meetings) {
-      for (const t of m.tasks || []) {
-        if (t.status === 'Pending Approval') {
-          pendingTaskIdSet.add(t.id);
+
+    const cleanDbMeetings = rawMeetings.filter(
+      (m: any) => m.id !== SYSTEM_SUBMISSIONS_MEETING_ID && !String(m.id).startsWith('system-') && m.title !== '__SYSTEM_TASK_SUBMISSIONS__'
+    );
+
+    const meetingsMap = new Map<string, Meeting>();
+
+    for (const m of cleanDbMeetings) {
+      const mDate = m.meeting_date || m.meetingDate || m.date || (m.created_at ? String(m.created_at).split('T')[0] : '') || new Date().toISOString().split('T')[0];
+      const mNotes = m.meeting_notes || m.meetingNotes || m.notes || m.catatan || m.description || '';
+      let mParts: string[] = [];
+      if (Array.isArray(m.participants)) {
+        mParts = m.participants.map((p: any) => String(p).trim()).filter(Boolean);
+      } else if (typeof m.participants === 'string') {
+        try {
+          const parsed = JSON.parse(m.participants);
+          mParts = Array.isArray(parsed) ? parsed.map((p: any) => String(p).trim()).filter(Boolean) : [m.participants.trim()];
+        } catch {
+          mParts = m.participants.split(',').map((s: string) => s.trim()).filter(Boolean);
         }
       }
+
+      const mTasks = (tasksByMeeting[m.id] || []).map((t: any) => {
+        const isPending = pendingTaskIdSet.has(t.id) || t.status === 'Pending Approval' || t.status === 'Blocked';
+        const rawAssignees = Array.isArray(t.assignees) ? t.assignees : (t.assignee ? String(t.assignee).split(',').map((s: string) => s.trim()).filter(Boolean) : []);
+        const resolvedAssignee = rawAssignees.length > 0 ? rawAssignees.join(', ') : String(t.assignee || 'Unassigned').trim();
+        return {
+          id: t.id,
+          meetingId: m.id,
+          title: String(t.title || 'Untitled Action Item').trim(),
+          assignee: resolvedAssignee,
+          assignees: rawAssignees.length > 0 ? rawAssignees : [resolvedAssignee],
+          dueDate: t.due_date || t.dueDate || new Date().toISOString().split('T')[0],
+          dueTime: t.due_time || t.dueTime,
+          status: isPending ? ('Pending Approval' as TaskStatus) : (t.status as TaskStatus),
+          priority: t.priority || 'Medium',
+          description: t.description || '',
+          tags: Array.isArray(t.tags) ? t.tags : [],
+          createdAt: t.created_at || t.createdAt || new Date().toISOString(),
+          updatedAt: t.updated_at || t.updatedAt || new Date().toISOString(),
+        };
+      });
+
+      meetingsMap.set(m.id, {
+        id: m.id,
+        title: m.title || m.judul || `Rapat ${mDate}`,
+        meetingDate: mDate,
+        participants: mParts,
+        meetingNotes: String(mNotes),
+        createdAt: m.created_at || m.createdAt || new Date().toISOString(),
+        updatedAt: m.updated_at || m.updatedAt || new Date().toISOString(),
+        tasks: mTasks,
+      });
     }
 
-    if (Array.isArray(rawMeetings) && rawMeetings.length > 0) {
-      const cleanDbMeetings = rawMeetings.filter(
-        (m: any) => m.id !== SYSTEM_SUBMISSIONS_MEETING_ID && !String(m.id).startsWith('system-') && m.title !== '__SYSTEM_TASK_SUBMISSIONS__'
-      );
+    // Reconstruct missing meetings from tasks that have a meeting_id not present in meetings table
+    for (const [mId, mTasks] of Object.entries(tasksByMeeting)) {
+      if (mId === 'general-tasks' || mId === 'undefined' || !mId) continue;
+      if (!meetingsMap.has(mId)) {
+        const first = mTasks[0];
+        const uniqueAssignees = Array.from(
+          new Set(mTasks.flatMap((t: any) => t.assignees || (t.assignee ? [t.assignee] : [])))
+        ).filter(Boolean);
+        const mDate = first.due_date || first.dueDate || new Date().toISOString().split('T')[0];
+        const recoveredTitle = first.title ? `Rapat Tindak Lanjut (${first.title.slice(0, 30)})` : `Rapat (${mId.slice(-6)})`;
 
-      const formatted: Meeting[] = cleanDbMeetings.map((m: any) => ({
-        id: m.id,
-        title: m.title || `Meeting ${m.meeting_date || ''}`,
-        meetingDate: m.meeting_date,
-        participants: Array.isArray(m.participants) ? m.participants : [],
-        meetingNotes: m.meeting_notes || '',
-        createdAt: m.created_at,
-        updatedAt: m.updated_at,
-        tasks: (m.tasks || []).map((t: any) => {
-          const isPending = pendingTaskIdSet.has(t.id) || t.status === 'Pending Approval' || t.status === 'Blocked';
-          return {
+        meetingsMap.set(mId, {
+          id: mId,
+          title: recoveredTitle,
+          meetingDate: mDate,
+          participants: uniqueAssignees.length > 0 ? (uniqueAssignees as string[]) : ['Peserta Rapat'],
+          meetingNotes: first.description ? `Catatan Agenda Tindak Lanjut:\n${first.description}` : 'Catatan rapat dipulihkan dari action items terdaftar.',
+          createdAt: first.created_at || new Date().toISOString(),
+          updatedAt: first.updated_at || new Date().toISOString(),
+          tasks: mTasks.map((t: any) => ({
             id: t.id,
-            meetingId: t.meeting_id,
-            title: t.title,
+            meetingId: mId,
+            title: String(t.title || 'Untitled Action Item').trim(),
             assignee: t.assignee || 'Unassigned',
-            assignees: t.assignees || (t.assignee ? String(t.assignee).split(',').map((s: string) => s.trim()).filter(Boolean) : []),
-            dueDate: t.due_date,
-            dueTime: t.due_time,
-            status: isPending ? ('Pending Approval' as TaskStatus) : (t.status as TaskStatus),
+            assignees: Array.isArray(t.assignees) ? t.assignees : [t.assignee || 'Unassigned'],
+            dueDate: t.due_date || t.dueDate || mDate,
+            dueTime: t.due_time || t.dueTime,
+            status: (pendingTaskIdSet.has(t.id) || t.status === 'Blocked' ? 'Pending Approval' : (t.status || 'To Do')) as TaskStatus,
             priority: t.priority || 'Medium',
             description: t.description || '',
             tags: t.tags || [],
-            createdAt: t.created_at,
-            updatedAt: t.updated_at,
-          };
-        }),
-      }));
-      meetings = formatted;
-      return formatted;
+            createdAt: t.created_at || new Date().toISOString(),
+            updatedAt: t.updated_at || new Date().toISOString(),
+          })),
+        });
+      }
     }
+
+    // General tasks container
+    if (tasksByMeeting['general-tasks'] && tasksByMeeting['general-tasks'].length > 0) {
+      meetingsMap.set('general-tasks', {
+        id: 'general-tasks',
+        title: 'Tugas Mandiri',
+        meetingDate: new Date().toISOString().split('T')[0],
+        participants: [],
+        meetingNotes: 'Tugas umum tanpa jadwal rapat.',
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        tasks: tasksByMeeting['general-tasks'].map((t: any) => ({
+          id: t.id,
+          meetingId: 'general-tasks',
+          title: t.title,
+          assignee: t.assignee || 'Unassigned',
+          assignees: Array.isArray(t.assignees) ? t.assignees : [t.assignee || 'Unassigned'],
+          dueDate: t.due_date || new Date().toISOString().split('T')[0],
+          dueTime: t.due_time,
+          status: (pendingTaskIdSet.has(t.id) || t.status === 'Blocked' ? 'Pending Approval' : (t.status || 'To Do')) as TaskStatus,
+          priority: t.priority || 'Medium',
+          description: t.description || '',
+          tags: t.tags || [],
+          createdAt: t.created_at || new Date().toISOString(),
+          updatedAt: t.updated_at || new Date().toISOString(),
+        })),
+      });
+    }
+
+    const formatted = Array.from(meetingsMap.values());
+    formatted.sort((a, b) => new Date(b.meetingDate || b.createdAt).getTime() - new Date(a.meetingDate || a.createdAt).getTime());
+    meetings = formatted;
+    return formatted;
   } catch (err: any) {
     console.warn('Supabase read fallback to memory:', err?.message);
   }

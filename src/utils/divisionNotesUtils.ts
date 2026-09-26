@@ -26,7 +26,7 @@ export const DEFAULT_DIVISIONS = [
  * will remain completely intact as general notes without any data loss or unwanted splitting.
  */
 export function parseMeetingNotes(rawNotes: string): ParsedMeetingNotes {
-  if (!rawNotes || !rawNotes.trim()) {
+  if (!rawNotes || typeof rawNotes !== 'string' || !rawNotes.trim()) {
     return {
       divisionNotes: [],
       generalNotes: '',
