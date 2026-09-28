@@ -433,9 +433,9 @@ export async function mysqlUpdateUser(id: string, updates: any): Promise<void> {
     fields.push('username = ?');
     values.push(String(updates.username).trim());
   }
-  if (updates.password !== undefined) {
+  if (updates.password !== undefined && String(updates.password).trim().length > 0) {
     fields.push('password = ?');
-    values.push(String(updates.password));
+    values.push(String(updates.password).trim());
   }
   if (updates.divisionId !== undefined) {
     fields.push('division_id = ?');
@@ -1768,9 +1768,11 @@ router.put('/users/:id', async (req, res) => {
   const idx = users.findIndex(u => u.id === req.params.id);
   const { username, password, divisionId, role } = req.body;
   const now = new Date().toISOString();
+  const trimmedPassword = password !== undefined && password !== null ? String(password).trim() : '';
+
   if (idx !== -1) {
     if (username !== undefined) users[idx].username = String(username).trim();
-    if (password !== undefined) users[idx].password = String(password);
+    if (trimmedPassword.length > 0) users[idx].password = trimmedPassword;
     if (divisionId !== undefined) users[idx].divisionId = String(divisionId);
     if (role !== undefined && ['admin', 'user'].includes(role)) users[idx].role = role;
     users[idx].updatedAt = now;
@@ -1778,7 +1780,12 @@ router.put('/users/:id', async (req, res) => {
 
   if (isMysqlConfigured()) {
     try {
-      await mysqlUpdateUser(req.params.id, { username, password, divisionId, role });
+      const updates: any = {};
+      if (username !== undefined) updates.username = String(username).trim();
+      if (trimmedPassword.length > 0) updates.password = trimmedPassword;
+      if (divisionId !== undefined) updates.divisionId = divisionId;
+      if (role !== undefined) updates.role = role;
+      await mysqlUpdateUser(req.params.id, updates);
     } catch (err: any) {
       console.warn('MySQL update user warning:', err?.message);
     }
