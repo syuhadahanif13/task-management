@@ -332,36 +332,74 @@ export async function mysqlDeleteTask(id: string): Promise<void> {
   await p.execute('DELETE FROM tasks WHERE id = ?', [id]);
 }
 
+let cachedDivisionsResponse: any[] | null = null;
+let lastDivisionsCacheTime = 0;
+const DIVISIONS_CACHE_TTL_MS = 10000;
+
+export function invalidateDivisionsCache() {
+  cachedDivisionsResponse = null;
+  lastDivisionsCacheTime = 0;
+}
+
 export async function mysqlGetDivisions(): Promise<any[]> {
+  const now = Date.now();
+  if (cachedDivisionsResponse && (now - lastDivisionsCacheTime < DIVISIONS_CACHE_TTL_MS)) {
+    return cachedDivisionsResponse;
+  }
   const p = getMysqlPool();
-  if (!p) return [];
+  if (!p) return cachedDivisionsResponse || [];
   const [rows]: any = await p.query('SELECT * FROM divisions ORDER BY name ASC');
-  return rows.map((d: any) => ({
+  const res = rows.map((d: any) => ({
     id: d.id,
     name: d.name,
     createdAt: d.created_at ? new Date(d.created_at).toISOString() : new Date().toISOString(),
     updatedAt: d.updated_at ? new Date(d.updated_at).toISOString() : new Date().toISOString(),
   }));
+  cachedDivisionsResponse = res;
+  lastDivisionsCacheTime = Date.now();
+  return res;
 }
 
 export async function mysqlCreateDivision(id: string, name: string): Promise<any> {
+  invalidateDivisionsCache();
   const p = getMysqlPool();
   if (!p) return { id, name };
   await p.execute('INSERT INTO divisions (id, name, created_at, updated_at) VALUES (?, ?, NOW(), NOW())', [id, name]);
   return { id, name };
 }
 
+export async function mysqlUpdateDivision(id: string, name: string): Promise<void> {
+  invalidateDivisionsCache();
+  const p = getMysqlPool();
+  if (!p) return;
+  await p.execute('UPDATE divisions SET name = ?, updated_at = NOW() WHERE id = ?', [name, id]);
+}
+
 export async function mysqlDeleteDivision(id: string): Promise<void> {
+  invalidateDivisionsCache();
   const p = getMysqlPool();
   if (!p) return;
   await p.execute('DELETE FROM divisions WHERE id = ?', [id]);
 }
 
+let cachedUsersResponse: any[] | null = null;
+let lastUsersCacheTime = 0;
+const USERS_CACHE_TTL_MS = 10000;
+
+export function invalidateUsersCache() {
+  cachedUsersResponse = null;
+  lastUsersCacheTime = 0;
+}
+
 export async function mysqlGetUsers(): Promise<any[]> {
+  const now = Date.now();
+  if (cachedUsersResponse && (now - lastUsersCacheTime < USERS_CACHE_TTL_MS)) {
+    return cachedUsersResponse;
+  }
   const p = getMysqlPool();
-  if (!p) return [];
+  if (!p) return cachedUsersResponse || [];
   const [rows]: any = await p.query('SELECT id, username, password, division_id, role, created_at, updated_at FROM users ORDER BY username ASC');
-  return rows.map((u: any) => ({
+  const res = rows.map((u: any) => ({
     id: u.id,
     username: u.username,
     password: u.password,
@@ -370,9 +408,13 @@ export async function mysqlGetUsers(): Promise<any[]> {
     createdAt: u.created_at ? new Date(u.created_at).toISOString() : new Date().toISOString(),
     updatedAt: u.updated_at ? new Date(u.updated_at).toISOString() : new Date().toISOString(),
   }));
+  cachedUsersResponse = res;
+  lastUsersCacheTime = Date.now();
+  return res;
 }
 
 export async function mysqlCreateUser(user: any): Promise<any> {
+  invalidateUsersCache();
   const p = getMysqlPool();
   if (!p) return user;
   await p.execute(
@@ -382,7 +424,36 @@ export async function mysqlCreateUser(user: any): Promise<any> {
   return user;
 }
 
+export async function mysqlUpdateUser(id: string, updates: any): Promise<void> {
+  invalidateUsersCache();
+  const p = getMysqlPool();
+  if (!p) return;
+  const fields: string[] = [];
+  const values: any[] = [];
+  if (updates.username !== undefined) {
+    fields.push('username = ?');
+    values.push(String(updates.username).trim());
+  }
+  if (updates.password !== undefined) {
+    fields.push('password = ?');
+    values.push(String(updates.password));
+  }
+  if (updates.divisionId !== undefined) {
+    fields.push('division_id = ?');
+    values.push(updates.divisionId || null);
+  }
+  if (updates.role !== undefined) {
+    fields.push('role = ?');
+    values.push(updates.role);
+  }
+  if (fields.length === 0) return;
+  fields.push('updated_at = NOW()');
+  values.push(id);
+  await p.execute(`UPDATE users SET ${fields.join(', ')} WHERE id = ?`, values);
+}
+
 export async function mysqlDeleteUser(id: string): Promise<void> {
+  invalidateUsersCache();
   const p = getMysqlPool();
   if (!p) return;
   await p.execute('DELETE FROM users WHERE id = ?', [id]);
@@ -2715,6 +2786,7 @@ async function syncDivisionsFromSupabase(): Promise<Division[]> {
 
 // Division CRUD
 router.get('/divisions', async (req, res) => {
+  res.setHeader('Cache-Control', 'private, max-age=2, stale-while-revalidate=10');
   const data = await syncDivisionsFromSupabase();
   res.json(data);
 });
@@ -2773,6 +2845,14 @@ router.put('/divisions/:id', async (req, res) => {
   if (idx !== -1 && name !== undefined) {
     divisions[idx].name = String(name).trim();
     divisions[idx].updatedAt = now;
+  }
+
+  if (isMysqlConfigured() && name !== undefined) {
+    try {
+      await mysqlUpdateDivision(req.params.id, String(name).trim());
+    } catch (err: any) {
+      console.warn('MySQL update division warning:', err?.message);
+    }
   }
 
   if (supabase) {
@@ -2869,6 +2949,7 @@ async function syncUsersFromSupabase(): Promise<User[]> {
 
 // User CRUD
 router.get('/users', async (req, res) => {
+  res.setHeader('Cache-Control', 'private, max-age=2, stale-while-revalidate=10');
   await syncUsersFromSupabase();
   const safeUsers = users.map(({ password, ...u }) => ({ ...u }));
   res.json(safeUsers);
@@ -2942,6 +3023,14 @@ router.put('/users/:id', async (req, res) => {
     if (divisionId !== undefined) users[idx].divisionId = String(divisionId);
     if (role !== undefined && ['admin', 'user'].includes(role)) users[idx].role = role;
     users[idx].updatedAt = now;
+  }
+
+  if (isMysqlConfigured()) {
+    try {
+      await mysqlUpdateUser(req.params.id, { username, password, divisionId, role });
+    } catch (err: any) {
+      console.warn('MySQL update user warning:', err?.message);
+    }
   }
 
   if (supabase) {

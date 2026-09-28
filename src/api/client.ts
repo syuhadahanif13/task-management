@@ -1654,8 +1654,21 @@ export const api = {
 
     let fetchedDivisions: Division[] = [];
 
-    // 2. Try direct Supabase client query
-    if (sbClient) {
+    // 2. Try API fetch first (fast MySQL hosting)
+    try {
+      const res = await apiFetch('/api/divisions');
+      if (res.ok) {
+        const data = await res.json();
+        if (Array.isArray(data) && data.length > 0) {
+          fetchedDivisions = data;
+        }
+      }
+    } catch (fetchErr) {
+      console.warn('API fetch divisions failed:', fetchErr);
+    }
+
+    // 3. Fallback to direct Supabase only if API didn't return data
+    if (fetchedDivisions.length === 0 && sbClient) {
       try {
         const { data, error } = await sbClient.from('divisions').select('*').order('name', { ascending: true });
         if (!error && Array.isArray(data) && data.length > 0) {
@@ -1668,21 +1681,6 @@ export const api = {
         }
       } catch (sbErr) {
         console.warn('Direct Supabase getDivisions warning:', sbErr);
-      }
-    }
-
-    // 3. If direct Supabase didn't return data, try API fetch
-    if (fetchedDivisions.length === 0) {
-      try {
-        const res = await apiFetch('/api/divisions');
-        if (res.ok) {
-          const data = await res.json();
-          if (Array.isArray(data) && data.length > 0) {
-            fetchedDivisions = data;
-          }
-        }
-      } catch (fetchErr) {
-        console.warn('API fetch divisions failed:', fetchErr);
       }
     }
 
@@ -1736,30 +1734,33 @@ export const api = {
     const divisionName = input.name.trim();
 
     if (sbClient) {
-      try {
-        const { data: sbData, error: sbErr } = await sbClient
-          .from('divisions')
-          .upsert({
-            id: divisionId,
-            name: divisionName,
-            created_at: now,
-            updated_at: now,
-          })
-          .select()
-          .maybeSingle();
+      const upsertPromise = sbClient
+        .from('divisions')
+        .upsert({
+          id: divisionId,
+          name: divisionName,
+          created_at: now,
+          updated_at: now,
+        })
+        .select()
+        .maybeSingle();
 
-        if (!sbErr && sbData) {
-          createdDivision = {
-            id: sbData.id,
-            name: sbData.name,
-            createdAt: sbData.created_at,
-            updatedAt: sbData.updated_at,
-          };
-        } else if (sbErr) {
-          console.warn('Direct Supabase upsert division warning:', sbErr.message);
+      if (!createdDivision) {
+        try {
+          const { data: sbData, error: sbErr } = await upsertPromise;
+          if (!sbErr && sbData) {
+            createdDivision = {
+              id: sbData.id,
+              name: sbData.name,
+              createdAt: sbData.created_at,
+              updatedAt: sbData.updated_at,
+            };
+          }
+        } catch (sbErr: any) {
+          console.warn('Direct Supabase upsert division error:', sbErr?.message);
         }
-      } catch (sbErr: any) {
-        console.warn('Direct Supabase upsert division error:', sbErr?.message);
+      } else {
+        Promise.resolve(upsertPromise).catch(() => {});
       }
     }
 
@@ -1812,24 +1813,29 @@ export const api = {
     }
 
     if (sbClient && input.name) {
-      try {
-        const { data, error } = await sbClient
-          .from('divisions')
-          .update({ name: input.name.trim(), updated_at: now })
-          .eq('id', id)
-          .select()
-          .maybeSingle();
+      const updatePromise = sbClient
+        .from('divisions')
+        .update({ name: input.name.trim(), updated_at: now })
+        .eq('id', id)
+        .select()
+        .maybeSingle();
 
-        if (!error && data) {
-          updatedDivision = {
-            id: data.id,
-            name: data.name,
-            createdAt: data.created_at,
-            updatedAt: data.updated_at,
-          };
+      if (!updatedDivision) {
+        try {
+          const { data, error } = await updatePromise;
+          if (!error && data) {
+            updatedDivision = {
+              id: data.id,
+              name: data.name,
+              createdAt: data.created_at,
+              updatedAt: data.updated_at,
+            };
+          }
+        } catch (sbErr) {
+          console.warn('Direct Supabase updateDivision warning:', sbErr);
         }
-      } catch (sbErr) {
-        console.warn('Direct Supabase updateDivision warning:', sbErr);
+      } else {
+        Promise.resolve(updatePromise).catch(() => {});
       }
     }
 
@@ -1869,11 +1875,7 @@ export const api = {
     }
 
     if (sbClient) {
-      try {
-        await sbClient.from('divisions').delete().eq('id', id);
-      } catch (sbErr) {
-        console.warn('Direct Supabase deleteDivision warning:', sbErr);
-      }
+      Promise.resolve(sbClient.from('divisions').delete().eq('id', id)).catch(() => {});
     }
 
     try {
@@ -1906,7 +1908,21 @@ export const api = {
 
     let fetchedUsers: Omit<User, 'password'>[] = [];
 
-    if (sbClient) {
+    // 2. Try API fetch first (fast MySQL hosting)
+    try {
+      const res = await apiFetch('/api/users');
+      if (res.ok) {
+        const data = await res.json();
+        if (Array.isArray(data) && data.length > 0) {
+          fetchedUsers = data;
+        }
+      }
+    } catch (err) {
+      console.warn('API getUsers failed:', err);
+    }
+
+    // 3. Fallback to direct Supabase only if API didn't return data
+    if (fetchedUsers.length === 0 && sbClient) {
       try {
         const { data, error } = await sbClient
           .from('users')
@@ -1924,20 +1940,6 @@ export const api = {
         }
       } catch (sbErr) {
         console.warn('Direct Supabase getUsers warning:', sbErr);
-      }
-    }
-
-    if (fetchedUsers.length === 0) {
-      try {
-        const res = await apiFetch('/api/users');
-        if (res.ok) {
-          const data = await res.json();
-          if (Array.isArray(data) && data.length > 0) {
-            fetchedUsers = data;
-          }
-        }
-      } catch (err) {
-        console.warn('API getUsers failed:', err);
       }
     }
 
@@ -1994,33 +1996,38 @@ export const api = {
     const userId = createdUser?.id || `user-${Date.now().toString(36)}-${Math.random().toString(36).substring(2, 6)}`;
 
     if (sbClient) {
-      try {
-        const { data: sbData, error: sbErr } = await sbClient
-          .from('users')
-          .upsert({
-            id: userId,
-            username: input.username.trim(),
-            password: input.password,
-            division_id: input.divisionId,
-            role: input.role || 'user',
-            created_at: now,
-            updated_at: now,
-          })
-          .select('id, username, division_id, role, created_at, updated_at')
-          .maybeSingle();
+      const upsertPromise = sbClient
+        .from('users')
+        .upsert({
+          id: userId,
+          username: input.username.trim(),
+          password: input.password,
+          division_id: input.divisionId,
+          role: input.role || 'user',
+          created_at: now,
+          updated_at: now,
+        })
+        .select('id, username, division_id, role, created_at, updated_at')
+        .maybeSingle();
 
-        if (!sbErr && sbData) {
-          createdUser = {
-            id: sbData.id,
-            username: sbData.username,
-            divisionId: sbData.division_id,
-            role: sbData.role,
-            createdAt: sbData.created_at,
-            updatedAt: sbData.updated_at,
-          };
+      if (!createdUser) {
+        try {
+          const { data: sbData, error: sbErr } = await upsertPromise;
+          if (!sbErr && sbData) {
+            createdUser = {
+              id: sbData.id,
+              username: sbData.username,
+              divisionId: sbData.division_id,
+              role: sbData.role,
+              createdAt: sbData.created_at,
+              updatedAt: sbData.updated_at,
+            };
+          }
+        } catch (sbErr) {
+          console.warn('Direct Supabase createUser warning:', sbErr);
         }
-      } catch (sbErr) {
-        console.warn('Direct Supabase createUser warning:', sbErr);
+      } else {
+        Promise.resolve(upsertPromise).catch(() => {});
       }
     }
 
@@ -2068,32 +2075,37 @@ export const api = {
     }
 
     if (sbClient) {
-      try {
-        const updateData: any = { updated_at: now };
-        if (input.username !== undefined) updateData.username = input.username.trim();
-        if (input.password !== undefined) updateData.password = input.password;
-        if (input.divisionId !== undefined) updateData.division_id = input.divisionId;
-        if (input.role !== undefined) updateData.role = input.role;
+      const updateData: any = { updated_at: now };
+      if (input.username !== undefined) updateData.username = input.username.trim();
+      if (input.password !== undefined) updateData.password = input.password;
+      if (input.divisionId !== undefined) updateData.division_id = input.divisionId;
+      if (input.role !== undefined) updateData.role = input.role;
 
-        const { data, error } = await sbClient
-          .from('users')
-          .update(updateData)
-          .eq('id', id)
-          .select('id, username, division_id, role, created_at, updated_at')
-          .maybeSingle();
+      const updatePromise = sbClient
+        .from('users')
+        .update(updateData)
+        .eq('id', id)
+        .select('id, username, division_id, role, created_at, updated_at')
+        .maybeSingle();
 
-        if (!error && data) {
-          updatedUser = {
-            id: data.id,
-            username: data.username,
-            divisionId: data.division_id,
-            role: data.role,
-            createdAt: data.created_at,
-            updatedAt: data.updated_at,
-          };
+      if (!updatedUser) {
+        try {
+          const { data, error } = await updatePromise;
+          if (!error && data) {
+            updatedUser = {
+              id: data.id,
+              username: data.username,
+              divisionId: data.division_id,
+              role: data.role,
+              createdAt: data.created_at,
+              updatedAt: data.updated_at,
+            };
+          }
+        } catch (sbErr) {
+          console.warn('Direct Supabase updateUser warning:', sbErr);
         }
-      } catch (sbErr) {
-        console.warn('Direct Supabase updateUser warning:', sbErr);
+      } else {
+        Promise.resolve(updatePromise).catch(() => {});
       }
     }
 
@@ -2135,11 +2147,7 @@ export const api = {
     }
 
     if (sbClient) {
-      try {
-        await sbClient.from('users').delete().eq('id', id);
-      } catch (sbErr) {
-        console.warn('Direct Supabase deleteUser warning:', sbErr);
-      }
+      Promise.resolve(sbClient.from('users').delete().eq('id', id)).catch(() => {});
     }
 
     try {
