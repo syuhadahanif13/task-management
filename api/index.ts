@@ -1,7 +1,6 @@
 import express from 'express';
 import path from 'path';
 import { GoogleGenAI, Type } from '@google/genai';
-import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import dotenv from 'dotenv';
 import mysql from 'mysql2/promise';
 
@@ -598,14 +597,6 @@ const app = express();
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
-// Initialize Supabase client
-const supabaseUrl = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
-const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY;
-let supabase: SupabaseClient | null = null;
-if (supabaseUrl && supabaseKey) {
-  supabase = createClient(supabaseUrl, supabaseKey);
-}
-
 // In-memory data store (clean state)
 let meetings: Meeting[] = [];
 let submissions: TaskSubmission[] = [];
@@ -624,7 +615,6 @@ router.get('/health', (req, res) => {
     status: 'ok',
     timestamp: new Date().toISOString(),
     mysqlConnected: isMysqlConfigured(),
-    supabaseConnected: Boolean(supabase)
   });
 });
 
@@ -654,64 +644,6 @@ router.get('/mysql/test', async (req, res) => {
     res.status(500).json({
       connected: false,
       error: err?.message || 'Error saat menghubungi MySQL hosting',
-    });
-  }
-});
-
-router.get('/supabase/config', (req, res) => {
-  const url = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || '';
-  const anonKey = process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY || '';
-  res.json({
-    configured: Boolean(url && (anonKey || process.env.SUPABASE_SERVICE_ROLE_KEY)),
-    supabaseUrl: url,
-    supabaseAnonKey: anonKey,
-    hasServerClient: Boolean(supabase),
-  });
-});
-
-router.post('/supabase/config', (req, res) => {
-  const { supabaseUrl, supabaseAnonKey } = req.body;
-  if (supabaseUrl && supabaseAnonKey) {
-    try {
-      supabase = createClient(supabaseUrl.trim(), supabaseAnonKey.trim());
-      console.log('Server Supabase client connected dynamically from client credentials');
-      return res.json({ success: true, message: 'Server Supabase client connected successfully' });
-    } catch (err: any) {
-      console.warn('Failed to dynamically connect server Supabase client:', err?.message);
-      return res.status(400).json({ error: err?.message });
-    }
-  }
-  res.status(400).json({ error: 'supabaseUrl and supabaseAnonKey are required' });
-});
-
-router.get('/supabase/test', async (req, res) => {
-  if (!supabase) {
-    return res.json({
-      connected: false,
-      message: 'Supabase belum dikonfigurasi di server environment.',
-      meetingsCount: 0,
-      tasksCount: 0,
-    });
-  }
-
-  try {
-    const [mRes, tRes] = await Promise.all([
-      supabase.from('meetings').select('count', { count: 'exact', head: true }),
-      supabase.from('tasks').select('count', { count: 'exact', head: true }),
-    ]);
-
-    res.json({
-      connected: !mRes.error || !tRes.error,
-      meetingsCount: mRes.count ?? 0,
-      tasksCount: tRes.count ?? 0,
-      meetingsError: mRes.error ? mRes.error.message : null,
-      tasksError: tRes.error ? tRes.error.message : null,
-      message: (!mRes.error && !tRes.error) ? 'Terhubung normal ke tabel meetings dan tasks' : 'Terhubung sebagian / terdapat error tabel',
-    });
-  } catch (err: any) {
-    res.status(500).json({
-      connected: false,
-      error: err?.message || 'Error saat menghubungi Supabase',
     });
   }
 });
@@ -775,282 +707,7 @@ function embedTaskSubmissionIntoDescription(originalDesc: string = '', sub: Task
   const cleanDesc = extractTaskDescription(originalDesc);
   return `${cleanDesc}\n${SUBMISSION_DELIMITER}\n${JSON.stringify(sub)}`;
 }
-
-async function loadSubmissionsFromSupabase(sb: SupabaseClient): Promise<TaskSubmission[]> {
-  // 1. Read from system meeting record in meetings table (use title query to avoid UUID syntax error on id)
-  try {
-    const { data: sysMeeting, error: smErr } = await sb
-      .from('meetings')
-      .select('meeting_notes')
-      .eq('title', '__SYSTEM_TASK_SUBMISSIONS__')
-      .maybeSingle();
-
-    if (!smErr && sysMeeting && sysMeeting.meeting_notes) {
-      try {
-        const parsed = JSON.parse(sysMeeting.meeting_notes);
-        if (Array.isArray(parsed)) {
-          for (const item of parsed) {
-            const existingIdx = submissions.findIndex(s => s.id === item.id || s.taskId === item.taskId || (item.taskTitle && s.taskTitle === item.taskTitle));
-            if (existingIdx >= 0) {
-              const existingAtt = Array.isArray(submissions[existingIdx].attachments) ? submissions[existingIdx].attachments : [];
-              const itemAtt = Array.isArray(item.attachments) ? item.attachments : [];
-              submissions[existingIdx] = {
-                ...submissions[existingIdx],
-                ...item,
-                attachments: itemAtt.length > 0 ? itemAtt : existingAtt,
-              };
-            } else {
-              submissions.push({
-                ...item,
-                attachments: Array.isArray(item.attachments) ? item.attachments : [],
-              });
-            }
-          }
-        }
-      } catch (e) {
-        console.warn('Failed parsing submissions from system-task-submissions:', e);
-      }
-    }
-  } catch (e1: any) {
-    console.warn('Step 1 loadSubmissionsFromSupabase warning:', e1?.message);
-  }
-
-  // 2. Also try reading from task_submissions table if available
-  try {
-    const { data: dbSubs, error: dbErr } = await sb
-      .from('task_submissions')
-      .select('*');
-
-    if (!dbErr && Array.isArray(dbSubs)) {
-      for (const s of dbSubs) {
-        const item: TaskSubmission = {
-          id: s.id,
-          taskId: s.task_id,
-          taskTitle: s.task_title,
-          assignee: s.assignee,
-          notes: s.notes || '',
-          attachments: Array.isArray(s.attachments) ? s.attachments : [],
-          status: s.status || 'pending',
-          submittedAt: s.submitted_at,
-          reviewedBy: s.reviewed_by,
-          reviewedAt: s.reviewed_at,
-          reviewNote: s.review_note
-        };
-        const existingIdx = submissions.findIndex(x => x.id === item.id || x.taskId === item.taskId);
-        if (existingIdx >= 0) {
-          const existingAtt = Array.isArray(submissions[existingIdx].attachments) ? submissions[existingIdx].attachments : [];
-          submissions[existingIdx] = {
-            ...submissions[existingIdx],
-            ...item,
-            attachments: item.attachments.length > 0 ? item.attachments : existingAtt,
-          };
-        } else {
-          submissions.push(item);
-        }
-      }
-    }
-  } catch (e2: any) {
-    console.warn('Step 2 loadSubmissionsFromSupabase warning:', e2?.message);
-  }
-
-  // 3. Read tasks table directly to extract submissions embedded in description (most reliable)
-  try {
-    const { data: dbTasks, error: taskErr } = await sb
-      .from('tasks')
-      .select('id, title, description, status');
-    if (!taskErr && Array.isArray(dbTasks)) {
-      for (const t of dbTasks) {
-        const extracted = extractTaskSubmissionFromDescription(t.description);
-        if (extracted) {
-          if (!extracted.taskId) extracted.taskId = t.id;
-          if (!extracted.taskTitle) extracted.taskTitle = t.title;
-          const existingIdx = submissions.findIndex(x => x.id === extracted.id || x.taskId === t.id || (t.title && x.taskTitle === t.title));
-          if (existingIdx >= 0) {
-            const existingAtt = Array.isArray(submissions[existingIdx].attachments) ? submissions[existingIdx].attachments : [];
-            const extAtt = Array.isArray(extracted.attachments) ? extracted.attachments : [];
-            submissions[existingIdx] = {
-              ...submissions[existingIdx],
-              ...extracted,
-              taskTitle: t.title,
-              attachments: extAtt.length > 0 ? extAtt : existingAtt,
-            };
-          } else {
-            submissions.push({ ...extracted, taskTitle: t.title });
-          }
-        }
-      }
-    }
-  } catch (e3: any) {
-    console.warn('Step 3 loadSubmissionsFromSupabase warning:', e3?.message);
-  }
-
-  return submissions;
-}
-
-async function saveSubmissionsToSupabase(sb: SupabaseClient, subs: TaskSubmission[]) {
-  const nowIso = new Date().toISOString();
-
-  // 1. Read existing submissions from Supabase system meeting
-  let combined: TaskSubmission[] = [];
-  try {
-    const { data: sysMeeting } = await sb
-      .from('meetings')
-      .select('meeting_notes')
-      .eq('title', '__SYSTEM_TASK_SUBMISSIONS__')
-      .maybeSingle();
-
-    if (sysMeeting && sysMeeting.meeting_notes) {
-      try {
-        const parsed = JSON.parse(sysMeeting.meeting_notes);
-        if (Array.isArray(parsed)) combined = parsed;
-      } catch {}
-    }
-  } catch {}
-
-  // Merge in-memory submissions into combined
-  for (const mem of submissions) {
-    const idx = combined.findIndex(s => s.id === mem.id || (mem.taskId && s.taskId === mem.taskId) || (mem.taskTitle && s.taskTitle === mem.taskTitle));
-    if (idx >= 0) {
-      const existingAtt = Array.isArray(combined[idx].attachments) ? combined[idx].attachments : [];
-      const memAtt = Array.isArray(mem.attachments) ? mem.attachments : [];
-      combined[idx] = {
-        ...combined[idx],
-        ...mem,
-        attachments: memAtt.length > 0 ? memAtt : existingAtt,
-      };
-    } else {
-      combined.push(mem);
-    }
-  }
-
-  // Merge incoming subs into combined
-  for (const sub of subs) {
-    const idx = combined.findIndex(s => s.id === sub.id || (sub.taskId && s.taskId === sub.taskId) || (sub.taskTitle && s.taskTitle === sub.taskTitle));
-    if (idx >= 0) {
-      const existingAtt = Array.isArray(combined[idx].attachments) ? combined[idx].attachments : [];
-      const subAtt = Array.isArray(sub.attachments) ? sub.attachments : [];
-      combined[idx] = {
-        ...combined[idx],
-        ...sub,
-        attachments: subAtt.length > 0 ? subAtt : existingAtt,
-      };
-    } else {
-      combined.push(sub);
-    }
-  }
-
-  // Update global in-memory submissions
-  submissions = combined;
-
-  const notesJson = JSON.stringify(combined);
-
-  // 1. Save to meetings system record by title (UUID-safe)
-  try {
-    const { data: existingMeeting } = await sb
-      .from('meetings')
-      .select('id')
-      .eq('title', '__SYSTEM_TASK_SUBMISSIONS__')
-      .maybeSingle();
-
-    if (existingMeeting) {
-      await sb.from('meetings').update({
-        title: '__SYSTEM_TASK_SUBMISSIONS__',
-        meeting_date: '2000-01-01',
-        participants: ['system'],
-        meeting_notes: notesJson,
-        updated_at: nowIso
-      }).eq('id', existingMeeting.id);
-    } else {
-      await sb.from('meetings').insert([{
-        id: generateSafeUuid(),
-        title: '__SYSTEM_TASK_SUBMISSIONS__',
-        meeting_date: '2000-01-01',
-        participants: ['system'],
-        meeting_notes: notesJson,
-        created_at: nowIso,
-        updated_at: nowIso
-      }]);
-    }
-  } catch (err: any) {
-    console.warn('saveSubmissionsToSupabase system meeting notice:', err?.message);
-  }
-
-  // 2. Embed submissions directly into tasks.description in Supabase for 100% resilient access
-  for (const sub of subs) {
-    try {
-      let currTask: any = null;
-      if (isValidUuid(sub.taskId)) {
-        try {
-          const { data } = await sb.from('tasks').select('id, description, title').eq('id', sub.taskId).maybeSingle();
-          currTask = data;
-        } catch {}
-      }
-      if (!currTask && (sub.taskTitle || sub.taskId)) {
-        try {
-          const searchTitle = sub.taskTitle || sub.taskId;
-          const { data } = await sb.from('tasks').select('id, description, title').eq('title', searchTitle).limit(1).maybeSingle();
-          currTask = data;
-        } catch {}
-      }
-      if (currTask) {
-        const updatedDesc = embedTaskSubmissionIntoDescription(currTask.description || '', sub);
-        await sb.from('tasks').update({ description: updatedDesc, updated_at: nowIso }).eq('id', currTask.id);
-      }
-    } catch (e: any) {
-      console.warn('Embed into task.description notice:', e?.message);
-    }
-  }
-
-  // 3. Try saving to task_submissions table if it exists
-  for (const sub of subs) {
-    if (isValidUuid(sub.taskId) && Array.isArray(sub.attachments) && sub.attachments.length > 0) {
-      try {
-        await sb.from('task_submissions').upsert({
-          id: isValidUuid(sub.id) ? sub.id : generateSafeUuid(),
-          task_id: sub.taskId,
-          assignee: sub.assignee || 'User',
-          notes: sub.notes || '',
-          attachments: sub.attachments,
-          status: sub.status || 'pending',
-          submitted_at: sub.submittedAt || nowIso,
-        });
-      } catch {}
-    }
-  }
-}
-
-async function updateTaskStatusInSupabase(sb: SupabaseClient, taskId: string, status: TaskStatus, description?: string) {
-  const now = new Date().toISOString();
-  const updatePayload: any = { updated_at: now };
-  if (description !== undefined) updatePayload.description = description;
-
-  if (isValidUuid(taskId)) {
-    try {
-      if (status === 'Pending Approval') {
-        updatePayload.status = 'Pending Approval';
-        const { error: err1 } = await sb.from('tasks').update(updatePayload).eq('id', taskId);
-        if (err1) {
-          console.warn('Supabase update Pending Approval rejected by constraint, using Blocked fallback:', err1.message);
-          updatePayload.status = 'Blocked';
-          const { error: err2 } = await sb.from('tasks').update(updatePayload).eq('id', taskId);
-          if (err2) {
-            console.warn('Supabase update Blocked fallback failed:', err2.message);
-          }
-        }
-      } else {
-        updatePayload.status = status;
-        const { error } = await sb.from('tasks').update(updatePayload).eq('id', taskId);
-        if (error) {
-          console.warn(`Supabase update task status ${status} warning:`, error.message);
-        }
-      }
-    } catch (err: any) {
-      console.warn('Supabase updateTaskStatus error:', err?.message);
-    }
-  }
-}
-
-async function syncMeetingsFromSupabase(): Promise<Meeting[]> {
+async function syncMeetingsFromDatabase(): Promise<Meeting[]> {
   if (isMysqlConfigured()) {
     try {
       const mysqlMeetings = await mysqlGetMeetings();
@@ -1061,179 +718,6 @@ async function syncMeetingsFromSupabase(): Promise<Meeting[]> {
     } catch (err: any) {
       console.warn('MySQL get meetings warning:', err?.message);
     }
-  }
-
-  if (!supabase) return meetings;
-  try {
-    // Sync submissions from Supabase system store and task_submissions table
-    try {
-      await loadSubmissionsFromSupabase(supabase);
-    } catch (subErr: any) {
-      console.warn('loadSubmissionsFromSupabase non-fatal warning:', subErr?.message);
-    }
-
-    let rawMeetings: any[] = [];
-    let rawTasks: any[] = [];
-
-    // Parallel fetch meetings and tasks without SQL ordering constraint
-    const [mRes, tRes] = await Promise.all([
-      supabase.from('meetings').select('*'),
-      supabase.from('tasks').select('*'),
-    ]);
-
-    if (!mRes.error && Array.isArray(mRes.data)) {
-      rawMeetings = mRes.data;
-    } else if (mRes.error) {
-      console.warn('Supabase meetings query failed:', mRes.error.message);
-    }
-
-    if (!tRes.error && Array.isArray(tRes.data)) {
-      rawTasks = tRes.data;
-    } else if (tRes.error) {
-      console.warn('Supabase tasks query failed:', tRes.error.message);
-    }
-
-    const tasksByMeeting: Record<string, any[]> = {};
-    for (const t of rawTasks) {
-      const mId = t.meeting_id || t.meetingId || 'general-tasks';
-      if (!tasksByMeeting[mId]) tasksByMeeting[mId] = [];
-      tasksByMeeting[mId].push(t);
-    }
-
-    // Collect all task IDs that have pending submissions
-    const pendingTaskIdSet = new Set<string>();
-    for (const s of submissions) {
-      if (s.status === 'pending') {
-        pendingTaskIdSet.add(s.taskId);
-      }
-    }
-
-    const cleanDbMeetings = rawMeetings.filter(
-      (m: any) => m.id !== SYSTEM_SUBMISSIONS_MEETING_ID && !String(m.id).startsWith('system-') && m.title !== '__SYSTEM_TASK_SUBMISSIONS__'
-    );
-
-    const meetingsMap = new Map<string, Meeting>();
-
-    for (const m of cleanDbMeetings) {
-      const mDate = m.meeting_date || m.meetingDate || m.date || (m.created_at ? String(m.created_at).split('T')[0] : '') || new Date().toISOString().split('T')[0];
-      const mNotes = m.meeting_notes || m.meetingNotes || m.notes || m.catatan || m.description || '';
-      let mParts: string[] = [];
-      if (Array.isArray(m.participants)) {
-        mParts = m.participants.map((p: any) => String(p).trim()).filter(Boolean);
-      } else if (typeof m.participants === 'string') {
-        try {
-          const parsed = JSON.parse(m.participants);
-          mParts = Array.isArray(parsed) ? parsed.map((p: any) => String(p).trim()).filter(Boolean) : [m.participants.trim()];
-        } catch {
-          mParts = m.participants.split(',').map((s: string) => s.trim()).filter(Boolean);
-        }
-      }
-
-      const mTasks = (tasksByMeeting[m.id] || []).map((t: any) => {
-        const isPending = pendingTaskIdSet.has(t.id) || t.status === 'Pending Approval' || t.status === 'Blocked';
-        const rawAssignees = Array.isArray(t.assignees) ? t.assignees : (t.assignee ? String(t.assignee).split(',').map((s: string) => s.trim()).filter(Boolean) : []);
-        const resolvedAssignee = rawAssignees.length > 0 ? rawAssignees.join(', ') : String(t.assignee || 'Unassigned').trim();
-        return {
-          id: t.id,
-          meetingId: m.id,
-          title: String(t.title || 'Untitled Action Item').trim(),
-          assignee: resolvedAssignee,
-          assignees: rawAssignees.length > 0 ? rawAssignees : [resolvedAssignee],
-          dueDate: t.due_date || t.dueDate || new Date().toISOString().split('T')[0],
-          dueTime: t.due_time || t.dueTime,
-          status: isPending ? ('Pending Approval' as TaskStatus) : (t.status as TaskStatus),
-          priority: t.priority || 'Medium',
-          description: t.description || '',
-          tags: Array.isArray(t.tags) ? t.tags : [],
-          createdAt: t.created_at || t.createdAt || new Date().toISOString(),
-          updatedAt: t.updated_at || t.updatedAt || new Date().toISOString(),
-        };
-      });
-
-      meetingsMap.set(m.id, {
-        id: m.id,
-        title: m.title || m.judul || `Rapat ${mDate}`,
-        meetingDate: mDate,
-        participants: mParts,
-        meetingNotes: String(mNotes),
-        createdAt: m.created_at || m.createdAt || new Date().toISOString(),
-        updatedAt: m.updated_at || m.updatedAt || new Date().toISOString(),
-        tasks: mTasks,
-      });
-    }
-
-    // Reconstruct missing meetings from tasks that have a meeting_id not present in meetings table
-    for (const [mId, mTasks] of Object.entries(tasksByMeeting)) {
-      if (mId === 'general-tasks' || mId === 'undefined' || !mId) continue;
-      if (!meetingsMap.has(mId)) {
-        const first = mTasks[0];
-        const uniqueAssignees = Array.from(
-          new Set(mTasks.flatMap((t: any) => t.assignees || (t.assignee ? [t.assignee] : [])))
-        ).filter(Boolean);
-        const mDate = first.due_date || first.dueDate || new Date().toISOString().split('T')[0];
-        const recoveredTitle = first.title ? `Rapat Tindak Lanjut (${first.title.slice(0, 30)})` : `Rapat (${mId.slice(-6)})`;
-
-        meetingsMap.set(mId, {
-          id: mId,
-          title: recoveredTitle,
-          meetingDate: mDate,
-          participants: uniqueAssignees.length > 0 ? (uniqueAssignees as string[]) : ['Peserta Rapat'],
-          meetingNotes: first.description ? `Catatan Agenda Tindak Lanjut:\n${first.description}` : 'Catatan rapat dipulihkan dari action items terdaftar.',
-          createdAt: first.created_at || new Date().toISOString(),
-          updatedAt: first.updated_at || new Date().toISOString(),
-          tasks: mTasks.map((t: any) => ({
-            id: t.id,
-            meetingId: mId,
-            title: String(t.title || 'Untitled Action Item').trim(),
-            assignee: t.assignee || 'Unassigned',
-            assignees: Array.isArray(t.assignees) ? t.assignees : [t.assignee || 'Unassigned'],
-            dueDate: t.due_date || t.dueDate || mDate,
-            dueTime: t.due_time || t.dueTime,
-            status: (pendingTaskIdSet.has(t.id) || t.status === 'Blocked' ? 'Pending Approval' : (t.status || 'To Do')) as TaskStatus,
-            priority: t.priority || 'Medium',
-            description: t.description || '',
-            tags: t.tags || [],
-            createdAt: t.created_at || new Date().toISOString(),
-            updatedAt: t.updated_at || new Date().toISOString(),
-          })),
-        });
-      }
-    }
-
-    // General tasks container
-    if (tasksByMeeting['general-tasks'] && tasksByMeeting['general-tasks'].length > 0) {
-      meetingsMap.set('general-tasks', {
-        id: 'general-tasks',
-        title: 'Tugas Mandiri',
-        meetingDate: new Date().toISOString().split('T')[0],
-        participants: [],
-        meetingNotes: 'Tugas umum tanpa jadwal rapat.',
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-        tasks: tasksByMeeting['general-tasks'].map((t: any) => ({
-          id: t.id,
-          meetingId: 'general-tasks',
-          title: t.title,
-          assignee: t.assignee || 'Unassigned',
-          assignees: Array.isArray(t.assignees) ? t.assignees : [t.assignee || 'Unassigned'],
-          dueDate: t.due_date || new Date().toISOString().split('T')[0],
-          dueTime: t.due_time,
-          status: (pendingTaskIdSet.has(t.id) || t.status === 'Blocked' ? 'Pending Approval' : (t.status || 'To Do')) as TaskStatus,
-          priority: t.priority || 'Medium',
-          description: t.description || '',
-          tags: t.tags || [],
-          createdAt: t.created_at || new Date().toISOString(),
-          updatedAt: t.updated_at || new Date().toISOString(),
-        })),
-      });
-    }
-
-    const formatted = Array.from(meetingsMap.values());
-    formatted.sort((a, b) => new Date(b.meetingDate || b.createdAt).getTime() - new Date(a.meetingDate || a.createdAt).getTime());
-    meetings = formatted;
-    return formatted;
-  } catch (err: any) {
-    console.warn('Supabase read fallback to memory:', err?.message);
   }
   return meetings;
 }
@@ -1249,11 +733,6 @@ router.get('/meetings', async (req, res) => {
     } catch (err: any) {
       console.warn('MySQL get meetings error, falling back:', err?.message);
     }
-  }
-
-  if (supabase) {
-    const synced = await syncMeetingsFromSupabase();
-    return res.json(synced);
   }
 
   const sorted = [...meetings].sort((a, b) => new Date(b.meetingDate).getTime() - new Date(a.meetingDate).getTime());
@@ -1328,43 +807,14 @@ router.post('/meetings', async (req, res) => {
     }
   }
 
-  // Sync to Supabase if connected
-  if (supabase) {
-    try {
-      await supabase.from('meetings').insert([{
-        id: newMeeting.id,
-        title: newMeeting.title,
-        meeting_date: newMeeting.meetingDate,
-        participants: newMeeting.participants,
-        meeting_notes: newMeeting.meetingNotes,
-        created_at: newMeeting.createdAt,
-        updated_at: newMeeting.updatedAt,
-      }]);
-      if (parsedTasks.length > 0) {
-        await supabase.from('tasks').insert(parsedTasks.map(t => ({
-          id: t.id,
-          meeting_id: newMeeting.id,
-          title: t.title,
-          assignee: t.assignee,
-          due_date: t.dueDate,
-          status: t.status,
-          created_at: t.createdAt,
-          updated_at: t.updatedAt
-        })));
-      }
-    } catch (err: any) {
-      console.warn('Supabase meeting creation sync warning:', err?.message);
-    }
-  }
-
   meetings.unshift(newMeeting);
   res.status(201).json(newMeeting);
 });
 
 router.put('/meetings/:id', async (req, res) => {
   let meetingIndex = meetings.findIndex(m => m.id === req.params.id);
-  if (meetingIndex === -1 && (isMysqlConfigured() || supabase)) {
-    await syncMeetingsFromSupabase();
+  if (meetingIndex === -1 && isMysqlConfigured()) {
+    await syncMeetingsFromDatabase();
     meetingIndex = meetings.findIndex(m => m.id === req.params.id);
   }
   if (meetingIndex === -1) return res.status(404).json({ error: 'Meeting not found' });
@@ -1387,29 +837,13 @@ router.put('/meetings/:id', async (req, res) => {
     }
   }
 
-  if (supabase) {
-    try {
-      await supabase.from('meetings').update({
-        title: updated.title,
-        meeting_date: updated.meetingDate,
-        participants: updated.participants,
-        meeting_notes: updated.meetingNotes,
-        updated_at: updated.updatedAt
-      }).eq('id', updated.id);
-    } catch (err: any) {
-      console.warn('Supabase meeting update warning:', err?.message);
-    }
-  }
-
   meetings[meetingIndex] = updated;
   res.json(updated);
 });
 
-// DELETE /api/meetings/:id - Menghapus data meeting dan tugas terkait dari Supabase & memori
+// DELETE /api/meetings/:id - Menghapus data meeting dan tugas terkait dari MySQL & memori
 router.delete('/meetings/:id', async (req, res) => {
   const meetingId = req.params.id;
-  let supabaseDeleted = false;
-  let supabaseError: string | null = null;
 
   if (isMysqlConfigured()) {
     try {
@@ -1419,30 +853,6 @@ router.delete('/meetings/:id', async (req, res) => {
     }
   }
 
-  // 1. Hapus dari Supabase jika koneksi aktif
-  if (supabase) {
-    try {
-      // Hapus tasks terkait (1:N relationship)
-      const { error: tasksErr } = await supabase.from('tasks').delete().eq('meeting_id', meetingId);
-      if (tasksErr) {
-        console.warn('Supabase tasks delete warning:', tasksErr.message);
-      }
-
-      // Hapus row meeting
-      const { error: mErr } = await supabase.from('meetings').delete().eq('id', meetingId);
-      if (mErr) {
-        supabaseError = mErr.message;
-        console.warn('Supabase meeting delete warning:', mErr.message);
-      } else {
-        supabaseDeleted = true;
-      }
-    } catch (err: any) {
-      supabaseError = err?.message || 'Unknown error';
-      console.error('Supabase delete error:', err);
-    }
-  }
-
-  // 2. Hapus dari in-memory state
   const meetingIndex = meetings.findIndex(m => m.id === meetingId);
   if (meetingIndex !== -1) {
     meetings.splice(meetingIndex, 1);
@@ -1451,8 +861,6 @@ router.delete('/meetings/:id', async (req, res) => {
   res.json({
     message: 'Meeting and associated tasks deleted successfully',
     id: meetingId,
-    supabaseDeleted,
-    supabaseError: supabaseError || undefined
   });
 });
 
@@ -1470,89 +878,6 @@ router.get('/tasks', async (req, res) => {
       return res.json(mysqlTasks);
     } catch (err: any) {
       console.warn('MySQL get tasks error, falling back:', err?.message);
-    }
-  }
-
-  if (supabase) {
-    try {
-      let query = supabase
-        .from('tasks')
-        .select('*, meetings(title, meeting_date)')
-        .order('due_date', { ascending: true });
-
-      if (meetingId) query = query.eq('meeting_id', String(meetingId));
-      if (status) query = query.eq('status', String(status));
-      if (assignee) query = query.ilike('assignee', `%${assignee}%`);
-      if (search) query = query.ilike('title', `%${search}%`);
-
-      const { data: dbTasks, error } = await query;
-      if (!error && Array.isArray(dbTasks)) {
-        const formatted = dbTasks.map((t: any) => ({
-          id: t.id,
-          meetingId: t.meeting_id,
-          title: t.title,
-          assignee: t.assignee,
-          assignees: t.assignees || (t.assignee ? String(t.assignee).split(',').map((s: string) => s.trim()).filter(Boolean) : []),
-          dueDate: t.due_date,
-          status: t.status,
-          priority: t.priority || 'Medium',
-          description: t.description || '',
-          tags: t.tags || [],
-          createdAt: t.created_at,
-          updatedAt: t.updated_at,
-          meetingTitle: t.meetings?.title || (t.meetings?.meeting_date ? `Meeting ${t.meetings.meeting_date}` : 'Tugas Mandiri'),
-          meetingDate: t.meetings?.meeting_date || '',
-        }));
-        return res.json(formatted);
-      } else {
-        // Fallback: Query tasks and meetings independently without foreign key requirement
-        let fallbackQuery = supabase
-          .from('tasks')
-          .select('*')
-          .order('due_date', { ascending: true });
-
-        if (meetingId) fallbackQuery = fallbackQuery.eq('meeting_id', String(meetingId));
-        if (status) fallbackQuery = fallbackQuery.eq('status', String(status));
-        if (assignee) fallbackQuery = fallbackQuery.ilike('assignee', `%${assignee}%`);
-        if (search) fallbackQuery = fallbackQuery.ilike('title', `%${search}%`);
-
-        const [tRes, mRes] = await Promise.all([
-          fallbackQuery,
-          supabase.from('meetings').select('*'),
-        ]);
-
-        if (!tRes.error && Array.isArray(tRes.data)) {
-          const mMap = new Map<string, any>();
-          if (Array.isArray(mRes.data)) {
-            for (const m of mRes.data) mMap.set(m.id, m);
-          }
-
-          const formatted = tRes.data.map((t: any) => {
-            const m = mMap.get(t.meeting_id);
-            const mTitle = m?.title || (m?.meeting_date ? `Meeting ${m.meeting_date}` : (m?.meetingDate ? `Meeting ${m.meetingDate}` : 'Tugas Mandiri'));
-            const mDate = m?.meeting_date || m?.meetingDate || m?.date || '';
-            return {
-              id: t.id,
-              meetingId: t.meeting_id,
-              title: t.title,
-              assignee: t.assignee,
-              assignees: t.assignees || (t.assignee ? String(t.assignee).split(',').map((s: string) => s.trim()).filter(Boolean) : []),
-              dueDate: t.due_date || t.dueDate,
-              status: t.status,
-              priority: t.priority || 'Medium',
-              description: t.description || '',
-              tags: t.tags || [],
-              createdAt: t.created_at,
-              updatedAt: t.updated_at,
-              meetingTitle: mTitle,
-              meetingDate: mDate,
-            };
-          });
-          return res.json(formatted);
-        }
-      }
-    } catch (err: any) {
-      console.warn('Supabase get tasks error:', err?.message);
     }
   }
 
@@ -1605,25 +930,6 @@ async function ensureGeneralMeeting(): Promise<Meeting> {
       updatedAt: now,
     };
     meetings.push(generalMeeting);
-
-    if (supabase) {
-      try {
-        const { data: existing } = await supabase.from('meetings').select('id').eq('id', 'general-tasks').single();
-        if (!existing) {
-          await supabase.from('meetings').insert([{
-            id: 'general-tasks',
-            title: 'Tugas Mandiri',
-            meeting_date: today,
-            participants: [],
-            meeting_notes: 'Tugas umum tanpa rapat',
-            created_at: now,
-            updated_at: now,
-          }]);
-        }
-      } catch (err: any) {
-        console.warn('Supabase ensure general meeting warning:', err?.message);
-      }
-    }
   }
 
   return generalMeeting;
@@ -1672,24 +978,6 @@ router.post('/tasks', async (req, res) => {
       await mysqlUpsertTask(targetMeeting.id, newTask);
     } catch (err: any) {
       console.warn('MySQL task insert warning:', err?.message);
-    }
-  }
-
-  if (supabase) {
-    try {
-      await supabase.from('tasks').insert([{
-        id: newTask.id,
-        meeting_id: newTask.meetingId,
-        title: newTask.title,
-        assignee: newTask.assignee,
-        due_date: newTask.dueDate,
-        status: newTask.status,
-        description: newTask.description,
-        created_at: newTask.createdAt,
-        updated_at: newTask.updatedAt
-      }]);
-    } catch (err: any) {
-      console.warn('Supabase task insert warning:', err?.message);
     }
   }
 
@@ -1743,24 +1031,6 @@ router.post('/meetings/:meetingId/tasks', async (req, res) => {
     }
   }
 
-  if (supabase) {
-    try {
-      await supabase.from('tasks').insert([{
-        id: newTask.id,
-        meeting_id: newTask.meetingId,
-        title: newTask.title,
-        assignee: newTask.assignee,
-        due_date: newTask.dueDate,
-        status: newTask.status,
-        description: newTask.description,
-        created_at: newTask.createdAt,
-        updated_at: newTask.updatedAt
-      }]);
-    } catch (err: any) {
-      console.warn('Supabase task insert warning:', err?.message);
-    }
-  }
-
   meeting.tasks.push(newTask);
   meeting.updatedAt = now;
   res.status(201).json(newTask);
@@ -1769,12 +1039,6 @@ router.post('/meetings/:meetingId/tasks', async (req, res) => {
 router.post('/tasks/:taskId/submit', async (req, res) => {
   const { taskId } = req.params;
   const { notes, attachments } = req.body as SubmitTaskInput;
-
-  if (supabase) {
-    try {
-      await loadSubmissionsFromSupabase(supabase);
-    } catch {}
-  }
 
   let targetMeeting: Meeting | undefined;
   let targetTask: Task | undefined;
@@ -1787,10 +1051,9 @@ router.post('/tasks/:taskId/submit', async (req, res) => {
     }
   }
 
-  // Fallback: sync from Supabase if not in memory
-  if (!targetTask && supabase) {
+  if (!targetTask && isMysqlConfigured()) {
     try {
-      await syncMeetingsFromSupabase();
+      await syncMeetingsFromDatabase();
       for (const m of meetings) {
         const found = m.tasks.find(t => t.id === taskId);
         if (found) {
@@ -1798,25 +1061,6 @@ router.post('/tasks/:taskId/submit', async (req, res) => {
           targetTask = found;
           break;
         }
-      }
-    } catch {}
-  }
-
-  // Fallback: standalone task lookup in Supabase
-  if (!targetTask && supabase) {
-    try {
-      const { data: sbTask } = await supabase.from('tasks').select('*').eq('id', taskId).maybeSingle();
-      if (sbTask) {
-        targetTask = {
-          id: sbTask.id,
-          meetingId: sbTask.meeting_id,
-          title: sbTask.title,
-          assignee: sbTask.assignee,
-          dueDate: sbTask.due_date,
-          status: sbTask.status,
-          createdAt: sbTask.created_at,
-          updatedAt: sbTask.updated_at,
-        };
       }
     } catch {}
   }
@@ -1893,27 +1137,6 @@ router.post('/tasks/:taskId/submit', async (req, res) => {
     }
   }
 
-  if (supabase) {
-    try {
-      await updateTaskStatusInSupabase(supabase, taskId, 'Pending Approval', targetTask.description);
-      await saveSubmissionsToSupabase(supabase, submissions);
-      const { error: subErr } = await supabase.from('task_submissions').upsert({
-        id: submission.id,
-        task_id: submission.taskId,
-        assignee: submission.assignee,
-        notes: submission.notes,
-        attachments: submission.attachments,
-        status: submission.status,
-        submitted_at: submission.submittedAt,
-      });
-      if (subErr) {
-        console.warn('Supabase task_submissions.upsert warning:', subErr.message);
-      }
-    } catch (err: any) {
-      console.warn('Supabase submit warning:', err?.message);
-    }
-  }
-
   res.status(201).json(submission);
 });
 
@@ -1922,12 +1145,6 @@ router.post('/tasks/:taskId/sync-submission', async (req, res) => {
   const sub = req.body as TaskSubmission;
   if (!sub || !sub.attachments || sub.attachments.length === 0) {
     return res.status(400).json({ error: 'No attachments provided for sync' });
-  }
-
-  if (supabase) {
-    try {
-      await loadSubmissionsFromSupabase(supabase);
-    } catch {}
   }
 
   let targetTask: Task | undefined;
@@ -1954,23 +1171,11 @@ router.post('/tasks/:taskId/sync-submission', async (req, res) => {
     submissions.push(sub);
   }
 
-  if (supabase) {
+  if (isMysqlConfigured()) {
     try {
-      if (targetTask) {
-        await updateTaskStatusInSupabase(supabase, targetTask.id, targetTask.status, targetTask.description);
-      }
-      await saveSubmissionsToSupabase(supabase, submissions);
-      await supabase.from('task_submissions').upsert({
-        id: sub.id,
-        task_id: taskId,
-        assignee: sub.assignee || 'User',
-        notes: sub.notes || '',
-        attachments: sub.attachments,
-        status: sub.status || 'pending',
-        submitted_at: sub.submittedAt || new Date().toISOString(),
-      });
+      await mysqlCreateSubmission(sub);
     } catch (e: any) {
-      console.warn('sync-submission Supabase save warning:', e?.message);
+      console.warn('sync-submission MySQL save warning:', e?.message);
     }
   }
 
@@ -1981,10 +1186,6 @@ router.post('/submissions/sync-all', async (req, res) => {
   const incoming = req.body?.submissions;
   if (!Array.isArray(incoming) || incoming.length === 0) {
     return res.json({ success: true, count: 0 });
-  }
-
-  if (supabase) {
-    await loadSubmissionsFromSupabase(supabase);
   }
 
   let updatedCount = 0;
@@ -2002,11 +1203,15 @@ router.post('/submissions/sync-all', async (req, res) => {
     } else {
       submissions.push(sub);
     }
-    updatedCount++;
-  }
 
-  if (supabase) {
-    await saveSubmissionsToSupabase(supabase, incoming);
+    if (isMysqlConfigured()) {
+      try {
+        await mysqlCreateSubmission(sub);
+      } catch (err: any) {
+        console.warn('MySQL sync submission warning:', err?.message);
+      }
+    }
+    updatedCount++;
   }
 
   res.json({ success: true, count: updatedCount });
@@ -2038,96 +1243,6 @@ router.get('/tasks/:taskId/submissions', async (req, res) => {
     }
   }
 
-  if (supabase) {
-    try {
-      await loadSubmissionsFromSupabase(supabase);
-
-      if (!targetTask) {
-        if (isValidUuid(taskId)) {
-          try {
-            const { data: sbTask } = await supabase.from('tasks').select('*').eq('id', taskId).maybeSingle();
-            if (sbTask) {
-              targetTask = {
-                id: sbTask.id,
-                meetingId: sbTask.meeting_id,
-                title: sbTask.title,
-                assignee: sbTask.assignee,
-                dueDate: sbTask.due_date,
-                status: sbTask.status,
-                description: sbTask.description,
-                createdAt: sbTask.created_at,
-                updatedAt: sbTask.updated_at,
-              };
-            }
-          } catch {}
-        }
-        if (!targetTask && queryTitle) {
-          try {
-            const { data: sbTaskByTitle } = await supabase.from('tasks').select('*').eq('title', queryTitle).limit(1).maybeSingle();
-            if (sbTaskByTitle) {
-              targetTask = {
-                id: sbTaskByTitle.id,
-                meetingId: sbTaskByTitle.meeting_id,
-                title: sbTaskByTitle.title,
-                assignee: sbTaskByTitle.assignee,
-                dueDate: sbTaskByTitle.due_date,
-                status: sbTaskByTitle.status,
-                description: sbTaskByTitle.description,
-                createdAt: sbTaskByTitle.created_at,
-                updatedAt: sbTaskByTitle.updated_at,
-              };
-            }
-          } catch {}
-        }
-      }
-
-      const validId = isValidUuid(taskId) ? taskId : (targetTask && isValidUuid(targetTask.id) ? targetTask.id : null);
-      if (validId) {
-        try {
-          const { data, error } = await supabase
-            .from('task_submissions')
-            .select('*')
-            .eq('task_id', validId)
-            .order('submitted_at', { ascending: false });
-
-          if (!error && Array.isArray(data) && data.length > 0) {
-            for (const s of data) {
-              const item: TaskSubmission = {
-                id: s.id,
-                taskId: s.task_id,
-                taskTitle: targetTask?.title,
-                assignee: s.assignee,
-                notes: s.notes || '',
-                attachments: Array.isArray(s.attachments) ? s.attachments : [],
-                status: s.status || 'pending',
-                submittedAt: s.submitted_at,
-                reviewedBy: s.reviewed_by,
-                reviewedAt: s.reviewed_at,
-                reviewNote: s.review_note
-              };
-              const existingIdx = submissions.findIndex(x => x.id === item.id || x.taskId === item.taskId || (targetTask && x.taskTitle === targetTask.title));
-              if (existingIdx >= 0) {
-                const existingAtt = Array.isArray(submissions[existingIdx].attachments) ? submissions[existingIdx].attachments : [];
-                submissions[existingIdx] = {
-                  ...submissions[existingIdx],
-                  ...item,
-                  attachments: item.attachments.length > 0 ? item.attachments : existingAtt,
-                };
-              } else {
-                submissions.push(item);
-              }
-            }
-          }
-        } catch (err: any) {
-          console.warn('Supabase read task_submissions warning:', err?.message);
-        }
-      }
-    } catch (err: any) {
-      console.warn('Supabase load submissions warning:', err?.message);
-    }
-  }
-
-  // Look up by taskId OR by taskTitle
   let rawList = submissions.filter(s =>
     s.taskId === taskId ||
     (targetTask && s.taskId === targetTask.id) ||
@@ -2135,7 +1250,6 @@ router.get('/tasks/:taskId/submissions', async (req, res) => {
     (targetTask && s.taskTitle && s.taskTitle === targetTask.title)
   );
 
-  // If no submissions found OR none have attachments, check embedded submission in targetTask.description
   const hasValidAtt = rawList.some(s => Array.isArray(s.attachments) && s.attachments.length > 0);
   if (!hasValidAtt && targetTask?.description) {
     const embedded = extractTaskSubmissionFromDescription(targetTask.description);
@@ -2144,25 +1258,6 @@ router.get('/tasks/:taskId/submissions', async (req, res) => {
     }
   }
 
-  // If still empty or no attachments, search Supabase tasks directly for this title
-  if (!rawList.some(s => Array.isArray(s.attachments) && s.attachments.length > 0) && (queryTitle || targetTask?.title) && supabase) {
-    try {
-      const searchTitle = queryTitle || targetTask?.title;
-      const { data: dbTasks } = await supabase.from('tasks').select('*').eq('title', searchTitle).limit(5);
-      if (Array.isArray(dbTasks)) {
-        for (const t of dbTasks) {
-          if (t.description) {
-            const emb = extractTaskSubmissionFromDescription(t.description);
-            if (emb && Array.isArray(emb.attachments) && emb.attachments.length > 0) {
-              rawList.unshift(emb);
-            }
-          }
-        }
-      }
-    } catch {}
-  }
-
-  // Consolidate submissions for this task: merge any duplicate records so attachments are preserved
   const consolidated: TaskSubmission[] = [];
   for (const s of rawList) {
     const existing = consolidated.find(c => c.id === s.id || c.taskId === s.taskId || (targetTask && c.taskTitle === targetTask.title));
@@ -2186,14 +1281,6 @@ router.post('/tasks/:taskId/approve', async (req, res) => {
   const { taskId } = req.params;
   const { submissionId, reviewNote } = req.body;
 
-  if (supabase) {
-    try {
-      await loadSubmissionsFromSupabase(supabase);
-    } catch (e: any) {
-      console.warn('loadSubmissionsFromSupabase in approve warning:', e?.message);
-    }
-  }
-
   let targetMeeting: Meeting | undefined;
   let targetTask: Task | undefined;
   for (const m of meetings) {
@@ -2204,9 +1291,9 @@ router.post('/tasks/:taskId/approve', async (req, res) => {
       break;
     }
   }
-  if (!targetTask && supabase) {
+  if (!targetTask && isMysqlConfigured()) {
     try {
-      await syncMeetingsFromSupabase();
+      await syncMeetingsFromDatabase();
       for (const m of meetings) {
         const found = m.tasks.find(t => t.id === taskId);
         if (found) {
@@ -2214,24 +1301,6 @@ router.post('/tasks/:taskId/approve', async (req, res) => {
           targetTask = found;
           break;
         }
-      }
-    } catch {}
-  }
-  if (!targetTask && supabase) {
-    try {
-      const { data: sbTask } = await supabase.from('tasks').select('*').eq('id', taskId).maybeSingle();
-      if (sbTask) {
-        targetTask = {
-          id: sbTask.id,
-          meetingId: sbTask.meeting_id,
-          title: sbTask.title,
-          assignee: sbTask.assignee,
-          dueDate: sbTask.due_date,
-          status: sbTask.status,
-          description: sbTask.description,
-          createdAt: sbTask.created_at,
-          updatedAt: sbTask.updated_at,
-        };
       }
     } catch {}
   }
@@ -2243,28 +1312,6 @@ router.post('/tasks/:taskId/approve', async (req, res) => {
                    submissions.find(s => s.taskTitle && s.taskTitle === targetTask?.title);
   if (!submission && targetTask?.description) {
     submission = extractTaskSubmissionFromDescription(targetTask.description) || undefined;
-  }
-
-  if (!submission && supabase) {
-    try {
-      const query = submissionId
-        ? supabase.from('task_submissions').select('*').eq('id', submissionId).maybeSingle()
-        : supabase.from('task_submissions').select('*').eq('task_id', taskId).order('submitted_at', { ascending: false }).limit(1).maybeSingle();
-      const { data: sbSub } = await query;
-      if (sbSub) {
-        submission = {
-          id: sbSub.id,
-          taskId: sbSub.task_id,
-          taskTitle: targetTask.title,
-          assignee: sbSub.assignee,
-          notes: sbSub.notes,
-          attachments: Array.isArray(sbSub.attachments) ? sbSub.attachments : [],
-          status: sbSub.status,
-          submittedAt: sbSub.submitted_at,
-        };
-        submissions.push(submission);
-      }
-    } catch {}
   }
 
   const now = new Date().toISOString();
@@ -2310,24 +1357,6 @@ router.post('/tasks/:taskId/approve', async (req, res) => {
     }
   }
 
-  if (supabase) {
-    try {
-      await updateTaskStatusInSupabase(supabase, taskId, 'Done', targetTask.description);
-      await saveSubmissionsToSupabase(supabase, submission ? [submission] : submissions);
-      const subTargetId = submission?.id || submissionId;
-      if (subTargetId) {
-        await supabase.from('task_submissions').update({
-          status: 'approved',
-          reviewed_by: 'admin',
-          reviewed_at: now,
-          review_note: reviewNote,
-        }).eq('id', subTargetId);
-      }
-    } catch (err: any) {
-      console.warn('Supabase approve warning:', err?.message);
-    }
-  }
-
   res.json(targetTask);
 });
 
@@ -2337,14 +1366,6 @@ router.post('/tasks/:taskId/reject', async (req, res) => {
 
   if (!reviewNote) {
     return res.status(400).json({ error: 'Review note is required for rejection.' });
-  }
-
-  if (supabase) {
-    try {
-      await loadSubmissionsFromSupabase(supabase);
-    } catch (e: any) {
-      console.warn('loadSubmissionsFromSupabase in reject warning:', e?.message);
-    }
   }
 
   let targetMeeting: Meeting | undefined;
@@ -2357,9 +1378,9 @@ router.post('/tasks/:taskId/reject', async (req, res) => {
       break;
     }
   }
-  if (!targetTask && supabase) {
+  if (!targetTask && isMysqlConfigured()) {
     try {
-      await syncMeetingsFromSupabase();
+      await syncMeetingsFromDatabase();
       for (const m of meetings) {
         const found = m.tasks.find(t => t.id === taskId);
         if (found) {
@@ -2370,48 +1391,11 @@ router.post('/tasks/:taskId/reject', async (req, res) => {
       }
     } catch {}
   }
-  if (!targetTask && supabase) {
-    try {
-      const { data: sbTask } = await supabase.from('tasks').select('*').eq('id', taskId).maybeSingle();
-      if (sbTask) {
-        targetTask = {
-          id: sbTask.id,
-          meetingId: sbTask.meeting_id,
-          title: sbTask.title,
-          assignee: sbTask.assignee,
-          dueDate: sbTask.due_date,
-          status: sbTask.status,
-          createdAt: sbTask.created_at,
-          updatedAt: sbTask.updated_at,
-        };
-      }
-    } catch {}
-  }
   if (!targetTask) return res.status(404).json({ error: 'Task not found' });
 
   let submission = submissions.find(s => s.id === submissionId) ||
                    submissions.find(s => s.taskId === taskId && s.status === 'pending') ||
                    submissions.find(s => s.taskId === taskId);
-  if (!submission && supabase) {
-    try {
-      const query = submissionId
-        ? supabase.from('task_submissions').select('*').eq('id', submissionId).maybeSingle()
-        : supabase.from('task_submissions').select('*').eq('task_id', taskId).order('submitted_at', { ascending: false }).limit(1).maybeSingle();
-      const { data: sbSub } = await query;
-      if (sbSub) {
-        submission = {
-          id: sbSub.id,
-          taskId: sbSub.task_id,
-          assignee: sbSub.assignee,
-          notes: sbSub.notes,
-          attachments: Array.isArray(sbSub.attachments) ? sbSub.attachments : [],
-          status: sbSub.status,
-          submittedAt: sbSub.submitted_at,
-        };
-        submissions.push(submission);
-      }
-    } catch {}
-  }
 
   const now = new Date().toISOString();
   if (submission) {
@@ -2454,24 +1438,6 @@ router.post('/tasks/:taskId/reject', async (req, res) => {
     }
   }
 
-  if (supabase) {
-    try {
-      await updateTaskStatusInSupabase(supabase, taskId, 'In Progress');
-      await saveSubmissionsToSupabase(supabase, submission ? [submission] : submissions);
-      const subTargetId = submission?.id || submissionId;
-      if (subTargetId) {
-        await supabase.from('task_submissions').update({
-          status: 'rejected',
-          reviewed_by: 'admin',
-          reviewed_at: now,
-          review_note: reviewNote,
-        }).eq('id', subTargetId);
-      }
-    } catch (err: any) {
-      console.warn('Supabase reject warning:', err?.message);
-    }
-  }
-
   res.json(targetTask);
 });
 
@@ -2483,7 +1449,6 @@ router.put('/tasks/:id', async (req, res) => {
   let targetMeeting: Meeting | undefined;
   let targetTask: Task | undefined;
 
-  // 1. Cari di memori
   for (const m of meetings) {
     const found = (m.tasks || []).find(t => t.id === taskId);
     if (found) {
@@ -2493,9 +1458,8 @@ router.put('/tasks/:id', async (req, res) => {
     }
   }
 
-  // 2. Jika tidak ada di memori dan Supabase terhubung, sinkronkan dari database
-  if (!targetTask && supabase) {
-    await syncMeetingsFromSupabase();
+  if (!targetTask && isMysqlConfigured()) {
+    await syncMeetingsFromDatabase();
     for (const m of meetings) {
       const found = (m.tasks || []).find(t => t.id === taskId);
       if (found) {
@@ -2506,48 +1470,10 @@ router.put('/tasks/:id', async (req, res) => {
     }
   }
 
-  // 3. Jika masih belum ditemukan di memori tapi Supabase aktif, cari langsung di tabel tasks
-  if (!targetTask && supabase) {
-    try {
-      const { data: dbTask, error } = await supabase
-        .from('tasks')
-        .select('*')
-        .eq('id', taskId)
-        .maybeSingle();
-
-      if (dbTask && !error) {
-        targetTask = {
-          id: dbTask.id,
-          meetingId: dbTask.meeting_id,
-          title: dbTask.title,
-          assignee: dbTask.assignee,
-          assignees: dbTask.assignees || (dbTask.assignee ? String(dbTask.assignee).split(',').map((s: string) => s.trim()).filter(Boolean) : []),
-          dueDate: dbTask.due_date,
-          dueTime: dbTask.due_time,
-          status: dbTask.status,
-          priority: dbTask.priority,
-          description: dbTask.description,
-          tags: dbTask.tags || [],
-          createdAt: dbTask.created_at,
-          updatedAt: dbTask.updated_at
-        };
-        targetMeeting = meetings.find(m => m.id === dbTask.meeting_id);
-        if (targetMeeting) {
-          if (!targetMeeting.tasks) targetMeeting.tasks = [];
-          targetMeeting.tasks.push(targetTask);
-        }
-      }
-    } catch (err: any) {
-      console.warn('Supabase single task query warning:', err?.message);
-    }
-  }
-
-  // Jika tetap tidak ditemukan sama sekali
   if (!targetTask) {
     return res.status(404).json({ error: `Task dengan id '${taskId}' tidak ditemukan di server.` });
   }
 
-  // 4. Update data task
   if (title !== undefined) targetTask.title = String(title).trim();
   if (assignee !== undefined || req.body.assignees !== undefined) {
     if (Array.isArray(req.body.assignees)) {
@@ -2573,7 +1499,6 @@ router.put('/tasks/:id', async (req, res) => {
   targetTask.updatedAt = now;
   if (targetMeeting) targetMeeting.updatedAt = now;
 
-  // Update MySQL jika aktif
   if (isMysqlConfigured()) {
     try {
       await mysqlUpsertTask(targetMeeting?.id || targetTask.meetingId || 'general-tasks', targetTask);
@@ -2582,40 +1507,10 @@ router.put('/tasks/:id', async (req, res) => {
     }
   }
 
-  // 5. Update ke Supabase jika aktif
-  if (supabase) {
-    try {
-      const updateData: any = {
-        title: targetTask.title,
-        assignee: targetTask.assignee,
-        due_date: targetTask.dueDate,
-        status: targetTask.status,
-        description: targetTask.description,
-        updated_at: targetTask.updatedAt
-      };
-      const { error: sbErr } = await supabase
-        .from('tasks')
-        .update(updateData)
-        .eq('id', targetTask.id);
-
-      if (sbErr) {
-        console.error('Supabase task update error:', sbErr);
-        if (targetTask.status === 'Pending Approval' && (sbErr.message?.includes('chk_task_status') || sbErr.message?.includes('check constraint'))) {
-          console.warn('Supabase check constraint prevented writing Pending Approval to tasks table. Handled gracefully.');
-          return res.json(targetTask);
-        }
-        return res.status(500).json({ error: sbErr.message || 'Gagal menyimpan perubahan ke database Supabase.' });
-      }
-    } catch (err: any) {
-      console.error('Supabase task update exception:', err);
-      return res.status(500).json({ error: err?.message || 'Terjadi kesalahan saat menghubungi database.' });
-    }
-  }
-
   return res.json(targetTask);
 });
 
-// DELETE /api/tasks/:id - Menghapus data task dari Supabase & memori
+// DELETE /api/tasks/:id - Menghapus data task dari MySQL & memori
 router.delete('/tasks/:id', async (req, res) => {
   const taskId = req.params.id;
 
@@ -2624,14 +1519,6 @@ router.delete('/tasks/:id', async (req, res) => {
       await mysqlDeleteTask(taskId);
     } catch (err: any) {
       console.warn('MySQL task delete warning:', err?.message);
-    }
-  }
-
-  if (supabase) {
-    try {
-      await supabase.from('tasks').delete().eq('id', taskId);
-    } catch (err: any) {
-      console.warn('Supabase task delete warning:', err?.message);
     }
   }
 
@@ -2653,6 +1540,8 @@ router.delete('/tasks/:id', async (req, res) => {
 
   return res.json({ message: 'Task deleted successfully', id: taskId });
 });
+
+
 
 
 router.post('/ai/extract', async (req, res) => {
@@ -2736,8 +1625,8 @@ function parseHeuristicMeeting(text: string, defaultDate: string) {
   return { title, meetingDate: defaultDate, participants, meetingNotes: text, tasks };
 }
 
-// Division Supabase Sync
-async function syncDivisionsFromSupabase(): Promise<Division[]> {
+// Division Database Sync (MySQL)
+async function syncDivisionsFromDatabase(): Promise<Division[]> {
   if (isMysqlConfigured()) {
     try {
       const mysqlDivs = await mysqlGetDivisions();
@@ -2749,45 +1638,13 @@ async function syncDivisionsFromSupabase(): Promise<Division[]> {
       console.warn('MySQL divisions sync warning:', err?.message);
     }
   }
-
-  if (!supabase) return divisions;
-  try {
-    const { data: dbDivisions, error } = await supabase
-      .from('divisions')
-      .select('*')
-      .order('name', { ascending: true });
-
-    if (!error && Array.isArray(dbDivisions)) {
-      if (dbDivisions.length > 0) {
-        divisions = dbDivisions.map((d: any) => ({
-          id: d.id,
-          name: d.name,
-          createdAt: d.created_at,
-          updatedAt: d.updated_at,
-        }));
-        return divisions;
-      } else if (divisions.length > 0) {
-        // Table exists in Supabase but is empty: seed in-memory initial divisions to Supabase
-        const now = new Date().toISOString();
-        const records = divisions.map(d => ({
-          id: d.id,
-          name: d.name,
-          created_at: d.createdAt || now,
-          updated_at: d.updatedAt || now,
-        }));
-        await supabase.from('divisions').insert(records);
-      }
-    }
-  } catch (err: any) {
-    console.warn('Supabase divisions sync warning:', err?.message);
-  }
   return divisions;
 }
 
 // Division CRUD
 router.get('/divisions', async (req, res) => {
   res.setHeader('Cache-Control', 'private, max-age=2, stale-while-revalidate=10');
-  const data = await syncDivisionsFromSupabase();
+  const data = await syncDivisionsFromDatabase();
   res.json(data);
 });
 
@@ -2812,29 +1669,6 @@ router.post('/divisions', async (req, res) => {
     }
   }
 
-  if (supabase) {
-    try {
-      const { data, error } = await supabase
-        .from('divisions')
-        .insert([{
-          id: division.id,
-          name: division.name,
-          created_at: division.createdAt,
-          updated_at: division.updatedAt
-        }])
-        .select()
-        .maybeSingle();
-
-      if (error) {
-        console.warn('Supabase insert division warning:', error.message);
-      } else if (data) {
-        division.id = data.id || division.id;
-      }
-    } catch (err: any) {
-      console.warn('Supabase insert division error:', err?.message);
-    }
-  }
-
   res.status(201).json(division);
 });
 
@@ -2855,17 +1689,6 @@ router.put('/divisions/:id', async (req, res) => {
     }
   }
 
-  if (supabase) {
-    try {
-      await supabase.from('divisions').update({
-        name: String(name).trim(),
-        updated_at: now
-      }).eq('id', req.params.id);
-    } catch (err: any) {
-      console.warn('Supabase update division warning:', err?.message);
-    }
-  }
-
   if (idx === -1) return res.status(404).json({ error: 'Division not found' });
   res.json(divisions[idx]);
 });
@@ -2882,19 +1705,11 @@ router.delete('/divisions/:id', async (req, res) => {
     }
   }
 
-  if (supabase) {
-    try {
-      await supabase.from('divisions').delete().eq('id', req.params.id);
-    } catch (err: any) {
-      console.warn('Supabase delete division warning:', err?.message);
-    }
-  }
-
   res.json({ message: 'Division deleted', id: req.params.id });
 });
 
-// User Supabase Sync
-async function syncUsersFromSupabase(): Promise<User[]> {
+// User Database Sync (MySQL)
+async function syncUsersFromDatabase(): Promise<User[]> {
   if (isMysqlConfigured()) {
     try {
       const mysqlUsers = await mysqlGetUsers();
@@ -2906,51 +1721,13 @@ async function syncUsersFromSupabase(): Promise<User[]> {
       console.warn('MySQL users sync warning:', err?.message);
     }
   }
-
-  if (!supabase) return users;
-  try {
-    const { data: dbUsers, error } = await supabase
-      .from('users')
-      .select('*')
-      .order('username', { ascending: true });
-
-    if (!error && Array.isArray(dbUsers)) {
-      if (dbUsers.length > 0) {
-        users = dbUsers.map((u: any) => ({
-          id: u.id,
-          username: u.username,
-          password: u.password,
-          divisionId: u.division_id || u.divisionId || '',
-          role: u.role || 'user',
-          createdAt: u.created_at,
-          updatedAt: u.updated_at,
-        }));
-        return users;
-      } else if (users.length > 0) {
-        // Table exists in Supabase but is empty: seed in-memory initial users to Supabase
-        const now = new Date().toISOString();
-        const records = users.map(u => ({
-          id: u.id,
-          username: u.username,
-          password: u.password,
-          division_id: u.divisionId || null,
-          role: u.role,
-          created_at: u.createdAt || now,
-          updated_at: u.updatedAt || now,
-        }));
-        await supabase.from('users').insert(records);
-      }
-    }
-  } catch (err: any) {
-    console.warn('Supabase users sync warning:', err?.message);
-  }
   return users;
 }
 
 // User CRUD
 router.get('/users', async (req, res) => {
   res.setHeader('Cache-Control', 'private, max-age=2, stale-while-revalidate=10');
-  await syncUsersFromSupabase();
+  await syncUsersFromDatabase();
   const safeUsers = users.map(({ password, ...u }) => ({ ...u }));
   res.json(safeUsers);
 });
@@ -2983,32 +1760,6 @@ router.post('/users', async (req, res) => {
     }
   }
 
-  if (supabase) {
-    try {
-      const { data, error } = await supabase
-        .from('users')
-        .insert([{
-          id: user.id,
-          username: user.username,
-          password: user.password,
-          division_id: user.divisionId,
-          role: user.role,
-          created_at: user.createdAt,
-          updated_at: user.updatedAt
-        }])
-        .select()
-        .maybeSingle();
-
-      if (error) {
-        console.warn('Supabase insert user warning:', error.message);
-      } else if (data) {
-        user.id = data.id || user.id;
-      }
-    } catch (err: any) {
-      console.warn('Supabase insert user error:', err?.message);
-    }
-  }
-
   const { password: _pwd, ...safeUser } = user;
   res.status(201).json(safeUser);
 });
@@ -3033,19 +1784,6 @@ router.put('/users/:id', async (req, res) => {
     }
   }
 
-  if (supabase) {
-    try {
-      const updates: any = { updated_at: now };
-      if (username !== undefined) updates.username = String(username).trim();
-      if (password !== undefined) updates.password = String(password);
-      if (divisionId !== undefined) updates.division_id = String(divisionId);
-      if (role !== undefined) updates.role = role;
-      await supabase.from('users').update(updates).eq('id', req.params.id);
-    } catch (err: any) {
-      console.warn('Supabase update user warning:', err?.message);
-    }
-  }
-
   if (idx === -1) return res.status(404).json({ error: 'User not found' });
   const { password: _pwd, ...safeUser } = users[idx];
   res.json(safeUser);
@@ -3063,21 +1801,13 @@ router.delete('/users/:id', async (req, res) => {
     }
   }
 
-  if (supabase) {
-    try {
-      await supabase.from('users').delete().eq('id', req.params.id);
-    } catch (err: any) {
-      console.warn('Supabase delete user warning:', err?.message);
-    }
-  }
-
   res.json({ message: 'User deleted', id: req.params.id });
 });
 
 // Auth
 router.post('/auth/login', async (req, res) => {
   const { username, password } = req.body;
-  await syncUsersFromSupabase();
+  await syncUsersFromDatabase();
   const user = users.find(u => u.username.toLowerCase() === String(username).trim().toLowerCase() && u.password === String(password));
   if (!user) return res.status(401).json({ error: 'Invalid username or password' });
   const { password: _pwd, ...safeUser } = user;

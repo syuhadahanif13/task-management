@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Meeting } from '../types';
-import { SUPABASE_SQL_MIGRATION } from '../lib/supabase';
+import { MYSQL_SQL_MIGRATION } from '../lib/mysqlSchema';
 import { Database, X, Code, CheckCircle, ArrowDown, Copy, Download, Layers } from 'lucide-react';
 
 interface SchemaInspectorModalProps {
@@ -21,7 +21,7 @@ export const SchemaInspectorModal: React.FC<SchemaInspectorModalProps> = ({
 
   const totalTasks = meetings.reduce((acc, m) => acc + (m.tasks?.length || 0), 0);
 
-  const sqlSchema = SUPABASE_SQL_MIGRATION;
+  const sqlSchema = MYSQL_SQL_MIGRATION;
 
   const copyToClipboard = (text: string) => {
     navigator.clipboard.writeText(text);
@@ -266,7 +266,7 @@ export const SchemaInspectorModal: React.FC<SchemaInspectorModalProps> = ({
           {activeTab === 'sql' && (
             <div className="space-y-2">
               <div className="flex items-center justify-between">
-                <span className="text-xs text-zinc-500 font-mono">PostgreSQL / Cloud SQL Compatible DDL</span>
+                <span className="text-xs text-zinc-500 font-mono">MySQL Database DDL (Self-Hosted / Cloud SQL)</span>
                 <button
                   onClick={() => copyToClipboard(sqlSchema)}
                   className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium text-zinc-700 bg-zinc-100 hover:bg-zinc-200 rounded border border-zinc-300"

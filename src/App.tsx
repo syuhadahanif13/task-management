@@ -2,7 +2,6 @@ import React, { useState, useEffect } from 'react';
 import { Meeting, Task, TaskStatus, CreateMeetingInput, CreateTaskInput, TaskSubmission, AppTab } from './types';
 import { Language, getT } from './i18n';
 import { api, getCachedMeetings, saveCachedTaskSubmission } from './api/client';
-import { getSupabaseClient } from './lib/supabase';
 import { filterTasksForUser } from './utils/taskAccess';
 import { extractTaskSubmissionFromDescription, embedTaskSubmissionIntoDescription } from './utils/submissionUtils';
 
@@ -31,8 +30,6 @@ import { AddTaskModal } from './components/AddTaskModal';
 import { LoginPage } from './components/LoginPage';
 import { PwaInstallBanner } from './components/PwaInstallBanner';
 import { PwaSettingsCard } from './components/PwaSettingsCard';
-import { SupabaseConfigModal } from './components/SupabaseConfigModal';
-import { getSupabaseConfig } from './lib/supabase';
 
 import {
   Check,
@@ -111,7 +108,6 @@ export default function App() {
   const [isUserManagerOpen, setIsUserManagerOpen] = useState(false);
   const [isAddTaskOpen, setIsAddTaskOpen] = useState(false);
   const [newMeetingDefaultDate, setNewMeetingDefaultDate] = useState('');
-  const [isSupabaseConfigOpen, setIsSupabaseConfigOpen] = useState(false);
 
   // ─── Effects ───
   useEffect(() => {
@@ -301,15 +297,6 @@ export default function App() {
 
   const handleDeleteMeeting = async (meetingId: string) => {
     try {
-      const supabase = getSupabaseClient();
-      if (supabase) {
-        try {
-          await supabase.from('tasks').delete().eq('meeting_id', meetingId);
-          await supabase.from('meetings').delete().eq('id', meetingId);
-        } catch (sErr) {
-          console.warn('Direct Supabase delete notice:', sErr);
-        }
-      }
       await api.deleteMeeting(meetingId);
       setMeetings(meetings.filter((m) => m.id !== meetingId));
       if (selectedMeetingId === meetingId) {
@@ -437,7 +424,7 @@ export default function App() {
         }))
       );
 
-      // 2. Submit to API / Supabase
+      // 2. Submit to API / MySQL backend
       await api.submitTask(taskId, { ...input, taskTitle: targetTitle });
 
       // 3. Ensure task status and embedded description are updated in tasks table
@@ -933,13 +920,6 @@ export default function App() {
                             >
                               ✨ Ekstrak AI
                             </button>
-                            <button
-                              onClick={() => setIsSupabaseConfigOpen(true)}
-                              className="px-4 py-2.5 rounded-full bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 text-xs font-bold hover:bg-emerald-100 dark:hover:bg-emerald-900/50 border border-emerald-200 dark:border-emerald-800 transition"
-                            >
-                              <Database className="w-3.5 h-3.5 inline mr-1" />
-                              Koneksi Supabase
-                            </button>
                           </div>
                         </div>
                       );
@@ -1226,63 +1206,66 @@ export default function App() {
                     </div>
                   </div>
 
-                  {/* Supabase Database Settings */}
+                  {/* MySQL Database Status & Settings */}
                   <div className="ios-card p-5">
                     <div className="flex items-center justify-between mb-4">
                       <div className="flex items-center gap-2">
-                        <div className={`w-8 h-8 rounded-xl flex items-center justify-center ${
-                          getSupabaseConfig().isConfigured 
-                            ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400' 
-                            : 'bg-amber-500/10 text-amber-600 dark:text-amber-400'
-                        }`}>
+                        <div className="w-8 h-8 rounded-xl flex items-center justify-center bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
                           <Database className="w-4 h-4" />
                         </div>
                         <div>
-                          <h3 className="text-sm font-semibold text-notion-text">Database Supabase (PostgreSQL)</h3>
-                          <p className="text-xs text-notion-text-secondary">Penyimpanan cloud terpusat untuk Data Rapat dan Action Items</p>
+                          <h3 className="text-sm font-semibold text-notion-text">Database MySQL (Self-Hosted)</h3>
+                          <p className="text-xs text-notion-text-secondary">Penyimpanan mandiri di server web hosting pribadi (49.50.10.26)</p>
                         </div>
                       </div>
-                      <span className={`text-[11px] font-bold px-2.5 py-1 rounded-full ${
-                        getSupabaseConfig().isConfigured 
-                          ? 'bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300' 
-                          : 'bg-amber-100 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300'
-                      }`}>
-                        {getSupabaseConfig().isConfigured ? '● Terkonfigurasi' : '○ Belum Dikonfigurasi'}
+                      <span className="text-[11px] font-bold px-2.5 py-1 rounded-full bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300">
+                        ● Terhubung Aktif
                       </span>
                     </div>
 
                     <div className="p-4 rounded-2xl bg-notion-sidebar space-y-3">
-                      <div className="text-xs text-notion-text-secondary flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                        <span>
-                          Sumber:{' '}
-                          <strong>
-                            {getSupabaseConfig().source === 'env'
-                              ? 'Environment Variable (.env)'
-                              : getSupabaseConfig().source === 'localStorage'
-                              ? 'Browser Storage (Tersimpan Lokal)'
-                              : 'Belum Ada'}
-                          </strong>
-                        </span>
-                        {getSupabaseConfig().url && (
-                          <span className="font-mono text-[11px] truncate max-w-xs text-notion-text">
-                            {getSupabaseConfig().url}
-                          </span>
-                        )}
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs text-notion-text-secondary">
+                        <div className="p-2.5 rounded-xl bg-white dark:bg-zinc-800/80 border border-notion-border">
+                          <span className="block text-[10px] uppercase font-bold text-notion-text-secondary">Server Host</span>
+                          <span className="font-mono text-xs text-notion-text font-semibold">49.50.10.26:3306</span>
+                        </div>
+                        <div className="p-2.5 rounded-xl bg-white dark:bg-zinc-800/80 border border-notion-border">
+                          <span className="block text-[10px] uppercase font-bold text-notion-text-secondary">Nama Database</span>
+                          <span className="font-mono text-xs text-notion-text font-semibold">task_management</span>
+                        </div>
+                      </div>
+
+                      <div className="text-[11px] text-notion-text-secondary flex items-center gap-1.5 pt-1">
+                        <Check className="w-3.5 h-3.5 text-emerald-500 flex-shrink-0" />
+                        <span>Koneksi penuh 100% dialihkan ke MySQL hosting mandiri dengan in-memory cache ultra-cepat.</span>
                       </div>
 
                       <div className="flex flex-wrap items-center gap-2 pt-1">
                         <button
-                          onClick={() => setIsSupabaseConfigOpen(true)}
+                          onClick={async () => {
+                            try {
+                              showToast('Menguji koneksi database MySQL...');
+                              const res = await fetch('/api/mysql/test');
+                              const data = await res.json();
+                              if (data.success) {
+                                showToast(`Koneksi MySQL Normal! (${data.counts?.meetings || 0} rapat, ${data.counts?.tasks || 0} tugas, ${data.counts?.users || 0} anggota tim)`);
+                              } else {
+                                alert(`Gagal tes MySQL: ${data.error || 'Unknown error'}`);
+                              }
+                            } catch (e: any) {
+                              alert(`Gagal menghubungi endpoint tes: ${e.message}`);
+                            }
+                          }}
                           className="notion-btn notion-btn-primary text-xs py-1.5 px-3 flex items-center gap-1.5"
                         >
                           <Database className="w-3.5 h-3.5" />
-                          <span>Kelola & Uji Koneksi Supabase</span>
+                          <span>Uji Koneksi Database MySQL</span>
                         </button>
 
                         <button
                           onClick={() => {
                             loadMeetings(false);
-                            showToast('Menyinkronkan data dari Supabase...');
+                            showToast('Menyinkronkan data terbaru dari MySQL...');
                           }}
                           className="notion-btn text-xs py-1.5 px-3 flex items-center gap-1.5 bg-white dark:bg-zinc-800 text-notion-text border border-notion-border hover:bg-zinc-50 dark:hover:bg-zinc-700 transition"
                         >
@@ -1390,16 +1373,6 @@ export default function App() {
         onClose={() => setIsAddTaskOpen(false)}
         onAddTask={handleAddTaskToMeeting}
         currentUser={currentUser}
-      />
-
-      <SupabaseConfigModal
-        isOpen={isSupabaseConfigOpen}
-        onClose={() => setIsSupabaseConfigOpen(false)}
-        meetings={meetings}
-        onConnectSuccess={() => {
-          loadMeetings(false);
-          showToast('Koneksi Supabase diperbarui & data disinkronkan.');
-        }}
       />
 
       {/* Progressive Web App (PWA) Install Prompt */}

@@ -52,7 +52,6 @@ self.addEventListener('fetch', (event) => {
   // 2. Do NOT cache API endpoints or external AI / backend calls
   if (
     url.pathname.startsWith('/api/') ||
-    url.hostname.includes('supabase.co') ||
     url.hostname.includes('aliyuncs.com') ||
     url.protocol.startsWith('chrome-extension')
   ) {

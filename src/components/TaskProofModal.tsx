@@ -238,7 +238,7 @@ export const TaskProofModal: React.FC<TaskProofModalProps> = ({
       // 1. Save locally
       saveCachedTaskSubmission(newSub);
 
-      // 2. Submit to API / Supabase
+      // 2. Submit to API / MySQL backend
       try {
         await api.submitTask(task.id, {
           notes: newSub.notes,
