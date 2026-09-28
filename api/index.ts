@@ -43,16 +43,30 @@ export function getMysqlPool(): mysql.Pool | null {
   }
 }
 
-export async function mysqlGetMeetings(): Promise<any[]> {
-  const p = getMysqlPool();
-  if (!p) return [];
+// In-memory cache for ultra-fast meeting data loads
+let cachedMeetingsResponse: any[] | null = null;
+let lastMeetingsCacheTime = 0;
+const MEETINGS_CACHE_TTL_MS = 5000; // 5 seconds TTL
 
-  const [meetingsRows]: any = await p.query(
-    'SELECT * FROM meetings ORDER BY meeting_date DESC, created_at DESC;'
-  );
-  const [tasksRows]: any = await p.query(
-    'SELECT * FROM tasks ORDER BY due_date ASC, created_at ASC;'
-  );
+export function invalidateMeetingsCache() {
+  cachedMeetingsResponse = null;
+  lastMeetingsCacheTime = 0;
+}
+
+export async function mysqlGetMeetings(): Promise<any[]> {
+  const now = Date.now();
+  if (cachedMeetingsResponse && (now - lastMeetingsCacheTime < MEETINGS_CACHE_TTL_MS)) {
+    return cachedMeetingsResponse;
+  }
+
+  const p = getMysqlPool();
+  if (!p) return cachedMeetingsResponse || [];
+
+  // Parallel query execution to cut round-trip latency
+  const [[meetingsRows], [tasksRows]]: any = await Promise.all([
+    p.query('SELECT * FROM meetings ORDER BY meeting_date DESC, created_at DESC;'),
+    p.query('SELECT * FROM tasks ORDER BY due_date ASC, created_at ASC;'),
+  ]);
 
   const tasksByMeeting: Record<string, any[]> = {};
   for (const t of tasksRows) {
@@ -120,10 +134,13 @@ export async function mysqlGetMeetings(): Promise<any[]> {
     };
   });
 
+  cachedMeetingsResponse = meetings;
+  lastMeetingsCacheTime = Date.now();
   return meetings;
 }
 
 export async function mysqlCreateMeeting(meeting: any): Promise<void> {
+  invalidateMeetingsCache();
   const p = getMysqlPool();
   if (!p) return;
 
@@ -150,6 +167,7 @@ export async function mysqlCreateMeeting(meeting: any): Promise<void> {
 }
 
 export async function mysqlUpdateMeeting(id: string, updates: any): Promise<void> {
+  invalidateMeetingsCache();
   const p = getMysqlPool();
   if (!p) return;
 
@@ -181,12 +199,14 @@ export async function mysqlUpdateMeeting(id: string, updates: any): Promise<void
 }
 
 export async function mysqlDeleteMeeting(id: string): Promise<void> {
+  invalidateMeetingsCache();
   const p = getMysqlPool();
   if (!p) return;
   await p.execute('DELETE FROM meetings WHERE id = ?', [id]);
 }
 
 export async function mysqlUpsertTask(meetingId: string, task: any): Promise<void> {
+  invalidateMeetingsCache();
   const p = getMysqlPool();
   if (!p) return;
 
@@ -306,6 +326,7 @@ export async function mysqlGetTasks(filters: { meetingId?: string; status?: stri
 }
 
 export async function mysqlDeleteTask(id: string): Promise<void> {
+  invalidateMeetingsCache();
   const p = getMysqlPool();
   if (!p) return;
   await p.execute('DELETE FROM tasks WHERE id = ?', [id]);
@@ -1147,6 +1168,8 @@ async function syncMeetingsFromSupabase(): Promise<Meeting[]> {
 }
 
 router.get('/meetings', async (req, res) => {
+  res.setHeader('Cache-Control', 'private, max-age=1, stale-while-revalidate=5');
+
   if (isMysqlConfigured()) {
     try {
       const synced = await mysqlGetMeetings();

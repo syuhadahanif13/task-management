@@ -422,7 +422,7 @@ function normalizeTaskRecord(t: any): Task {
 
 export const api = {
   async getMeetings(): Promise<Meeting[]> {
-    // 1. Fetch from backend Express server
+    // 1. Fetch from backend Express server (fast MySQL on hosting)
     let serverMeetings: Meeting[] = [];
     try {
       const res = await apiFetch('/api/meetings');
@@ -433,10 +433,40 @@ export const api = {
         }
       }
     } catch (err) {
-      console.warn('API getMeetings failed, checking Supabase & cache:', err);
+      console.warn('API getMeetings failed, checking fallback:', err);
     }
 
-    // 2. Fetch from Supabase direct client if available
+    // Fast-path: When server returns meetings, process and return immediately without blocking on Supabase
+    if (serverMeetings.length > 0) {
+      const pendingIds = getCachedPendingTaskIds();
+      let mergedList = serverMeetings
+        .filter((m) => m.id !== SYSTEM_SUBMISSIONS_MEETING_ID && !String(m.id).startsWith('system-') && m.title !== '__SYSTEM_TASK_SUBMISSIONS__')
+        .map((m) => ({
+          ...m,
+          tasks: (m.tasks || []).map((t) => {
+            if (t.status === 'Done') {
+              if (pendingIds.has(t.id)) removeCachedPendingTaskId(t.id);
+              return t;
+            }
+            if ((t.status as string) === 'Blocked' || t.status === 'Pending Approval' || pendingIds.has(t.id)) {
+              return { ...t, status: 'Pending Approval' as const };
+            }
+            return t;
+          }),
+        }));
+
+      mergedList.sort((a, b) => {
+        const dateA = new Date(a.meetingDate || a.createdAt || 0).getTime();
+        const dateB = new Date(b.meetingDate || b.createdAt || 0).getTime();
+        return dateB - dateA;
+      });
+
+      saveCachedMeetings(mergedList);
+      syncAllCachedSubmissions().catch(() => {});
+      return mergedList;
+    }
+
+    // 2. Fallback: Fetch from Supabase direct client if available
     let sbMeetings: any[] = [];
     let sbTasks: any[] = [];
     let sbClient = getSupabaseClient();

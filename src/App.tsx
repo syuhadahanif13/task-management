@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Meeting, Task, TaskStatus, CreateMeetingInput, CreateTaskInput, TaskSubmission, AppTab } from './types';
 import { Language, getT } from './i18n';
-import { api, saveCachedTaskSubmission } from './api/client';
+import { api, getCachedMeetings, saveCachedTaskSubmission } from './api/client';
 import { getSupabaseClient } from './lib/supabase';
 import { filterTasksForUser } from './utils/taskAccess';
 import { extractTaskSubmissionFromDescription, embedTaskSubmissionIntoDescription } from './utils/submissionUtils';
@@ -74,8 +74,21 @@ export default function App() {
   const t = getT(language);
 
   // ─── Data ───
-  const [meetings, setMeetings] = useState<Meeting[]>([]);
-  const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [meetings, setMeetings] = useState<Meeting[]>(() => {
+    try {
+      return getCachedMeetings().filter((m) => !m.id.startsWith('system-'));
+    } catch {
+      return [];
+    }
+  });
+  const [isLoading, setIsLoading] = useState<boolean>(() => {
+    try {
+      const cached = getCachedMeetings();
+      return cached.length === 0;
+    } catch {
+      return true;
+    }
+  });
   const [errorMsg, setErrorMsg] = useState<string>('');
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
@@ -176,8 +189,9 @@ export default function App() {
   };
 
   useEffect(() => {
-    // Initial load with spinner
-    loadMeetings(false);
+    // Initial load: silent background sync if cached data is already hydrated, spinner only if empty
+    const hasCachedData = meetings.length > 0;
+    loadMeetings(hasCachedData);
 
     // Silent background refresh on internal task update
     const handleTasksUpdate = () => {
