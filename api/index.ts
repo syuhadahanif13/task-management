@@ -3,6 +3,25 @@ import path from 'path';
 import { GoogleGenAI, Type } from '@google/genai';
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import dotenv from 'dotenv';
+import {
+  isMysqlConfigured,
+  mysqlGetMeetings,
+  mysqlCreateMeeting,
+  mysqlUpdateMeeting,
+  mysqlDeleteMeeting,
+  mysqlGetTasks,
+  mysqlUpsertTask,
+  mysqlDeleteTask,
+  mysqlGetDivisions,
+  mysqlCreateDivision,
+  mysqlDeleteDivision,
+  mysqlGetUsers,
+  mysqlCreateUser,
+  mysqlDeleteUser,
+  mysqlGetSubmissions,
+  mysqlCreateSubmission,
+  mysqlUpdateSubmissionStatus,
+} from './mysql';
 
 dotenv.config();
 
@@ -120,8 +139,39 @@ router.get('/health', (req, res) => {
   res.json({
     status: 'ok',
     timestamp: new Date().toISOString(),
+    mysqlConnected: isMysqlConfigured(),
     supabaseConnected: Boolean(supabase)
   });
+});
+
+router.get('/mysql/test', async (req, res) => {
+  if (!isMysqlConfigured()) {
+    return res.json({
+      connected: false,
+      message: 'MySQL belum dikonfigurasi di environment.',
+      meetingsCount: 0,
+      tasksCount: 0,
+    });
+  }
+
+  try {
+    const [meetings, tasks] = await Promise.all([
+      mysqlGetMeetings(),
+      mysqlGetTasks({})
+    ]);
+
+    res.json({
+      connected: true,
+      meetingsCount: meetings.length,
+      tasksCount: tasks.length,
+      message: 'Terhubung normal ke database MySQL hosting!',
+    });
+  } catch (err: any) {
+    res.status(500).json({
+      connected: false,
+      error: err?.message || 'Error saat menghubungi MySQL hosting',
+    });
+  }
 });
 
 router.get('/supabase/config', (req, res) => {
@@ -517,6 +567,18 @@ async function updateTaskStatusInSupabase(sb: SupabaseClient, taskId: string, st
 }
 
 async function syncMeetingsFromSupabase(): Promise<Meeting[]> {
+  if (isMysqlConfigured()) {
+    try {
+      const mysqlMeetings = await mysqlGetMeetings();
+      if (mysqlMeetings.length > 0) {
+        meetings = mysqlMeetings;
+        return meetings;
+      }
+    } catch (err: any) {
+      console.warn('MySQL get meetings warning:', err?.message);
+    }
+  }
+
   if (!supabase) return meetings;
   try {
     // Sync submissions from Supabase system store and task_submissions table
@@ -693,6 +755,16 @@ async function syncMeetingsFromSupabase(): Promise<Meeting[]> {
 }
 
 router.get('/meetings', async (req, res) => {
+  if (isMysqlConfigured()) {
+    try {
+      const synced = await mysqlGetMeetings();
+      meetings = synced;
+      return res.json(synced);
+    } catch (err: any) {
+      console.warn('MySQL get meetings error, falling back:', err?.message);
+    }
+  }
+
   if (supabase) {
     const synced = await syncMeetingsFromSupabase();
     return res.json(synced);
@@ -702,7 +774,18 @@ router.get('/meetings', async (req, res) => {
   res.json(sorted);
 });
 
-router.get('/meetings/:id', (req, res) => {
+router.get('/meetings/:id', async (req, res) => {
+  if (isMysqlConfigured()) {
+    try {
+      const all = await mysqlGetMeetings();
+      meetings = all;
+      const m = all.find(x => x.id === req.params.id);
+      if (m) return res.json(m);
+    } catch (err: any) {
+      console.warn('MySQL get meeting error:', err?.message);
+    }
+  }
+
   const meeting = meetings.find(m => m.id === req.params.id);
   if (!meeting) return res.status(404).json({ error: 'Meeting not found' });
   res.json(meeting);
@@ -750,6 +833,15 @@ router.post('/meetings', async (req, res) => {
     updatedAt: now,
   };
 
+  // Sync to MySQL if connected
+  if (isMysqlConfigured()) {
+    try {
+      await mysqlCreateMeeting(newMeeting);
+    } catch (err: any) {
+      console.warn('MySQL meeting creation sync warning:', err?.message);
+    }
+  }
+
   // Sync to Supabase if connected
   if (supabase) {
     try {
@@ -785,7 +877,7 @@ router.post('/meetings', async (req, res) => {
 
 router.put('/meetings/:id', async (req, res) => {
   let meetingIndex = meetings.findIndex(m => m.id === req.params.id);
-  if (meetingIndex === -1 && supabase) {
+  if (meetingIndex === -1 && (isMysqlConfigured() || supabase)) {
     await syncMeetingsFromSupabase();
     meetingIndex = meetings.findIndex(m => m.id === req.params.id);
   }
@@ -800,6 +892,14 @@ router.put('/meetings/:id', async (req, res) => {
     title: title ? String(title).trim() : existing.title,
     updatedAt: new Date().toISOString(),
   };
+
+  if (isMysqlConfigured()) {
+    try {
+      await mysqlUpdateMeeting(updated.id, updated);
+    } catch (err: any) {
+      console.warn('MySQL meeting update warning:', err?.message);
+    }
+  }
 
   if (supabase) {
     try {
@@ -824,6 +924,14 @@ router.delete('/meetings/:id', async (req, res) => {
   const meetingId = req.params.id;
   let supabaseDeleted = false;
   let supabaseError: string | null = null;
+
+  if (isMysqlConfigured()) {
+    try {
+      await mysqlDeleteMeeting(meetingId);
+    } catch (err: any) {
+      console.warn('MySQL meeting delete warning:', err?.message);
+    }
+  }
 
   // 1. Hapus dari Supabase jika koneksi aktif
   if (supabase) {
@@ -864,6 +972,20 @@ router.delete('/meetings/:id', async (req, res) => {
 
 router.get('/tasks', async (req, res) => {
   const { meetingId, status, assignee, search } = req.query;
+
+  if (isMysqlConfigured()) {
+    try {
+      const mysqlTasks = await mysqlGetTasks({
+        meetingId: meetingId ? String(meetingId) : undefined,
+        status: status ? String(status) : undefined,
+        assignee: assignee ? String(assignee) : undefined,
+        search: search ? String(search) : undefined,
+      });
+      return res.json(mysqlTasks);
+    } catch (err: any) {
+      console.warn('MySQL get tasks error, falling back:', err?.message);
+    }
+  }
 
   if (supabase) {
     try {
@@ -1059,6 +1181,14 @@ router.post('/tasks', async (req, res) => {
     updatedAt: now,
   };
 
+  if (isMysqlConfigured()) {
+    try {
+      await mysqlUpsertTask(targetMeeting.id, newTask);
+    } catch (err: any) {
+      console.warn('MySQL task insert warning:', err?.message);
+    }
+  }
+
   if (supabase) {
     try {
       await supabase.from('tasks').insert([{
@@ -1118,6 +1248,14 @@ router.post('/meetings/:meetingId/tasks', async (req, res) => {
     createdAt: now,
     updatedAt: now,
   };
+
+  if (isMysqlConfigured()) {
+    try {
+      await mysqlUpsertTask(meeting.id, newTask);
+    } catch (err: any) {
+      console.warn('MySQL task insert warning:', err?.message);
+    }
+  }
 
   if (supabase) {
     try {
@@ -1256,6 +1394,19 @@ router.post('/tasks/:taskId/submit', async (req, res) => {
     }
   }
 
+  if (isMysqlConfigured()) {
+    try {
+      await mysqlCreateSubmission(submission);
+      await mysqlUpsertTask(targetMeeting?.id || 'general-tasks', {
+        ...targetTask,
+        status: 'Pending Approval',
+        description: targetTask.description,
+      });
+    } catch (err: any) {
+      console.warn('MySQL submit task warning:', err?.message);
+    }
+  }
+
   if (supabase) {
     try {
       await updateTaskStatusInSupabase(supabase, taskId, 'Pending Approval', targetTask.description);
@@ -1383,6 +1534,22 @@ router.get('/tasks/:taskId/submissions', async (req, res) => {
   for (const m of meetings) {
     const f = (m.tasks || []).find(t => t.id === taskId || (queryTitle && t.title === queryTitle));
     if (f) { targetTask = f; break; }
+  }
+
+  if (isMysqlConfigured()) {
+    try {
+      const mysqlSubs = await mysqlGetSubmissions();
+      for (const item of mysqlSubs) {
+        const existingIdx = submissions.findIndex(x => x.id === item.id || x.taskId === item.taskId);
+        if (existingIdx >= 0) {
+          submissions[existingIdx] = { ...submissions[existingIdx], ...item };
+        } else {
+          submissions.push(item);
+        }
+      }
+    } catch (err: any) {
+      console.warn('MySQL get submissions error:', err?.message);
+    }
   }
 
   if (supabase) {
@@ -1645,6 +1812,18 @@ router.post('/tasks/:taskId/approve', async (req, res) => {
     }
   }
 
+  if (isMysqlConfigured()) {
+    try {
+      const subTargetId = submission?.id || submissionId;
+      if (subTargetId) {
+        await mysqlUpdateSubmissionStatus(subTargetId, 'approved', 'admin', reviewNote);
+      }
+      await mysqlUpsertTask(targetMeeting?.id || 'general-tasks', targetTask);
+    } catch (err: any) {
+      console.warn('MySQL approve task error:', err?.message);
+    }
+  }
+
   if (supabase) {
     try {
       await updateTaskStatusInSupabase(supabase, taskId, 'Done', targetTask.description);
@@ -1777,6 +1956,18 @@ router.post('/tasks/:taskId/reject', async (req, res) => {
     }
   }
 
+  if (isMysqlConfigured()) {
+    try {
+      const subTargetId = submission?.id || submissionId;
+      if (subTargetId) {
+        await mysqlUpdateSubmissionStatus(subTargetId, 'rejected', 'admin', reviewNote);
+      }
+      await mysqlUpsertTask(targetMeeting?.id || 'general-tasks', targetTask);
+    } catch (err: any) {
+      console.warn('MySQL reject task error:', err?.message);
+    }
+  }
+
   if (supabase) {
     try {
       await updateTaskStatusInSupabase(supabase, taskId, 'In Progress');
@@ -1896,6 +2087,15 @@ router.put('/tasks/:id', async (req, res) => {
   targetTask.updatedAt = now;
   if (targetMeeting) targetMeeting.updatedAt = now;
 
+  // Update MySQL jika aktif
+  if (isMysqlConfigured()) {
+    try {
+      await mysqlUpsertTask(targetMeeting?.id || targetTask.meetingId || 'general-tasks', targetTask);
+    } catch (err: any) {
+      console.warn('MySQL task update warning:', err?.message);
+    }
+  }
+
   // 5. Update ke Supabase jika aktif
   if (supabase) {
     try {
@@ -1932,6 +2132,14 @@ router.put('/tasks/:id', async (req, res) => {
 // DELETE /api/tasks/:id - Menghapus data task dari Supabase & memori
 router.delete('/tasks/:id', async (req, res) => {
   const taskId = req.params.id;
+
+  if (isMysqlConfigured()) {
+    try {
+      await mysqlDeleteTask(taskId);
+    } catch (err: any) {
+      console.warn('MySQL task delete warning:', err?.message);
+    }
+  }
 
   if (supabase) {
     try {
@@ -2044,6 +2252,18 @@ function parseHeuristicMeeting(text: string, defaultDate: string) {
 
 // Division Supabase Sync
 async function syncDivisionsFromSupabase(): Promise<Division[]> {
+  if (isMysqlConfigured()) {
+    try {
+      const mysqlDivs = await mysqlGetDivisions();
+      if (mysqlDivs.length > 0) {
+        divisions = mysqlDivs;
+        return divisions;
+      }
+    } catch (err: any) {
+      console.warn('MySQL divisions sync warning:', err?.message);
+    }
+  }
+
   if (!supabase) return divisions;
   try {
     const { data: dbDivisions, error } = await supabase
@@ -2096,6 +2316,14 @@ router.post('/divisions', async (req, res) => {
     updatedAt: now,
   };
   divisions.push(division);
+
+  if (isMysqlConfigured()) {
+    try {
+      await mysqlCreateDivision(division.id, division.name);
+    } catch (err: any) {
+      console.warn('MySQL insert division warning:', err?.message);
+    }
+  }
 
   if (supabase) {
     try {
@@ -2151,6 +2379,14 @@ router.delete('/divisions/:id', async (req, res) => {
   const idx = divisions.findIndex(d => d.id === req.params.id);
   if (idx !== -1) divisions.splice(idx, 1);
 
+  if (isMysqlConfigured()) {
+    try {
+      await mysqlDeleteDivision(req.params.id);
+    } catch (err: any) {
+      console.warn('MySQL delete division warning:', err?.message);
+    }
+  }
+
   if (supabase) {
     try {
       await supabase.from('divisions').delete().eq('id', req.params.id);
@@ -2164,6 +2400,18 @@ router.delete('/divisions/:id', async (req, res) => {
 
 // User Supabase Sync
 async function syncUsersFromSupabase(): Promise<User[]> {
+  if (isMysqlConfigured()) {
+    try {
+      const mysqlUsers = await mysqlGetUsers();
+      if (mysqlUsers.length > 0) {
+        users = mysqlUsers;
+        return users;
+      }
+    } catch (err: any) {
+      console.warn('MySQL users sync warning:', err?.message);
+    }
+  }
+
   if (!supabase) return users;
   try {
     const { data: dbUsers, error } = await supabase
@@ -2231,6 +2479,14 @@ router.post('/users', async (req, res) => {
   };
   users.push(user);
 
+  if (isMysqlConfigured()) {
+    try {
+      await mysqlCreateUser(user);
+    } catch (err: any) {
+      console.warn('MySQL insert user warning:', err?.message);
+    }
+  }
+
   if (supabase) {
     try {
       const { data, error } = await supabase
@@ -2294,6 +2550,14 @@ router.put('/users/:id', async (req, res) => {
 router.delete('/users/:id', async (req, res) => {
   const idx = users.findIndex(u => u.id === req.params.id);
   if (idx !== -1) users.splice(idx, 1);
+
+  if (isMysqlConfigured()) {
+    try {
+      await mysqlDeleteUser(req.params.id);
+    } catch (err: any) {
+      console.warn('MySQL delete user warning:', err?.message);
+    }
+  }
 
   if (supabase) {
     try {
