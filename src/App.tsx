@@ -741,6 +741,7 @@ export default function App() {
           pendingReviewCount={pendingReviewCount}
           showBack={currentTab === 'active-meeting'}
           onSwitchToAdmin={handleSwitchToAdmin}
+          onOpenProfile={() => setIsUserManagerOpen(true)}
         />
 
         {/* Page content */}
@@ -1079,7 +1080,7 @@ export default function App() {
                   meetings={meetings}
                   t={t}
                   onSelectMeeting={handleSelectMeeting}
-                  onOpenUserManager={() => setIsUserManagerOpen(true)}
+                  onOpenUserManager={currentUser?.role === 'admin' ? () => setIsUserManagerOpen(true) : undefined}
                 />
               )}
 
@@ -1093,7 +1094,9 @@ export default function App() {
 
                   {/* Organization */}
                   <div className="ios-card p-5">
-                    <p className="notion-section-title mb-4">Organisasi</p>
+                    <p className="notion-section-title mb-4">
+                      {currentUser?.role === 'admin' ? 'Organisasi' : 'Akun & Profil'}
+                    </p>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                       <div className="p-4 rounded-2xl bg-notion-sidebar">
                         <div className="flex items-center justify-between mb-2">
@@ -1121,22 +1124,22 @@ export default function App() {
                         <div className="flex items-center justify-between mb-2">
                           <div className="flex items-center gap-2">
                             <CheckSquare className="w-4 h-4 text-ios-indigo" />
-                            <h3 className="text-sm font-semibold text-notion-text">{t.settings.users}</h3>
+                            <h3 className="text-sm font-semibold text-notion-text">
+                              {currentUser?.role === 'admin' ? t.settings.users : 'Profil & Kata Sandi'}
+                            </h3>
                           </div>
                           <button
-                            onClick={() => {
-                              if (currentUser?.role !== 'admin') {
-                                showToast('Hanya Administrator yang dapat mengelola pengguna.');
-                                return;
-                              }
-                              setIsUserManagerOpen(true);
-                            }}
-                            className={`notion-btn text-xs py-1 px-2.5 ${currentUser?.role === 'admin' ? 'notion-btn-primary' : 'opacity-60 cursor-not-allowed bg-zinc-200 dark:bg-zinc-700 text-zinc-600 dark:text-zinc-300'}`}
+                            onClick={() => setIsUserManagerOpen(true)}
+                            className="notion-btn notion-btn-primary text-xs py-1 px-2.5"
                           >
-                            {t.settings.manageUsers}
+                            {currentUser?.role === 'admin' ? t.settings.manageUsers : 'Edit Profil & Password'}
                           </button>
                         </div>
-                        <p className="text-xs text-notion-text-secondary">{t.settings.usersDesc}</p>
+                        <p className="text-xs text-notion-text-secondary">
+                          {currentUser?.role === 'admin'
+                            ? t.settings.usersDesc
+                            : 'Lihat data akun profil dan ubah kata sandi login Anda.'}
+                        </p>
                       </div>
                     </div>
                   </div>
@@ -1360,6 +1363,18 @@ export default function App() {
       <UserManager
         isOpen={isUserManagerOpen}
         onClose={() => setIsUserManagerOpen(false)}
+        currentUser={currentUser}
+        onUserUpdated={(updated) => {
+          setCurrentUser((prev: any) => ({ ...prev, ...updated }));
+          const saved = sessionStorage.getItem('currentUser');
+          if (saved) {
+            try {
+              const parsed = JSON.parse(saved);
+              sessionStorage.setItem('currentUser', JSON.stringify({ ...parsed, ...updated }));
+            } catch {}
+          }
+          showToast(`Profil "${updated.username}" berhasil diperbarui!`);
+        }}
         onSimulateUser={(user) => {
           setCurrentUser(user);
           sessionStorage.setItem('currentUser', JSON.stringify(user));

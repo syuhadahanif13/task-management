@@ -40,6 +40,7 @@ interface TopBarProps {
   pendingReviewCount?: number;
   showBack?: boolean;
   onSwitchToAdmin?: () => void;
+  onOpenProfile?: () => void;
 }
 
 export const TopBar: React.FC<TopBarProps> = ({
@@ -61,6 +62,7 @@ export const TopBar: React.FC<TopBarProps> = ({
   pendingReviewCount = 0,
   showBack,
   onSwitchToAdmin,
+  onOpenProfile,
 }) => {
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [isNotifOpen, setIsNotifOpen] = useState(false);
@@ -109,7 +111,11 @@ export const TopBar: React.FC<TopBarProps> = ({
           /* ─── State 1: Home / Dashboard Header ─── */
           <div className="flex items-center justify-between">
             {/* Left: Avatar + "Welcome Back," + User Name */}
-            <div className="flex items-center gap-3 min-w-0">
+            <div
+              onClick={onOpenProfile}
+              className={`flex items-center gap-3 min-w-0 ${onOpenProfile ? 'cursor-pointer active:scale-95 transition-transform' : ''}`}
+              title={onOpenProfile ? 'Buka Profil Saya' : undefined}
+            >
               <div className="relative shrink-0">
                 <div className="w-10 h-10 rounded-full overflow-hidden bg-gradient-to-tr from-amber-400 via-rose-400 to-indigo-500 p-[1.5px] shadow-xs">
                   <div className="w-full h-full rounded-full bg-white dark:bg-zinc-900 flex items-center justify-center text-sm font-bold text-gray-800 dark:text-zinc-100">
@@ -305,37 +311,60 @@ export const TopBar: React.FC<TopBarProps> = ({
               </div>
 
               {/* User Profile Snippet (Glass Card) */}
-              <div className="my-3.5 p-3 rounded-2xl bg-white/50 dark:bg-white/5 flex items-center gap-3 border border-white/60 dark:border-white/10 shadow-xs">
-                <div className="w-10 h-10 rounded-full bg-gradient-to-tr from-amber-400 via-rose-400 to-indigo-500 p-[1.5px] shadow-xs shrink-0">
-                  <div className="w-full h-full rounded-full bg-white dark:bg-zinc-900 flex items-center justify-center text-xs font-bold text-gray-800 dark:text-zinc-100">
-                    {userName.charAt(0).toUpperCase()}
+              <div className="my-3.5 p-3 rounded-2xl bg-white/50 dark:bg-white/5 border border-white/60 dark:border-white/10 shadow-xs space-y-2">
+                <div
+                  onClick={() => {
+                    if (onOpenProfile) {
+                      setIsDrawerOpen(false);
+                      onOpenProfile();
+                    }
+                  }}
+                  className={`flex items-center gap-3 ${onOpenProfile ? 'cursor-pointer hover:opacity-80 transition-opacity' : ''}`}
+                >
+                  <div className="w-10 h-10 rounded-full bg-gradient-to-tr from-amber-400 via-rose-400 to-indigo-500 p-[1.5px] shadow-xs shrink-0">
+                    <div className="w-full h-full rounded-full bg-white dark:bg-zinc-900 flex items-center justify-center text-xs font-bold text-gray-800 dark:text-zinc-100">
+                      {userName.charAt(0).toUpperCase()}
+                    </div>
                   </div>
-                </div>
-                <div className="min-w-0 flex-1">
-                  <h4 className="text-xs font-bold text-gray-900 dark:text-white truncate leading-tight">
-                    {userName}
-                  </h4>
-                  <div className="flex items-center justify-between gap-1.5 mt-0.5">
-                    <div className="flex items-center gap-1.5 min-w-0">
+                  <div className="min-w-0 flex-1">
+                    <h4 className="text-xs font-bold text-gray-900 dark:text-white truncate leading-tight">
+                      {userName}
+                    </h4>
+                    <div className="flex items-center gap-1.5 mt-0.5 min-w-0">
                       <span className="w-1.5 h-1.5 rounded-full bg-[#a3e635] shadow-[0_0_6px_#a3e635] shrink-0" />
                       <p className="text-[10px] text-gray-500 dark:text-zinc-400 capitalize truncate">
                         {currentUser?.role || 'Member'}
                       </p>
                     </div>
-                    {currentUser?.role === 'user' && onSwitchToAdmin && (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setIsDrawerOpen(false);
-                          onSwitchToAdmin();
-                        }}
-                        className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-600 dark:text-indigo-400 transition-colors shrink-0"
-                        title="Beralih kembali ke Admin"
-                      >
-                        👑 Ke Admin
-                      </button>
-                    )}
                   </div>
+                </div>
+
+                <div className="flex items-center justify-between gap-1.5 pt-2 border-t border-black/5 dark:border-white/5">
+                  {onOpenProfile && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsDrawerOpen(false);
+                        onOpenProfile();
+                      }}
+                      className="text-[11px] font-semibold px-2.5 py-1 rounded-xl bg-indigo-50 dark:bg-indigo-950/40 text-indigo-600 dark:text-indigo-400 border border-indigo-200/80 dark:border-indigo-800/60 hover:bg-indigo-100 transition-colors flex items-center gap-1"
+                    >
+                      ✏️ Edit Profil & Password
+                    </button>
+                  )}
+                  {currentUser?.role === 'user' && onSwitchToAdmin && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsDrawerOpen(false);
+                        onSwitchToAdmin();
+                      }}
+                      className="text-[10px] font-bold px-2 py-1 rounded-full bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-600 dark:text-indigo-400 transition-colors shrink-0 ml-auto"
+                      title="Beralih kembali ke Admin"
+                    >
+                      👑 Ke Admin
+                    </button>
+                  )}
                 </div>
               </div>
 
