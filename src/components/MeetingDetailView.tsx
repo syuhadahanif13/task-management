@@ -230,30 +230,48 @@ export const MeetingDetailView: React.FC<MeetingDetailViewProps> = ({
     <div className="bg-white/95 dark:bg-zinc-850 rounded-[32px] p-5 sm:p-7 border border-gray-200/70 dark:border-zinc-750 shadow-sm space-y-6 max-w-6xl mx-auto">
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-5 border-b border-gray-100 dark:border-zinc-800 gap-4">
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3 flex-1 min-w-0">
           <button
             onClick={onBack}
-            className="w-11 h-11 rounded-full bg-gray-100/80 dark:bg-zinc-800 flex items-center justify-center text-gray-700 dark:text-zinc-300 hover:bg-black hover:text-white transition active:scale-95 shadow-xs"
+            className="w-11 h-11 rounded-full bg-gray-100/80 dark:bg-zinc-800 flex items-center justify-center text-gray-700 dark:text-zinc-300 hover:bg-black hover:text-white transition active:scale-95 shadow-xs shrink-0"
             title="Kembali"
           >
             <ArrowLeft className="h-5 w-5" />
           </button>
-          <div>
-            <h1 className="text-2xl sm:text-3xl font-black text-gray-900 dark:text-white tracking-tight">
-              {meeting.title || `Rapat ${meeting.meetingDate}`}
-            </h1>
-            <p className="text-xs font-semibold text-gray-400 dark:text-zinc-500 mt-0.5">
-              📅 {new Date(meeting.meetingDate).toLocaleDateString('id-ID', {
-                weekday: 'long',
-                year: 'numeric',
-                month: 'long',
-                day: 'numeric',
-              })}
-            </p>
+          <div className="flex-1 min-w-0">
+            {isEditingMeeting ? (
+              <div className="space-y-1 max-w-xl">
+                <span className="text-[11px] font-bold text-gray-400 dark:text-zinc-400 uppercase tracking-wider block">
+                  Judul Rapat
+                </span>
+                <input
+                  type="text"
+                  value={editTitle}
+                  onChange={(e) => setEditTitle(e.target.value)}
+                  placeholder="Masukkan judul rapat..."
+                  className="w-full bg-white dark:bg-zinc-800 text-lg sm:text-2xl font-black text-gray-900 dark:text-white px-3.5 py-1.5 rounded-xl border border-gray-300 dark:border-zinc-700 focus:outline-none focus:ring-2 focus:ring-black dark:focus:ring-white transition shadow-xs"
+                  autoFocus
+                />
+              </div>
+            ) : (
+              <div>
+                <h1 className="text-2xl sm:text-3xl font-black text-gray-900 dark:text-white tracking-tight">
+                  {meeting.title || `Rapat ${meeting.meetingDate}`}
+                </h1>
+                <p className="text-xs font-semibold text-gray-400 dark:text-zinc-500 mt-0.5">
+                  📅 {new Date(meeting.meetingDate).toLocaleDateString('id-ID', {
+                    weekday: 'long',
+                    year: 'numeric',
+                    month: 'long',
+                    day: 'numeric',
+                  })}
+                </p>
+              </div>
+            )}
           </div>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 shrink-0">
           {!isEditingMeeting ? (
             <>
               <button
@@ -264,7 +282,7 @@ export const MeetingDetailView: React.FC<MeetingDetailViewProps> = ({
                   setEditParticipants(meeting.participants.join(', '));
                   setIsEditingMeeting(true);
                 }}
-                className="px-4 py-2 rounded-full bg-gray-100 dark:bg-zinc-800 hover:bg-gray-200 text-gray-800 dark:text-zinc-200 text-xs font-bold transition flex items-center gap-1.5"
+                className="px-4 py-2 rounded-full bg-gray-100 dark:bg-zinc-800 hover:bg-gray-200 text-gray-800 dark:text-zinc-200 text-xs font-bold transition flex items-center gap-1.5 shrink-0"
               >
                 <Edit3 className="h-3.5 w-3.5" />
                 <span>Edit</span>
@@ -276,7 +294,7 @@ export const MeetingDetailView: React.FC<MeetingDetailViewProps> = ({
                       onDeleteMeeting(meeting.id);
                     }
                   }}
-                  className="px-4 py-2 rounded-full bg-rose-50 dark:bg-rose-950/40 text-rose-600 dark:text-rose-300 hover:bg-rose-100 text-xs font-bold transition flex items-center gap-1.5"
+                  className="px-4 py-2 rounded-full bg-rose-50 dark:bg-rose-950/40 text-rose-600 dark:text-rose-300 hover:bg-rose-100 text-xs font-bold transition flex items-center gap-1.5 shrink-0"
                 >
                   <Trash2 className="h-3.5 w-3.5" />
                   <span>Hapus</span>
@@ -284,22 +302,22 @@ export const MeetingDetailView: React.FC<MeetingDetailViewProps> = ({
               )}
             </>
           ) : (
-            <>
+            <div className="flex items-center gap-2.5 shrink-0">
               <button
                 onClick={handleSaveMeetingEdits}
-                className="px-5 py-2 rounded-full bg-[#18191d] hover:bg-black text-white text-xs font-bold transition flex items-center gap-1.5 shadow-sm"
+                className="px-5 py-2 min-w-[95px] rounded-full bg-[#18191d] hover:bg-black text-white text-xs font-bold transition flex items-center justify-center gap-1.5 shadow-sm whitespace-nowrap shrink-0"
               >
                 <Check className="h-3.5 w-3.5" />
-                Simpan
+                <span>Simpan</span>
               </button>
               <button
                 onClick={() => setIsEditingMeeting(false)}
-                className="px-4 py-2 rounded-full bg-gray-100 dark:bg-zinc-800 text-gray-700 dark:text-zinc-300 text-xs font-bold hover:bg-gray-200 transition"
+                className="px-5 py-2 min-w-[95px] rounded-full bg-gray-100 dark:bg-zinc-800 text-gray-700 dark:text-zinc-300 text-xs font-bold hover:bg-gray-200 transition flex items-center justify-center gap-1.5 whitespace-nowrap shadow-xs shrink-0"
               >
                 <X className="h-3.5 w-3.5" />
-                Batal
+                <span>Batal</span>
               </button>
-            </>
+            </div>
           )}
         </div>
       </div>
@@ -307,6 +325,29 @@ export const MeetingDetailView: React.FC<MeetingDetailViewProps> = ({
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
         {/* Left Column: Core Fields */}
         <div className="lg:col-span-5 space-y-4">
+          {/* Judul Rapat */}
+          <div className="bg-[#f8f9fa] dark:bg-zinc-800/60 rounded-[26px] p-5 border border-gray-200/50 dark:border-zinc-700/50">
+            <div className="flex items-center gap-2 mb-2">
+              <FileText className="h-4 w-4 text-ios-blue" />
+              <h3 className="text-xs font-bold text-gray-500 dark:text-zinc-400 uppercase tracking-wider">
+                Judul Rapat
+              </h3>
+            </div>
+            {isEditingMeeting ? (
+              <input
+                type="text"
+                value={editTitle}
+                onChange={(e) => setEditTitle(e.target.value)}
+                placeholder="Masukkan judul rapat..."
+                className="w-full bg-white dark:bg-zinc-700/80 rounded-xl px-3.5 py-2.5 text-xs font-semibold text-gray-800 dark:text-white border border-gray-200 dark:border-zinc-600 focus:outline-none focus:ring-2 focus:ring-black dark:focus:ring-white"
+              />
+            ) : (
+              <p className="text-sm font-bold text-gray-900 dark:text-white">
+                {meeting.title || `Rapat ${meeting.meetingDate}`}
+              </p>
+            )}
+          </div>
+
           {/* Meeting Date */}
           <div className="bg-[#f8f9fa] dark:bg-zinc-800/60 rounded-[26px] p-5 border border-gray-200/50 dark:border-zinc-700/50">
             <div className="flex items-center gap-2 mb-2">

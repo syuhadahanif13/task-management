@@ -825,7 +825,7 @@ router.put('/meetings/:id', async (req, res) => {
     meetingDate: meetingDate ? String(meetingDate).trim() : existing.meetingDate,
     participants: Array.isArray(participants) ? participants.map(p => String(p).trim()).filter(Boolean) : existing.participants,
     meetingNotes: meetingNotes !== undefined ? String(meetingNotes) : existing.meetingNotes,
-    title: title ? String(title).trim() : existing.title,
+    title: title !== undefined ? String(title).trim() : existing.title,
     updatedAt: new Date().toISOString(),
   };
 
