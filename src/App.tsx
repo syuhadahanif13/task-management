@@ -40,7 +40,6 @@ import {
   CheckSquare,
   Users,
   Settings as SettingsIcon,
-  Database,
 } from 'lucide-react';
 
 export default function App() {
@@ -1205,76 +1204,6 @@ export default function App() {
                             🌙 {t.settings.darkMode}
                           </button>
                         </div>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* MySQL Database Status & Settings */}
-                  <div className="ios-card p-5">
-                    <div className="flex items-center justify-between mb-4">
-                      <div className="flex items-center gap-2">
-                        <div className="w-8 h-8 rounded-xl flex items-center justify-center bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
-                          <Database className="w-4 h-4" />
-                        </div>
-                        <div>
-                          <h3 className="text-sm font-semibold text-notion-text">Database MySQL (Self-Hosted)</h3>
-                          <p className="text-xs text-notion-text-secondary">Penyimpanan mandiri di server web hosting pribadi (49.50.10.26)</p>
-                        </div>
-                      </div>
-                      <span className="text-[11px] font-bold px-2.5 py-1 rounded-full bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300">
-                        ● Terhubung Aktif
-                      </span>
-                    </div>
-
-                    <div className="p-4 rounded-2xl bg-notion-sidebar space-y-3">
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs text-notion-text-secondary">
-                        <div className="p-2.5 rounded-xl bg-white dark:bg-zinc-800/80 border border-notion-border">
-                          <span className="block text-[10px] uppercase font-bold text-notion-text-secondary">Server Host</span>
-                          <span className="font-mono text-xs text-notion-text font-semibold">49.50.10.26:3306</span>
-                        </div>
-                        <div className="p-2.5 rounded-xl bg-white dark:bg-zinc-800/80 border border-notion-border">
-                          <span className="block text-[10px] uppercase font-bold text-notion-text-secondary">Nama Database</span>
-                          <span className="font-mono text-xs text-notion-text font-semibold">task_management</span>
-                        </div>
-                      </div>
-
-                      <div className="text-[11px] text-notion-text-secondary flex items-center gap-1.5 pt-1">
-                        <Check className="w-3.5 h-3.5 text-emerald-500 flex-shrink-0" />
-                        <span>Koneksi penuh 100% dialihkan ke MySQL hosting mandiri dengan in-memory cache ultra-cepat.</span>
-                      </div>
-
-                      <div className="flex flex-wrap items-center gap-2 pt-1">
-                        <button
-                          onClick={async () => {
-                            try {
-                              showToast('Menguji koneksi database MySQL...');
-                              const res = await fetch('/api/mysql/test');
-                              const data = await res.json();
-                              if (data.success) {
-                                showToast(`Koneksi MySQL Normal! (${data.counts?.meetings || 0} rapat, ${data.counts?.tasks || 0} tugas, ${data.counts?.users || 0} anggota tim)`);
-                              } else {
-                                alert(`Gagal tes MySQL: ${data.error || 'Unknown error'}`);
-                              }
-                            } catch (e: any) {
-                              alert(`Gagal menghubungi endpoint tes: ${e.message}`);
-                            }
-                          }}
-                          className="notion-btn notion-btn-primary text-xs py-1.5 px-3 flex items-center gap-1.5"
-                        >
-                          <Database className="w-3.5 h-3.5" />
-                          <span>Uji Koneksi Database MySQL</span>
-                        </button>
-
-                        <button
-                          onClick={() => {
-                            loadMeetings(false);
-                            showToast('Menyinkronkan data terbaru dari MySQL...');
-                          }}
-                          className="notion-btn text-xs py-1.5 px-3 flex items-center gap-1.5 bg-white dark:bg-zinc-800 text-notion-text border border-notion-border hover:bg-zinc-50 dark:hover:bg-zinc-700 transition"
-                        >
-                          <RefreshCw className="w-3.5 h-3.5" />
-                          <span>Sinkronkan Ulang</span>
-                        </button>
                       </div>
                     </div>
                   </div>
