@@ -1,12 +1,13 @@
 import React from 'react';
 import { Meeting } from '../types';
-import { Calendar, Users, FileText, CheckCircle2, ChevronRight, Trash2 } from 'lucide-react';
+import { Calendar, Users, FileText, CheckCircle2, ChevronRight, Trash2, FileDown } from 'lucide-react';
 
 interface MeetingCardProps {
   meeting: Meeting;
   isSelected?: boolean;
   onSelect: (meeting: Meeting) => void;
   onDelete?: (meetingId: string) => void;
+  onExport?: (meeting: Meeting) => void;
 }
 
 export const MeetingCard: React.FC<MeetingCardProps> = ({
@@ -14,6 +15,7 @@ export const MeetingCard: React.FC<MeetingCardProps> = ({
   isSelected = false,
   onSelect,
   onDelete,
+  onExport,
 }) => {
   const totalTasks = meeting.tasks?.length || 0;
   const completedTasks = meeting.tasks?.filter((t) => t.status === 'Done').length || 0;
@@ -43,18 +45,32 @@ export const MeetingCard: React.FC<MeetingCardProps> = ({
           <span className="text-[11px] text-notion-text-secondary">{meeting.meetingDate}</span>
         </div>
 
-        {onDelete && (
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              onDelete(meeting.id);
-            }}
-            className="rounded-md p-1 text-notion-text-secondary opacity-0 transition-opacity hover:text-notion-danger group-hover:opacity-100"
-            title="Hapus Rapat"
-          >
-            <Trash2 className="h-3.5 w-3.5" />
-          </button>
-        )}
+        <div className="flex items-center gap-1">
+          {onExport && (
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                onExport(meeting);
+              }}
+              className="rounded-md p-1 text-notion-text-secondary hover:text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-950/40 transition"
+              title="Export PDF Rapat Ini"
+            >
+              <FileDown className="h-3.5 w-3.5" />
+            </button>
+          )}
+          {onDelete && (
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                onDelete(meeting.id);
+              }}
+              className="rounded-md p-1 text-notion-text-secondary opacity-0 transition-opacity hover:text-notion-danger group-hover:opacity-100"
+              title="Hapus Rapat"
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+            </button>
+          )}
+        </div>
       </div>
 
       <h3 className="notion-page-title mb-2 line-clamp-1">

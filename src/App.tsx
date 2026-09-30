@@ -30,6 +30,7 @@ import { AddTaskModal } from './components/AddTaskModal';
 import { LoginPage } from './components/LoginPage';
 import { PwaInstallBanner } from './components/PwaInstallBanner';
 import { PwaSettingsCard } from './components/PwaSettingsCard';
+import { ReportModal } from './components/ReportModal';
 
 import {
   Check,
@@ -40,6 +41,7 @@ import {
   CheckSquare,
   Users,
   Settings as SettingsIcon,
+  FileDown,
 } from 'lucide-react';
 
 export default function App() {
@@ -107,6 +109,13 @@ export default function App() {
   const [isUserManagerOpen, setIsUserManagerOpen] = useState(false);
   const [isAddTaskOpen, setIsAddTaskOpen] = useState(false);
   const [newMeetingDefaultDate, setNewMeetingDefaultDate] = useState('');
+  const [isReportModalOpen, setIsReportModalOpen] = useState(false);
+  const [reportModalMeetingId, setReportModalMeetingId] = useState<string | null>(null);
+
+  const handleOpenReport = (meetingId?: string) => {
+    setReportModalMeetingId(meetingId || null);
+    setIsReportModalOpen(true);
+  };
 
   // ─── Effects ───
   useEffect(() => {
@@ -835,6 +844,15 @@ export default function App() {
                       </div>
 
                       <button
+                        onClick={() => handleOpenReport()}
+                        className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-2xl bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-950/40 dark:hover:bg-emerald-900/50 text-emerald-700 dark:text-emerald-300 text-xs font-bold transition shadow-sm active:scale-95"
+                        title="Export PDF & Generate Laporan Rapat"
+                      >
+                        <FileDown className="w-4 h-4" />
+                        <span>Laporan PDF</span>
+                      </button>
+
+                      <button
                         onClick={() => setIsAiExtractOpen(true)}
                         className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-2xl bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-950/40 dark:hover:bg-indigo-900/50 text-indigo-700 dark:text-indigo-300 text-xs font-bold transition shadow-sm"
                       >
@@ -955,6 +973,16 @@ export default function App() {
                                     <button
                                       onClick={(e) => {
                                         e.stopPropagation();
+                                        handleOpenReport(meeting.id);
+                                      }}
+                                      className="w-8 h-8 rounded-full bg-gray-50 dark:bg-zinc-700/50 hover:bg-emerald-50 hover:text-emerald-600 dark:hover:bg-emerald-950/40 dark:hover:text-emerald-300 text-gray-400 flex items-center justify-center transition"
+                                      title="Export PDF & Cetak Laporan Rapat Ini"
+                                    >
+                                      <FileDown className="w-3.5 h-3.5" />
+                                    </button>
+                                    <button
+                                      onClick={(e) => {
+                                        e.stopPropagation();
                                         if (confirm(t.meetings.deleteConfirm)) {
                                           handleDeleteMeeting(meeting.id);
                                         }
@@ -1047,6 +1075,7 @@ export default function App() {
                   onApproveSubmission={handleApproveSubmission}
                   onRejectSubmission={handleRejectSubmission}
                   onViewProof={(task) => setViewingProofTask(task)}
+                  onOpenReport={() => handleOpenReport(selectedMeeting.id)}
                   currentUserRole={currentUser?.role || 'admin'}
                   currentUser={currentUser}
                 />
@@ -1317,6 +1346,14 @@ export default function App() {
         onClose={() => setIsAddTaskOpen(false)}
         onAddTask={handleAddTaskToMeeting}
         currentUser={currentUser}
+      />
+
+      <ReportModal
+        isOpen={isReportModalOpen}
+        onClose={() => setIsReportModalOpen(false)}
+        meetings={meetings}
+        initialMeetingId={reportModalMeetingId}
+        onToast={showToast}
       />
 
       {/* Progressive Web App (PWA) Install Prompt */}

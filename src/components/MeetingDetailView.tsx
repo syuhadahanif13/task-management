@@ -24,6 +24,7 @@ import {
   Filter,
   User as UserIcon,
   Building,
+  FileDown,
 } from 'lucide-react';
 import { parseMeetingNotes } from '../utils/divisionNotesUtils';
 
@@ -41,6 +42,7 @@ interface MeetingDetailViewProps {
   onApproveSubmission?: (taskId: string, submissionId: string, reviewNote?: string) => Promise<void>;
   onRejectSubmission?: (taskId: string, submissionId: string, reviewNote: string) => Promise<void>;
   onViewProof?: (task: Task) => void;
+  onOpenReport?: () => void;
   currentUserRole?: 'admin' | 'user';
   currentUser?: { username: string; role?: string; divisionId?: string } | null;
 }
@@ -59,6 +61,7 @@ export const MeetingDetailView: React.FC<MeetingDetailViewProps> = ({
   onApproveSubmission,
   onRejectSubmission,
   onViewProof,
+  onOpenReport,
   currentUserRole = 'admin',
   currentUser,
 }) => {
@@ -274,6 +277,16 @@ export const MeetingDetailView: React.FC<MeetingDetailViewProps> = ({
         <div className="flex items-center gap-2 shrink-0">
           {!isEditingMeeting ? (
             <>
+              {onOpenReport && (
+                <button
+                  onClick={onOpenReport}
+                  className="px-4 py-2 rounded-full bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-950/40 dark:hover:bg-emerald-900/60 text-emerald-700 dark:text-emerald-300 text-xs font-bold transition flex items-center gap-1.5 shrink-0 shadow-xs"
+                  title="Export PDF & Cetak Laporan Rapat"
+                >
+                  <FileDown className="h-3.5 w-3.5" />
+                  <span>Export PDF</span>
+                </button>
+              )}
               <button
                 onClick={() => {
                   setEditTitle(meeting.title || '');
