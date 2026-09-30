@@ -308,33 +308,6 @@ export function exportSingleMeetingPdf(meeting: Meeting, options: ReportOptions 
     }
   }
 
-  // ─── Tanda Tangan & Pengesahan Dokumen ───
-  if (currentY > pageHeight - 40) {
-    doc.addPage();
-    currentY = 25;
-  }
-
-  const signColWidth = (pageWidth - 28) / 2;
-  doc.setFontSize(8);
-  doc.setFont('helvetica', 'normal');
-  doc.setTextColor(71, 85, 105);
-
-  doc.text('Dibuat & Dicatat Oleh,', 25, currentY);
-  doc.text('Mengetahui / Pimpinan Rapat,', 14 + signColWidth + 15, currentY);
-
-  currentY += 18;
-
-  doc.setFont('helvetica', 'bold');
-  doc.setTextColor(15, 23, 42);
-  doc.text('( ............................................ )', 20, currentY);
-  doc.text('( ............................................ )', 14 + signColWidth + 10, currentY);
-
-  doc.setFontSize(7);
-  doc.setFont('helvetica', 'normal');
-  doc.setTextColor(148, 163, 184);
-  doc.text('Notulis / Admin Divisi', 28, currentY + 4);
-  doc.text('Direktur / Project Manager', 14 + signColWidth + 18, currentY + 4);
-
   // ─── Footer Halaman ───
   const pageCount = (doc.internal as any).getNumberOfPages();
   for (let i = 1; i <= pageCount; i++) {
@@ -588,33 +561,6 @@ export function exportAllMeetingsPdf(meetings: Meeting[], options: ReportOptions
     }
   }
 
-  // ─── Tanda Tangan & Pengesahan Laporan ───
-  if (currentY > pageHeight - 40) {
-    doc.addPage();
-    currentY = 25;
-  }
-
-  const signColWidth = (pageWidth - 28) / 2;
-  doc.setFontSize(8);
-  doc.setFont('helvetica', 'normal');
-  doc.setTextColor(71, 85, 105);
-
-  doc.text('Dibuat & Direkap Oleh,', 25, currentY);
-  doc.text('Disetujui & Diketahui,', 14 + signColWidth + 20, currentY);
-
-  currentY += 18;
-
-  doc.setFont('helvetica', 'bold');
-  doc.setTextColor(15, 23, 42);
-  doc.text('( ............................................ )', 20, currentY);
-  doc.text('( ............................................ )', 14 + signColWidth + 15, currentY);
-
-  doc.setFontSize(7);
-  doc.setFont('helvetica', 'normal');
-  doc.setTextColor(148, 163, 184);
-  doc.text('Koordinator / Task Administrator', 22, currentY + 4);
-  doc.text('Direksi / Head of Operations', 14 + signColWidth + 20, currentY + 4);
-
   // ─── Footer Halaman ───
   const pageCount = (doc.internal as any).getNumberOfPages();
   for (let i = 1; i <= pageCount; i++) {
@@ -736,19 +682,6 @@ export function printReportHtml(meetingOrMeetings: Meeting | Meeting[], options:
           </tbody>
         </table>
       ` : ''}
-
-      <div class="signature-section">
-        <div class="signature-box">
-          <p>Dibuat & Dicatat Oleh,</p>
-          <div class="signature-line"></div>
-          <p><strong>( Notulis / PIC Rapat )</strong></p>
-        </div>
-        <div class="signature-box">
-          <p>Mengetahui & Disetujui,</p>
-          <div class="signature-line"></div>
-          <p><strong>( Pimpinan Rapat / Manajemen )</strong></p>
-        </div>
-      </div>
     `;
   } else {
     // Multiple meetings consolidated
@@ -844,19 +777,6 @@ export function printReportHtml(meetingOrMeetings: Meeting | Meeting[], options:
           </tbody>
         </table>
       ` : ''}
-
-      <div class="signature-section">
-        <div class="signature-box">
-          <p>Dibuat & Direkap Oleh,</p>
-          <div class="signature-line"></div>
-          <p><strong>( Koordinator / Notulis )</strong></p>
-        </div>
-        <div class="signature-box">
-          <p>Mengetahui & Mengesahkan,</p>
-          <div class="signature-line"></div>
-          <p><strong>( Direksi / Head of Operations )</strong></p>
-        </div>
-      </div>
     `;
   }
 
