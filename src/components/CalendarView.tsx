@@ -18,6 +18,7 @@ import {
 } from 'lucide-react';
 
 import { isTaskAssignedToUser } from '../utils/taskAccess';
+import { extractTaskDescription } from '../utils/submissionUtils';
 
 interface CalendarViewProps {
   meetings: Meeting[];
@@ -150,12 +151,14 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
       // Tasks on selected date
       for (const t of m.tasks || []) {
         if (t.dueDate === selectedDate && isTaskAssignedToUser(t, currentUser)) {
+          const cleanDesc = extractTaskDescription(t.description);
           items.push({
             id: `t-${t.id}`,
             title: t.title,
-            subtitle: t.description || (m.title ? `From: ${m.title}` : undefined),
+            subtitle: cleanDesc || (m.title && m.id !== 'general-tasks' ? `Dari: ${m.title}` : undefined),
             time: t.dueTime ? `${t.dueTime}` : '11:00 AM',
             type: 'task',
+            meeting: m,
             task: t,
             status: t.status,
             participants: t.assignees && t.assignees.length > 0
@@ -398,7 +401,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                     {/* Event Card */}
                     <div
                       onClick={() => {
-                        if (item.type === 'meeting' && item.meeting) {
+                        if (item.meeting && item.meeting.id !== 'general-tasks') {
                           onSelectMeeting(item.meeting);
                         }
                       }}

@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Meeting, Task, TaskStatus } from '../types';
 import { Translations } from '../i18n';
 import { filterTasksForUser } from '../utils/taskAccess';
+import { extractTaskDescription } from '../utils/submissionUtils';
 import {
   Plus,
   Bell,
@@ -562,7 +563,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
 
                     {/* Description or Meeting Origin */}
                     <p className="text-xs text-gray-500 dark:text-zinc-400 line-clamp-2 mb-4">
-                      {task.description || task.meetingTitle}
+                      {extractTaskDescription(task.description) || task.meetingTitle}
                     </p>
                   </div>
 

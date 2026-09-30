@@ -2,6 +2,7 @@ import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { Meeting, Task } from '../types';
 import { parseMeetingNotes } from './divisionNotesUtils';
+import { extractTaskDescription } from './submissionUtils';
 
 export interface ReportOptions {
   includeStats?: boolean;
@@ -822,7 +823,7 @@ export function printReportHtml(meetingOrMeetings: Meeting | Meeting[], options:
             ${tasks.map((t, idx) => `
               <tr>
                 <td style="text-align: center;">${idx + 1}</td>
-                <td><strong>${t.title}</strong>${t.description ? `<br/><small style="color: #64748b;">${t.description}</small>` : ''}</td>
+                <td><strong>${t.title}</strong>${extractTaskDescription(t.description) ? `<br/><small style="color: #64748b;">${extractTaskDescription(t.description)}</small>` : ''}</td>
                 <td>${Array.isArray(t.assignees) && t.assignees.length > 0 ? t.assignees.join(', ') : t.assignee}</td>
                 <td style="text-align: center;">${formatShortDate(t.dueDate)}</td>
                 <td style="text-align: center;"><span class="badge badge-${t.status.toLowerCase().replace(/\s+/g, '-')}">${t.status}</span></td>
