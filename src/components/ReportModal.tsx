@@ -257,17 +257,15 @@ export const ReportModal: React.FC<ReportModalProps> = ({
                 <span>Sertakan Ringkasan Statistik & KPI</span>
               </label>
 
-              {reportScope === 'single' && (
-                <label className="flex items-center gap-2 cursor-pointer text-gray-700 dark:text-zinc-300 font-medium">
-                  <input
-                    type="checkbox"
-                    checked={includeNotes}
-                    onChange={(e) => setIncludeNotes(e.target.checked)}
-                    className="rounded text-emerald-600 focus:ring-emerald-500 w-4 h-4"
-                  />
-                  <span>Sertakan Notulensi & Catatan Pembahasan</span>
-                </label>
-              )}
+              <label className="flex items-center gap-2 cursor-pointer text-gray-700 dark:text-zinc-300 font-medium">
+                <input
+                  type="checkbox"
+                  checked={includeNotes}
+                  onChange={(e) => setIncludeNotes(e.target.checked)}
+                  className="rounded text-emerald-600 focus:ring-emerald-500 w-4 h-4"
+                />
+                <span>Sertakan Notulensi & Catatan Pembahasan</span>
+              </label>
 
               <label className="flex items-center gap-2 cursor-pointer text-gray-700 dark:text-zinc-300 font-medium">
                 <input
@@ -336,6 +334,40 @@ export const ReportModal: React.FC<ReportModalProps> = ({
                     <div className="text-base font-extrabold text-amber-600">
                       {totalTasksCount - doneTasksCount}
                     </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Notes preview snippet */}
+              {includeNotes && (
+                <div className="bg-white dark:bg-zinc-800 rounded-xl border border-gray-200/60 dark:border-zinc-700 p-3">
+                  <div className="text-[11px] font-bold text-gray-700 dark:text-zinc-200 mb-1.5 flex items-center justify-between">
+                    <span>
+                      {reportScope === 'single'
+                        ? 'Catatan & Notulensi Pembahasan:'
+                        : `Catatan & Notulensi (${meetings.filter(m => m.meetingNotes?.trim()).length} Rapat Berisi Notulensi):`}
+                    </span>
+                  </div>
+                  <div className="text-[11px] text-gray-600 dark:text-zinc-300 bg-gray-50 dark:bg-zinc-750 p-2.5 rounded-lg whitespace-pre-wrap max-h-24 overflow-y-auto leading-relaxed">
+                    {reportScope === 'single' ? (
+                      currentMeeting?.meetingNotes?.trim() || (
+                        <span className="italic text-gray-400 dark:text-zinc-500">
+                          (Tidak ada catatan notulensi khusus yang dicatat)
+                        </span>
+                      )
+                    ) : (
+                      meetings.filter(m => m.meetingNotes?.trim()).length > 0 ? (
+                        meetings
+                          .filter(m => m.meetingNotes?.trim())
+                          .slice(0, 3)
+                          .map((m, idx) => `• ${m.title || `Rapat ${m.meetingDate}`}: ${m.meetingNotes?.trim().slice(0, 100)}${m.meetingNotes && m.meetingNotes.trim().length > 100 ? '...' : ''}`)
+                          .join('\n')
+                      ) : (
+                        <span className="italic text-gray-400 dark:text-zinc-500">
+                          (Belum ada catatan notulensi khusus pada daftar rapat)
+                        </span>
+                      )
+                    )}
                   </div>
                 </div>
               )}

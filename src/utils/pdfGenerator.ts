@@ -160,64 +160,90 @@ export function exportSingleMeetingPdf(meeting: Meeting, options: ReportOptions 
   }
 
   // ─── Catatan / Notulensi Rapat ───
-  if (includeNotes && meeting.meetingNotes && meeting.meetingNotes.trim()) {
+  if (includeNotes) {
+    if (currentY > pageHeight - 35) {
+      doc.addPage();
+      currentY = 20;
+    }
+
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(10);
     doc.setTextColor(15, 23, 42);
     doc.text('A. NOTULENSI & CATATAN PEMBAHASAN', 14, currentY);
-    currentY += 4;
+    currentY += 5;
 
-    const parsed = parseMeetingNotes(meeting.meetingNotes);
+    const rawNotes = meeting.meetingNotes?.trim();
 
-    if (parsed.isStructured && parsed.divisionNotes.length > 0) {
-      if (parsed.generalNotes) {
+    if (!rawNotes) {
+      doc.setFont('helvetica', 'italic');
+      doc.setFontSize(8);
+      doc.setTextColor(148, 163, 184);
+      doc.text('(Tidak ada catatan notulensi khusus yang dicatat untuk rapat ini)', 14, currentY);
+      currentY += 8;
+    } else {
+      const parsed = parseMeetingNotes(rawNotes);
+
+      if (parsed.isStructured && parsed.divisionNotes.length > 0) {
+        if (parsed.generalNotes) {
+          doc.setFont('helvetica', 'normal');
+          doc.setFontSize(8);
+          doc.setTextColor(51, 65, 85);
+          const splitGen = doc.splitTextToSize(parsed.generalNotes, pageWidth - 28);
+          for (const line of splitGen) {
+            if (currentY > pageHeight - 20) {
+              doc.addPage();
+              currentY = 20;
+            }
+            doc.text(line, 14, currentY);
+            currentY += 3.8;
+          }
+          currentY += 2;
+        }
+
+        parsed.divisionNotes.forEach((dn) => {
+          if (currentY > pageHeight - 25) {
+            doc.addPage();
+            currentY = 20;
+          }
+
+          doc.setFont('helvetica', 'bold');
+          doc.setFontSize(8.5);
+          doc.setTextColor(30, 41, 59);
+          doc.text(`• Catatan Divisi: ${dn.divisionName}`, 16, currentY);
+          currentY += 4;
+
+          doc.setFont('helvetica', 'normal');
+          doc.setFontSize(8);
+          doc.setTextColor(71, 85, 105);
+          const splitDiv = doc.splitTextToSize(dn.notes || '(Tidak ada catatan)', pageWidth - 32);
+          for (const line of splitDiv) {
+            if (currentY > pageHeight - 20) {
+              doc.addPage();
+              currentY = 20;
+            }
+            doc.text(line, 18, currentY);
+            currentY += 3.6;
+          }
+          currentY += 3;
+        });
+      } else {
         doc.setFont('helvetica', 'normal');
         doc.setFontSize(8);
         doc.setTextColor(51, 65, 85);
-        const splitGen = doc.splitTextToSize(parsed.generalNotes, pageWidth - 28);
-        doc.text(splitGen, 14, currentY);
-        currentY += splitGen.length * 3.8 + 2;
-      }
-
-      parsed.divisionNotes.forEach((dn) => {
-        if (currentY > pageHeight - 35) {
-          doc.addPage();
-          currentY = 20;
+        const splitNotes = doc.splitTextToSize(rawNotes, pageWidth - 28);
+        for (const line of splitNotes) {
+          if (currentY > pageHeight - 20) {
+            doc.addPage();
+            currentY = 20;
+          }
+          doc.text(line, 14, currentY);
+          currentY += 3.8;
         }
-
-        doc.setFont('helvetica', 'bold');
-        doc.setFontSize(8.5);
-        doc.setTextColor(30, 41, 59);
-        doc.text(`• Divisi ${dn.divisionName}`, 16, currentY);
-        currentY += 3.5;
-
-        doc.setFont('helvetica', 'normal');
-        doc.setFontSize(8);
-        doc.setTextColor(71, 85, 105);
-        const splitDiv = doc.splitTextToSize(dn.notes || '(Tidak ada catatan)', pageWidth - 32);
-        doc.text(splitDiv, 18, currentY);
-        currentY += splitDiv.length * 3.6 + 3;
-      });
-    } else {
-      doc.setFont('helvetica', 'normal');
-      doc.setFontSize(8);
-      doc.setTextColor(51, 65, 85);
-      const splitNotes = doc.splitTextToSize(meeting.meetingNotes, pageWidth - 28);
-      
-      // Check pagination if notes are long
-      if (currentY + splitNotes.length * 3.8 > pageHeight - 35) {
-        doc.text(splitNotes.slice(0, 15), 14, currentY);
-        doc.addPage();
-        currentY = 20;
-        doc.text(splitNotes.slice(15), 14, currentY);
-        currentY += (splitNotes.length - 15) * 3.8 + 4;
-      } else {
-        doc.text(splitNotes, 14, currentY);
-        currentY += splitNotes.length * 3.8 + 4;
+        currentY += 3;
       }
     }
 
-    currentY += 4;
+    currentY += 3;
   }
 
   // ─── Tabel Tindak Lanjut / Action Items ───
@@ -334,6 +360,7 @@ export function exportSingleMeetingPdf(meeting: Meeting, options: ReportOptions 
 export function exportAllMeetingsPdf(meetings: Meeting[], options: ReportOptions = {}): void {
   const {
     includeStats = true,
+    includeNotes = true,
     includeTasks = true,
     statusFilter = 'all',
   } = options;
@@ -474,7 +501,110 @@ export function exportAllMeetingsPdf(meetings: Meeting[], options: ReportOptions
   // @ts-ignore
   currentY = doc.lastAutoTable.finalY + 10;
 
-  // ─── Tabel 2: Rekapitulasi Action Items ───
+  // ─── Bagian B: Catatan & Notulensi Tiap Rapat ───
+  if (includeNotes) {
+    if (currentY > pageHeight - 35) {
+      doc.addPage();
+      currentY = 20;
+    }
+
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(10);
+    doc.setTextColor(15, 23, 42);
+    doc.text('B. NOTULENSI & CATATAN TIAP RAPAT', 14, currentY);
+    currentY += 6;
+
+    meetings.forEach((m, idx) => {
+      if (currentY > pageHeight - 30) {
+        doc.addPage();
+        currentY = 20;
+      }
+
+      // Meeting Subheader
+      doc.setFillColor(241, 245, 249);
+      doc.roundedRect(14, currentY, pageWidth - 28, 6.5, 1, 1, 'F');
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(8.5);
+      doc.setTextColor(30, 41, 59);
+      const mTitle = `${idx + 1}. ${m.title || `Rapat ${m.meetingDate}`} (${formatShortDate(m.meetingDate)})`;
+      doc.text(mTitle, 16, currentY + 4.5);
+      currentY += 9;
+
+      const rawNotes = m.meetingNotes?.trim();
+      if (!rawNotes) {
+        doc.setFont('helvetica', 'italic');
+        doc.setFontSize(7.5);
+        doc.setTextColor(148, 163, 184);
+        doc.text('(Tidak ada catatan notulensi khusus yang dicatat)', 16, currentY);
+        currentY += 5;
+      } else {
+        const parsed = parseMeetingNotes(rawNotes);
+        if (parsed.isStructured && parsed.divisionNotes.length > 0) {
+          if (parsed.generalNotes) {
+            doc.setFont('helvetica', 'normal');
+            doc.setFontSize(7.5);
+            doc.setTextColor(51, 65, 85);
+            const splitGen = doc.splitTextToSize(parsed.generalNotes, pageWidth - 32);
+            for (const line of splitGen) {
+              if (currentY > pageHeight - 20) {
+                doc.addPage();
+                currentY = 20;
+              }
+              doc.text(line, 16, currentY);
+              currentY += 3.5;
+            }
+            currentY += 1.5;
+          }
+
+          parsed.divisionNotes.forEach((dn) => {
+            if (currentY > pageHeight - 25) {
+              doc.addPage();
+              currentY = 20;
+            }
+
+            doc.setFont('helvetica', 'bold');
+            doc.setFontSize(7.5);
+            doc.setTextColor(30, 41, 59);
+            doc.text(`• Catatan Divisi: ${dn.divisionName}`, 18, currentY);
+            currentY += 3.5;
+
+            doc.setFont('helvetica', 'normal');
+            doc.setFontSize(7.5);
+            doc.setTextColor(71, 85, 105);
+            const splitDiv = doc.splitTextToSize(dn.notes || '(Tidak ada catatan)', pageWidth - 36);
+            for (const line of splitDiv) {
+              if (currentY > pageHeight - 20) {
+                doc.addPage();
+                currentY = 20;
+              }
+              doc.text(line, 20, currentY);
+              currentY += 3.4;
+            }
+            currentY += 2;
+          });
+        } else {
+          doc.setFont('helvetica', 'normal');
+          doc.setFontSize(7.5);
+          doc.setTextColor(51, 65, 85);
+          const splitNotes = doc.splitTextToSize(rawNotes, pageWidth - 32);
+          for (const line of splitNotes) {
+            if (currentY > pageHeight - 20) {
+              doc.addPage();
+              currentY = 20;
+            }
+            doc.text(line, 16, currentY);
+            currentY += 3.5;
+          }
+          currentY += 2;
+        }
+      }
+      currentY += 3;
+    });
+
+    currentY += 4;
+  }
+
+  // ─── Tabel Action Items ───
   if (includeTasks) {
     if (currentY > pageHeight - 45) {
       doc.addPage();
@@ -484,11 +614,12 @@ export function exportAllMeetingsPdf(meetings: Meeting[], options: ReportOptions
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(10);
     doc.setTextColor(15, 23, 42);
+    const taskPrefix = includeNotes ? 'C.' : 'B.';
     const taskTitleLabel = statusFilter === 'all'
-      ? 'B. DAFTAR SELURUH TINDAK LANJUT (ACTION ITEMS)'
+      ? `${taskPrefix} DAFTAR SELURUH TINDAK LANJUT (ACTION ITEMS)`
       : statusFilter === 'done'
-      ? 'B. DAFTAR TINDAK LANJUT (HANYA SELESAI)'
-      : 'B. DAFTAR TINDAK LANJUT (BELUM SELESAI / PENDING)';
+      ? `${taskPrefix} DAFTAR TINDAK LANJUT (HANYA SELESAI)`
+      : `${taskPrefix} DAFTAR TINDAK LANJUT (BELUM SELESAI / PENDING)`;
     doc.text(taskTitleLabel, 14, currentY);
     currentY += 4;
 
@@ -650,10 +781,28 @@ export function printReportHtml(meetingOrMeetings: Meeting | Meeting[], options:
         </div>
       ` : ''}
 
-      ${options.includeNotes !== false && singleMeeting.meetingNotes ? `
-        <div class="section-title">A. NOTULENSI & CATATAN RAPAT</div>
+      ${options.includeNotes !== false ? `
+        <div class="section-title">A. NOTULENSI & CATATAN PEMBAHASAN</div>
         <div class="notes-box">
-          ${singleMeeting.meetingNotes.replace(/\n/g, '<br/>')}
+          ${(() => {
+            const raw = singleMeeting.meetingNotes?.trim();
+            if (!raw) return '<em style="color: #94a3b8;">(Tidak ada catatan notulensi khusus yang dicatat untuk rapat ini)</em>';
+            const parsed = parseMeetingNotes(raw);
+            if (parsed.isStructured && parsed.divisionNotes.length > 0) {
+              return `
+                ${parsed.generalNotes ? `<div style="margin-bottom: 12px;">${parsed.generalNotes.replace(/\n/g, '<br/>')}</div>` : ''}
+                <div style="display: flex; flex-direction: column; gap: 8px;">
+                  ${parsed.divisionNotes.map(dn => `
+                    <div style="padding: 6px 10px; background: #fff; border-left: 3px solid #10b981; border-radius: 4px; box-shadow: 0 1px 2px rgba(0,0,0,0.04);">
+                      <strong style="color: #0f172a;">• Catatan Divisi: ${dn.divisionName}</strong>
+                      <div style="color: #475569; margin-top: 3px;">${dn.notes ? dn.notes.replace(/\n/g, '<br/>') : '<em>(Tidak ada catatan)</em>'}</div>
+                    </div>
+                  `).join('')}
+                </div>
+              `;
+            }
+            return raw.replace(/\n/g, '<br/>');
+          })()}
         </div>
       ` : ''}
 
@@ -750,8 +899,40 @@ export function printReportHtml(meetingOrMeetings: Meeting | Meeting[], options:
         </tbody>
       </table>
 
+      ${options.includeNotes !== false ? `
+        <div class="section-title" style="margin-top: 30px;">B. NOTULENSI & CATATAN TIAP RAPAT</div>
+        <div style="display: flex; flex-direction: column; gap: 12px; margin-bottom: 24px;">
+          ${meetings.map((m, idx) => {
+            const rawNotes = m.meetingNotes?.trim();
+            const parsed = rawNotes ? parseMeetingNotes(rawNotes) : null;
+            return `
+              <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 12px;">
+                <div style="font-weight: 700; font-size: 12px; color: #1e293b; margin-bottom: 6px;">
+                  ${idx + 1}. ${m.title || `Rapat ${m.meetingDate}`} <span style="font-weight: 400; color: #64748b;">(${formatShortDate(m.meetingDate)})</span>
+                </div>
+                ${!rawNotes ? `
+                  <div style="font-style: italic; color: #94a3b8; font-size: 11px;">(Tidak ada catatan notulensi khusus yang dicatat)</div>
+                ` : parsed?.isStructured && parsed.divisionNotes.length > 0 ? `
+                  ${parsed.generalNotes ? `<div style="font-size: 11px; color: #334155; margin-bottom: 8px;">${parsed.generalNotes.replace(/\n/g, '<br/>')}</div>` : ''}
+                  <div style="display: flex; flex-direction: column; gap: 6px;">
+                    ${parsed.divisionNotes.map(dn => `
+                      <div style="padding-left: 8px; border-left: 2px solid #cbd5e1; font-size: 11px;">
+                        <strong style="color: #0f172a;">• Catatan Divisi: ${dn.divisionName}</strong>
+                        <div style="color: #475569; margin-top: 2px;">${dn.notes ? dn.notes.replace(/\n/g, '<br/>') : '<em>(Tidak ada catatan)</em>'}</div>
+                      </div>
+                    `).join('')}
+                  </div>
+                ` : `
+                  <div style="font-size: 11px; color: #334155; white-space: pre-wrap;">${rawNotes}</div>
+                `}
+              </div>
+            `;
+          }).join('')}
+        </div>
+      ` : ''}
+
       ${options.includeTasks !== false ? `
-        <div class="section-title" style="margin-top: 30px;">B. REKAPITULASI SELURUH ACTION ITEMS</div>
+        <div class="section-title" style="margin-top: 30px;">${options.includeNotes !== false ? 'C.' : 'B.'} REKAPITULASI SELURUH ACTION ITEMS</div>
         <table class="report-table">
           <thead>
             <tr>
@@ -1024,6 +1205,16 @@ export function generateTextReportSummary(meetingOrMeetings: Meeting | Meeting[]
       const r = t.length > 0 ? Math.round((d / t.length) * 100) : 0;
       text += `${i + 1}. *${m.title || `Rapat ${m.meetingDate}`}* (${formatShortDate(m.meetingDate)})\n   Progres: ${d}/${t.length} Selesai (${r}%)\n`;
     });
+
+    if (meetings.some((m) => m.meetingNotes && m.meetingNotes.trim())) {
+      text += `\n*📝 CATATAN / NOTULENSI TIAP RAPAT:*\n`;
+      meetings.forEach((m) => {
+        if (m.meetingNotes && m.meetingNotes.trim()) {
+          const previewText = m.meetingNotes.trim().replace(/\n+/g, ' ').slice(0, 180);
+          text += `• *${m.title || `Rapat ${m.meetingDate}`}:* ${previewText}${m.meetingNotes.trim().length > 180 ? '...' : ''}\n`;
+        }
+      });
+    }
 
     text += `\n_Dicetak otomatis dari Sistem Rapat & Manajemen Tugas PT Raja Emas Indonesia_`;
     return text;
