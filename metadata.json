@@ -1,6 +1,0 @@
-{
-  "name": "Meeting Task Management System",
-  "description": "Task management system based on meeting outputs with meeting dates, participants, notes/minutes, and linked action item tasks.",
-  "requestFramePermissions": [],
-  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
-}
