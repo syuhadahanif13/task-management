@@ -1062,6 +1062,8 @@ export const api = {
   async getGitHubProjects(repo?: string, userId?: string): Promise<{
     projects: Array<{ id: string; number: number; title: string; url: string; owner: string; description?: string }>;
     hasToken: boolean;
+    requiresScopeUpgrade?: boolean;
+    connectedUsername?: string;
     defaultRepo: string;
   }> {
     const params = new URLSearchParams();
@@ -1071,6 +1073,36 @@ export const api = {
     if (!res.ok) {
       const err = await res.json().catch(() => ({}));
       throw new Error(err.error || 'Gagal mengambil daftar GitHub Projects');
+    }
+    return res.json();
+  },
+
+  async getGitHubRepos(userId?: string): Promise<{
+    connected: boolean;
+    username?: string;
+    source?: string;
+    repos: import('../types').GitHubConnectedRepo[];
+    error?: string;
+  }> {
+    const params = new URLSearchParams();
+    if (userId) params.set('userId', userId);
+    const res = await apiFetch(`/api/github/repos?${params.toString()}`);
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      return { connected: false, repos: [], error: err.error || 'Gagal memuat repositori GitHub' };
+    }
+    return res.json();
+  },
+
+  async syncGitHubRepos(userId?: string): Promise<{ message: string; addedCount: number; totalCount: number }> {
+    const res = await apiFetch('/api/github/sync-repos', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ userId }),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || 'Gagal menyinkronkan repositori GitHub');
     }
     return res.json();
   },

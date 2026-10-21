@@ -301,6 +301,7 @@ export const AddTaskModal: React.FC<AddTaskModalProps> = ({ isOpen, onClose, onA
             <GitProjectSelector
               value={githubRepo}
               onChange={setGithubRepo}
+              currentUser={currentUser}
               label="Project Git (Khusus Tim IT)"
               helperText="Pilih atau tambahkan repositori GitHub untuk task ini. Hanya diisi jika task terhubung ke project coding/Git."
             />

@@ -243,3 +243,14 @@ export interface EmployeeStats {
 }
 
 export type AppTab = 'dashboard' | 'calendar' | 'meetings' | 'active-meeting' | 'all-tasks' | 'team' | 'settings';
+
+export interface GitHubConnectedRepo {
+  id: number;
+  name: string;
+  fullName: string;
+  url: string;
+  description?: string;
+  private: boolean;
+  owner: string;
+  updatedAt?: string;
+}

@@ -476,7 +476,7 @@ export async function mysqlGetUsers(): Promise<any[]> {
   }
   const p = getMysqlPool();
   if (!p) return cachedUsersResponse || [];
-  const [rows]: any = await p.query('SELECT id, username, password, division_id, role, github_id, github_username, github_avatar_url, created_at, updated_at FROM users ORDER BY username ASC');
+  const [rows]: any = await p.query('SELECT id, username, password, division_id, role, github_id, github_username, github_avatar_url, github_access_token, created_at, updated_at FROM users ORDER BY username ASC');
   const res = rows.map((u: any) => ({
     id: u.id,
     username: u.username,
@@ -486,6 +486,7 @@ export async function mysqlGetUsers(): Promise<any[]> {
     githubId: u.github_id || null,
     githubUsername: u.github_username || null,
     githubAvatarUrl: u.github_avatar_url || null,
+    githubAccessToken: u.github_access_token || null,
     createdAt: u.created_at ? new Date(u.created_at).toISOString() : new Date().toISOString(),
     updatedAt: u.updated_at ? new Date(u.updated_at).toISOString() : new Date().toISOString(),
   }));
@@ -1859,7 +1860,10 @@ async function syncUsersFromDatabase(): Promise<User[]> {
 router.get('/users', async (req, res) => {
   res.setHeader('Cache-Control', 'private, max-age=2, stale-while-revalidate=10');
   await syncUsersFromDatabase();
-  const safeUsers = users.map(({ password, ...u }) => ({ ...u }));
+  const safeUsers = users.map(({ password, githubAccessToken, ...u }) => ({
+    ...u,
+    hasGitHubToken: Boolean(githubAccessToken),
+  }));
   res.json(safeUsers);
 });
 
@@ -2068,7 +2072,7 @@ router.get('/auth/github', (req, res) => {
   const redirectUri = process.env.GITHUB_REDIRECT_URI || `${protocol}://${host}/api/auth/github/callback`;
   const state = req.query.state ? String(req.query.state) : generateId('gh_state');
 
-  const githubAuthUrl = `https://github.com/login/oauth/authorize?client_id=${encodeURIComponent(clientId.trim())}&redirect_uri=${encodeURIComponent(redirectUri)}&scope=read:user,repo&state=${encodeURIComponent(state)}`;
+  const githubAuthUrl = `https://github.com/login/oauth/authorize?client_id=${encodeURIComponent(clientId.trim())}&redirect_uri=${encodeURIComponent(redirectUri)}&scope=read:user,repo,read:project,project&state=${encodeURIComponent(state)}`;
   res.redirect(githubAuthUrl);
 });
 
@@ -2304,6 +2308,81 @@ router.post('/auth/github/unlink', async (req, res) => {
   res.json({ message: 'Akun GitHub berhasil diputuskan', user: safeUser });
 });
 
+// Helper: Resolve GitHub Token across user, team, and server environment
+export async function resolveGitHubToken(userId?: string): Promise<{
+  token: string;
+  username: string;
+  source: 'user' | 'team' | 'server' | 'none';
+}> {
+  // 1. If userId provided, check memory users
+  if (userId) {
+    const memoryUser = users.find(u => u.id === userId);
+    if (memoryUser?.githubAccessToken) {
+      return {
+        token: memoryUser.githubAccessToken,
+        username: memoryUser.githubUsername || memoryUser.username,
+        source: 'user',
+      };
+    }
+  }
+
+  // 2. Query MySQL for specific user or any team user with token
+  const p = getMysqlPool();
+  if (p) {
+    try {
+      if (userId) {
+        const [rows]: any = await p.query(
+          'SELECT id, username, github_access_token, github_username FROM users WHERE id = ? AND github_access_token IS NOT NULL LIMIT 1',
+          [userId]
+        );
+        if (rows && rows.length > 0 && rows[0].github_access_token) {
+          return {
+            token: rows[0].github_access_token,
+            username: rows[0].github_username || rows[0].username,
+            source: 'user',
+          };
+        }
+      }
+
+      // Check if any team user has connected GitHub
+      const [teamRows]: any = await p.query(
+        'SELECT id, username, github_access_token, github_username FROM users WHERE github_access_token IS NOT NULL ORDER BY updated_at DESC LIMIT 1'
+      );
+      if (teamRows && teamRows.length > 0 && teamRows[0].github_access_token) {
+        return {
+          token: teamRows[0].github_access_token,
+          username: teamRows[0].github_username || teamRows[0].username,
+          source: 'team',
+        };
+      }
+    } catch (err: any) {
+      console.warn('Gagal membaca token GitHub dari MySQL:', err.message);
+    }
+  }
+
+  // 3. Fallback to any memory user with token
+  const anyUser = users.find(u => Boolean(u.githubAccessToken));
+  if (anyUser && anyUser.githubAccessToken) {
+    return {
+      token: anyUser.githubAccessToken,
+      username: anyUser.githubUsername || anyUser.username,
+      source: 'team',
+    };
+  }
+
+  // 4. Server environment token from .env
+  const serverToken = process.env.GITHUB_TOKEN || '';
+  if (serverToken.trim()) {
+    return {
+      token: serverToken.trim(),
+      username: 'server',
+      source: 'server',
+    };
+  }
+
+  return { token: '', username: '', source: 'none' };
+}
+
 // 6. Jira-style GitHub Development Info for a Task
 router.get('/github/task-dev', async (req, res) => {
   const { taskId, repo: requestedRepo, userId } = req.query;
@@ -2343,14 +2422,9 @@ router.get('/github/task-dev', async (req, res) => {
     ? requestedRepo.trim()
     : (targetTask.githubRepo || '');
 
-  // Resolve GitHub Token: check user token or server token
-  let token = process.env.GITHUB_TOKEN || '';
-  if (userId) {
-    const u = users.find(usr => usr.id === userId);
-    if (u?.githubAccessToken) {
-      token = u.githubAccessToken;
-    }
-  }
+  // Resolve GitHub Token: check user token, team member token, or server token
+  const tokenInfo = await resolveGitHubToken(typeof userId === 'string' ? userId : undefined);
+  const token = tokenInfo.token;
 
   // Clean Task Key & slug (like Jira's PROJ-123)
   const taskNumberMatch = taskId.match(/task-(\d+)/i) || taskId.match(/(\d+)/);
@@ -2369,6 +2443,8 @@ router.get('/github/task-dev', async (req, res) => {
       repo: '',
       hasRepo: false,
       hasToken: Boolean(token),
+      connectedUsername: tokenInfo.username || null,
+      tokenSource: tokenInfo.source,
       recommendedBranchName,
       recommendedGitCommand,
       recommendedCommitMsg,
@@ -2559,6 +2635,8 @@ router.get('/github/task-dev', async (req, res) => {
     taskTitle: targetTask.title,
     repo,
     hasToken: Boolean(token),
+    connectedUsername: tokenInfo.username || null,
+    tokenSource: tokenInfo.source,
     recommendedBranchName,
     recommendedGitCommand,
     recommendedCommitMsg,
@@ -2634,11 +2712,8 @@ router.post('/github/link', async (req, res) => {
       };
 
       // Try fetching richer PR details from GitHub API if token is available
-      let token = process.env.GITHUB_TOKEN || '';
-      if (userId) {
-        const u = users.find(usr => usr.id === userId);
-        if (u?.githubAccessToken) token = u.githubAccessToken;
-      }
+      const tokenInfo = await resolveGitHubToken(typeof userId === 'string' ? userId : undefined);
+      const token = tokenInfo.token;
 
       if (token) {
         try {
@@ -2710,11 +2785,8 @@ router.post('/github/link', async (req, res) => {
           updatedAt: new Date().toISOString(),
         };
 
-        let token = process.env.GITHUB_TOKEN || '';
-        if (userId) {
-          const u = users.find(usr => usr.id === userId);
-          if (u?.githubAccessToken) token = u.githubAccessToken;
-        }
+        const tokenInfo = await resolveGitHubToken(typeof userId === 'string' ? userId : undefined);
+        const token = tokenInfo.token;
 
         if (token) {
           try {
@@ -2854,11 +2926,8 @@ router.delete('/github/unlink-item', async (req, res) => {
 // 8b. Get List of GitHub Projects (Projects v2)
 router.get('/github/projects', async (req, res) => {
   const { repo: requestedRepo, userId } = req.query;
-  let token = process.env.GITHUB_TOKEN || '';
-  if (userId) {
-    const u = users.find(usr => usr.id === String(userId));
-    if (u?.githubAccessToken) token = u.githubAccessToken;
-  }
+  const tokenInfo = await resolveGitHubToken(typeof userId === 'string' ? userId : undefined);
+  let token = tokenInfo.token;
 
   const defaultRepo = (typeof requestedRepo === 'string' && requestedRepo.trim())
     ? requestedRepo.trim()
@@ -2916,7 +2985,7 @@ router.get('/github/projects', async (req, res) => {
       variables: { owner: owner || 'syuhadahanif13', repoName: repoName || 'task-management' },
     };
 
-    const gqlRes = await fetch('https://api.github.com/graphql', {
+    let gqlRes = await fetch('https://api.github.com/graphql', {
       method: 'POST',
       headers: {
         Authorization: `bearer ${token}`,
@@ -2926,33 +2995,59 @@ router.get('/github/projects', async (req, res) => {
       body: JSON.stringify(graphqlQuery),
     });
 
+    let gqlData: any = await gqlRes.json().catch(() => ({}));
+    let requiresScopeUpgrade = false;
+
+    // If insufficient scopes (e.g. read:project missing) and server token exists, try server token fallback
+    if (gqlData.errors && Array.isArray(gqlData.errors) && gqlData.errors.some((e: any) => e.type === 'INSUFFICIENT_SCOPES')) {
+      const serverToken = process.env.GITHUB_TOKEN;
+      if (serverToken && serverToken !== token) {
+        const retryRes = await fetch('https://api.github.com/graphql', {
+          method: 'POST',
+          headers: {
+            Authorization: `bearer ${serverToken}`,
+            'User-Agent': 'TaskManagementSystem-App',
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(graphqlQuery),
+        });
+        const retryData = await retryRes.json().catch(() => ({}));
+        if (retryData.data) {
+          gqlData = retryData;
+        } else {
+          requiresScopeUpgrade = true;
+        }
+      } else {
+        requiresScopeUpgrade = true;
+      }
+    }
+
     const projectList: Array<{ id: string; number: number; title: string; url: string; owner: string; description?: string }> = [];
     const seenUrls = new Set<string>();
 
-    if (gqlRes.ok) {
-      const gqlData: any = await gqlRes.json();
-      const viewerProjects = gqlData.data?.viewer?.projectsV2?.nodes || [];
-      const userProjects = gqlData.data?.user?.projectsV2?.nodes || [];
-      const repoProjects = gqlData.data?.repository?.projectsV2?.nodes || [];
+    const viewerProjects = gqlData.data?.viewer?.projectsV2?.nodes || [];
+    const userProjects = gqlData.data?.user?.projectsV2?.nodes || [];
+    const repoProjects = gqlData.data?.repository?.projectsV2?.nodes || [];
 
-      for (const p of [...viewerProjects, ...userProjects, ...repoProjects]) {
-        if (p && !p.closed && !seenUrls.has(p.url)) {
-          seenUrls.add(p.url);
-          projectList.push({
-            id: p.id,
-            number: p.number,
-            title: p.title,
-            url: p.url,
-            owner: p.url.includes('/users/') ? p.url.split('/users/')[1].split('/')[0] : (owner || 'GitHub'),
-            description: p.shortDescription || undefined,
-          });
-        }
+    for (const p of [...viewerProjects, ...userProjects, ...repoProjects]) {
+      if (p && !p.closed && !seenUrls.has(p.url)) {
+        seenUrls.add(p.url);
+        projectList.push({
+          id: p.id,
+          number: p.number,
+          title: p.title,
+          url: p.url,
+          owner: p.url.includes('/users/') ? p.url.split('/users/')[1].split('/')[0] : (owner || 'GitHub'),
+          description: p.shortDescription || undefined,
+        });
       }
     }
 
     res.json({
       projects: projectList,
       hasToken: true,
+      requiresScopeUpgrade,
+      connectedUsername: tokenInfo.username,
       defaultRepo,
     });
   } catch (err: any) {
@@ -2961,7 +3056,120 @@ router.get('/github/projects', async (req, res) => {
   }
 });
 
-// 8c. Create GitHub Issue from Task and optionally add to GitHub Project
+// 8c. Get List of Repositories from Connected GitHub Account
+router.get('/github/repos', async (req, res) => {
+  const { userId } = req.query;
+  const tokenInfo = await resolveGitHubToken(typeof userId === 'string' ? userId : undefined);
+
+  if (!tokenInfo.token) {
+    return res.json({
+      connected: false,
+      username: null,
+      repos: [],
+      message: 'Belum ada akun GitHub yang terhubung.',
+    });
+  }
+
+  try {
+    const ghRes = await fetch('https://api.github.com/user/repos?sort=updated&per_page=100&affiliation=owner,collaborator,organization_member', {
+      headers: {
+        Authorization: `Bearer ${tokenInfo.token}`,
+        'User-Agent': 'TaskManagementSystem-App',
+        Accept: 'application/vnd.github.v3+json',
+      },
+    });
+
+    if (!ghRes.ok) {
+      const errText = await ghRes.text();
+      console.warn('GitHub repos API error:', errText);
+      return res.status(ghRes.status).json({
+        connected: false,
+        error: 'Gagal memuat repositori GitHub: ' + ghRes.statusText,
+      });
+    }
+
+    const reposData: any = await ghRes.json();
+    const repos = Array.isArray(reposData)
+      ? reposData.map((r: any) => ({
+          id: r.id,
+          name: r.name,
+          fullName: r.full_name,
+          url: r.html_url,
+          description: r.description || '',
+          private: Boolean(r.private),
+          owner: r.owner?.login || '',
+          updatedAt: r.updated_at,
+        }))
+      : [];
+
+    res.json({
+      connected: true,
+      username: tokenInfo.username,
+      source: tokenInfo.source,
+      repos,
+    });
+  } catch (err: any) {
+    console.error('Error fetching github repos:', err);
+    res.status(500).json({ connected: false, error: err.message || 'Gagal memuat repositori' });
+  }
+});
+
+// 8d. Sync / Import Connected GitHub Repositories into Database
+router.post('/github/sync-repos', async (req, res) => {
+  const { userId } = req.body;
+  const tokenInfo = await resolveGitHubToken(userId);
+
+  if (!tokenInfo.token) {
+    return res.status(400).json({ error: 'Tidak ada akun GitHub yang terhubung untuk disinkronkan' });
+  }
+
+  try {
+    const ghRes = await fetch('https://api.github.com/user/repos?sort=updated&per_page=100&affiliation=owner,collaborator', {
+      headers: {
+        Authorization: `Bearer ${tokenInfo.token}`,
+        'User-Agent': 'TaskManagementSystem-App',
+        Accept: 'application/vnd.github.v3+json',
+      },
+    });
+
+    if (!ghRes.ok) {
+      return res.status(ghRes.status).json({ error: 'Gagal mengambil data repositori dari GitHub' });
+    }
+
+    const reposData: any = await ghRes.json();
+    if (!Array.isArray(reposData)) {
+      return res.json({ message: 'Tidak ada repositori ditemukan', count: 0 });
+    }
+
+    const existingProjects = await mysqlGetGitProjects();
+    const existingRepos = new Set(existingProjects.map((p) => p.repo.toLowerCase()));
+
+    let addedCount = 0;
+    for (const r of reposData) {
+      if (!existingRepos.has(r.full_name.toLowerCase())) {
+        await mysqlCreateGitProject({
+          id: `gp-gh-${r.id}`,
+          name: r.name,
+          repo: r.full_name,
+          url: r.html_url,
+          description: r.description || `Repositori GitHub ${r.full_name}`,
+        });
+        existingRepos.add(r.full_name.toLowerCase());
+        addedCount++;
+      }
+    }
+
+    res.json({
+      message: `Berhasil menyinkronkan repositori GitHub`,
+      addedCount,
+      totalCount: existingRepos.size,
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || 'Gagal menyinkronkan repositori' });
+  }
+});
+
+// 8e. Create GitHub Issue from Task and optionally add to GitHub Project
 router.post('/github/task-issue/create', async (req, res) => {
   const { taskId, repo: requestedRepo, projectId, projectTitle, projectUrl, userId } = req.body;
   if (!taskId) return res.status(400).json({ error: 'taskId is required' });
@@ -2991,11 +3199,8 @@ router.post('/github/task-issue/create', async (req, res) => {
 
   if (!targetTask) return res.status(404).json({ error: 'Task tidak ditemukan' });
 
-  let token = process.env.GITHUB_TOKEN || '';
-  if (userId) {
-    const u = users.find(usr => usr.id === userId);
-    if (u?.githubAccessToken) token = u.githubAccessToken;
-  }
+  const tokenInfo = await resolveGitHubToken(typeof userId === 'string' ? userId : undefined);
+  const token = tokenInfo.token;
 
   if (!token) {
     return res.status(400).json({ error: 'GitHub Token belum dikonfigurasi di server atau akun Anda.' });
@@ -3177,11 +3382,8 @@ router.post('/github/task-issue/update-status', async (req, res) => {
   const repo = metadata.repo || targetTask.githubRepo || process.env.GITHUB_DEFAULT_REPO || 'syuhadahanif13/task-management';
   const [owner, repoName] = repo.split('/');
 
-  let token = process.env.GITHUB_TOKEN || '';
-  if (userId) {
-    const u = users.find(usr => usr.id === userId);
-    if (u?.githubAccessToken) token = u.githubAccessToken;
-  }
+  const tokenInfo = await resolveGitHubToken(typeof userId === 'string' ? userId : undefined);
+  const token = tokenInfo.token;
 
   if (!token) {
     return res.status(400).json({ error: 'GitHub Token belum tersedia' });

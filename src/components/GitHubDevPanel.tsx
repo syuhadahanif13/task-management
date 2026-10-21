@@ -54,6 +54,8 @@ export const GitHubDevPanel: React.FC<GitHubDevPanelProps> = ({
     taskKey: string;
     repo: string;
     hasToken: boolean;
+    connectedUsername?: string | null;
+    tokenSource?: string;
     recommendedBranchName: string;
     recommendedGitCommand: string;
     recommendedCommitMsg: string;
@@ -495,15 +497,23 @@ export const GitHubDevPanel: React.FC<GitHubDevPanelProps> = ({
 
             <div className="flex items-center gap-2">
               {devData?.hasToken ? (
-                <span className="inline-flex items-center gap-1 text-[11px] font-medium text-emerald-600 dark:text-emerald-400">
+                <span className="inline-flex items-center gap-1.5 text-[11px] font-medium text-emerald-600 dark:text-emerald-400">
                   <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
-                  GitHub API Terkoneksi
+                  <span>GitHub Terhubung {devData.connectedUsername ? `(@${devData.connectedUsername})` : ''}</span>
                 </span>
               ) : (
-                <span className="inline-flex items-center gap-1 text-[11px] font-medium text-amber-600 dark:text-amber-400">
-                  <Lock className="w-3 h-3" />
-                  Mode Token Terbatas
-                </span>
+                <div className="flex items-center gap-1.5">
+                  <span className="inline-flex items-center gap-1 text-[11px] font-medium text-amber-600 dark:text-amber-400">
+                    <Lock className="w-3 h-3" />
+                    Belum Terkoneksi
+                  </span>
+                  <a
+                    href="/api/auth/github"
+                    className="text-[10px] px-2 py-0.5 rounded bg-indigo-50 text-indigo-700 dark:bg-indigo-950/60 dark:text-indigo-300 font-bold hover:underline"
+                  >
+                    Hubungkan
+                  </a>
+                </div>
               )}
             </div>
           </div>
@@ -519,7 +529,7 @@ export const GitHubDevPanel: React.FC<GitHubDevPanelProps> = ({
                   </h4>
                   <p className="text-[11px] text-zinc-500 dark:text-zinc-400">
                     {!repoName
-                      ? 'Task ini belum terhubung ke project GitHub manapun. Pilih project atau daftarkan repositori baru untuk tim IT.'
+                      ? 'Pilih repositori dari akun GitHub terhubung atau daftarkan repositori baru untuk tim IT.'
                       : 'Pilih repositori lain atau daftarkan project baru.'}
                   </p>
                 </div>
@@ -527,7 +537,7 @@ export const GitHubDevPanel: React.FC<GitHubDevPanelProps> = ({
                   <button
                     type="button"
                     onClick={() => setIsEditingRepo(false)}
-                    className="text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 p-1"
+                    className="text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 p-1 cursor-pointer"
                   >
                     <X className="w-4 h-4" />
                   </button>
@@ -536,6 +546,7 @@ export const GitHubDevPanel: React.FC<GitHubDevPanelProps> = ({
 
               <GitProjectSelector
                 value={currentRepo}
+                currentUser={currentUser}
                 onChange={(selectedRepo) => {
                   handleSaveRepo(selectedRepo);
                 }}
