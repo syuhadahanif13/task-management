@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Task, GitHubTaskMetadata, GitHubIssue, GitHubProjectRef } from '../types';
 import { api } from '../api/client';
+import { GitProjectSelector } from './GitProjectSelector';
 import {
   X,
   GitBranch,
@@ -45,6 +46,8 @@ export const GitHubDevPanel: React.FC<GitHubDevPanelProps> = ({
   const [errorMsg, setErrorMsg] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
+  const [currentRepo, setCurrentRepo] = useState(task?.githubRepo || '');
+  const [isEditingRepo, setIsEditingRepo] = useState(false);
 
   // Dev Data from API
   const [devData, setDevData] = useState<{
@@ -90,18 +93,19 @@ export const GitHubDevPanel: React.FC<GitHubDevPanelProps> = ({
   const [isLinking, setIsLinking] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
 
-  const loadDevInfo = async (silent = false) => {
+  const loadDevInfo = async (silent = false, overrideRepo?: string) => {
     if (!task) return;
     if (!silent) setIsLoading(true);
     else setIsSyncing(true);
     setErrorMsg('');
 
     try {
-      const data = await api.getTaskGitHubDev(task.id, task.githubRepo, currentUser?.id);
+      const repoToUse = overrideRepo !== undefined ? overrideRepo : (currentRepo || task.githubRepo);
+      const data = await api.getTaskGitHubDev(task.id, repoToUse, currentUser?.id);
       setDevData(data);
 
       // Fetch projects list in parallel if token is available
-      if (data.hasToken) {
+      if (data.hasToken && data.repo) {
         api.getGitHubProjects(data.repo, currentUser?.id)
           .then((pRes) => {
             if (pRes.projects && pRes.projects.length > 0) {
@@ -120,7 +124,10 @@ export const GitHubDevPanel: React.FC<GitHubDevPanelProps> = ({
 
   useEffect(() => {
     if (isOpen && task) {
-      loadDevInfo();
+      const repo = task.githubRepo || '';
+      setCurrentRepo(repo);
+      setIsEditingRepo(false);
+      loadDevInfo(false, repo);
       setLinkInputUrl('');
       setLinkInputBranch('');
       setManualIssueInput('');
@@ -128,7 +135,7 @@ export const GitHubDevPanel: React.FC<GitHubDevPanelProps> = ({
       setSelectedProjectId('');
       setSuccessMsg('');
     }
-  }, [isOpen, task?.id]);
+  }, [isOpen, task?.id, task?.githubRepo]);
 
   if (!isOpen || !task) return null;
 
@@ -138,9 +145,36 @@ export const GitHubDevPanel: React.FC<GitHubDevPanelProps> = ({
     setTimeout(() => setCopiedKey(null), 2000);
   };
 
+  // 0. Save or Change Git Project
+  const handleSaveRepo = async (newRepo: string) => {
+    if (!task) return;
+    setIsLoading(true);
+    setErrorMsg('');
+    setSuccessMsg('');
+
+    try {
+      const updatedTask = await api.updateTask(task.id, { githubRepo: newRepo });
+      setCurrentRepo(newRepo);
+      setIsEditingRepo(false);
+      if (onTaskUpdated) {
+        onTaskUpdated(updatedTask);
+      }
+      setSuccessMsg(newRepo ? `Project Git berhasil diatur ke ${newRepo}` : 'Tautan Project Git dilepas');
+      await loadDevInfo(true, newRepo);
+    } catch (err: any) {
+      setErrorMsg(err.message || 'Gagal mengubah Project Git task');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   // 1. Create GitHub Issue
   const handleCreateIssue = async () => {
     if (!task) return;
+    if (!repoName) {
+      setErrorMsg('Pilih atau tambahkan Project Git terlebih dahulu sebelum membuat issue.');
+      return;
+    }
     setIsCreatingIssue(true);
     setErrorMsg('');
     setSuccessMsg('');
@@ -149,7 +183,7 @@ export const GitHubDevPanel: React.FC<GitHubDevPanelProps> = ({
       const chosenProject = availableProjects.find((p) => p.id === selectedProjectId);
       const res = await api.createGitHubIssue({
         taskId: task.id,
-        repo: devData?.repo,
+        repo: repoName || devData?.repo,
         projectId: selectedProjectId || (devData?.project?.id ? String(devData.project.id) : undefined),
         projectTitle: chosenProject?.title || devData?.project?.title,
         projectUrl: chosenProject?.url || devData?.project?.url,
@@ -306,7 +340,7 @@ export const GitHubDevPanel: React.FC<GitHubDevPanelProps> = ({
   };
 
   const taskKey = devData?.taskKey || `REI-${task.id.slice(-4)}`;
-  const repoName = devData?.repo || task.githubRepo || 'syuhadahanif13/task-management';
+  const repoName = devData?.repo || currentRepo || task.githubRepo || '';
   const issueData = devData?.issue || task.githubMetadata?.issue;
   const projectData = devData?.project || task.githubMetadata?.project;
 
@@ -420,16 +454,43 @@ export const GitHubDevPanel: React.FC<GitHubDevPanelProps> = ({
           {/* Repo Info Header */}
           <div className="flex flex-wrap items-center justify-between gap-2 p-3 bg-zinc-50 dark:bg-zinc-800/40 rounded-xl border border-zinc-200/80 dark:border-zinc-800 text-xs">
             <div className="flex items-center gap-2">
-              <span className="text-zinc-400">Repository:</span>
-              <a
-                href={`https://github.com/${repoName}`}
-                target="_blank"
-                rel="noreferrer"
-                className="font-mono font-semibold text-indigo-600 dark:text-indigo-400 hover:underline flex items-center gap-1"
-              >
-                {repoName}
-                <ExternalLink className="w-3 h-3" />
-              </a>
+              <span className="text-zinc-400">Project Git:</span>
+              {repoName ? (
+                <div className="flex items-center gap-1.5">
+                  <a
+                    href={`https://github.com/${repoName}`}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="font-mono font-semibold text-indigo-600 dark:text-indigo-400 hover:underline flex items-center gap-1"
+                  >
+                    {repoName}
+                    <ExternalLink className="w-3 h-3" />
+                  </a>
+                  <button
+                    type="button"
+                    onClick={() => setIsEditingRepo(!isEditingRepo)}
+                    className="text-[11px] font-semibold text-zinc-500 hover:text-indigo-600 dark:hover:text-indigo-400 underline ml-1 cursor-pointer"
+                  >
+                    {isEditingRepo ? 'Batal' : 'Ganti Project'}
+                  </button>
+                </div>
+              ) : (
+                <div className="flex items-center gap-2">
+                  <span className="text-amber-600 dark:text-amber-400 font-semibold italic flex items-center gap-1">
+                    <AlertCircle className="w-3.5 h-3.5" />
+                    Belum Terhubung
+                  </span>
+                  {!isEditingRepo && (
+                    <button
+                      type="button"
+                      onClick={() => setIsEditingRepo(true)}
+                      className="text-[11px] font-bold text-indigo-600 dark:text-indigo-400 hover:underline cursor-pointer"
+                    >
+                      + Pilih / Tambah Project
+                    </button>
+                  )}
+                </div>
+              )}
             </div>
 
             <div className="flex items-center gap-2">
@@ -446,6 +507,43 @@ export const GitHubDevPanel: React.FC<GitHubDevPanelProps> = ({
               )}
             </div>
           </div>
+
+          {/* Project Git Selector Box (Shown if not linked or user clicks Ganti Project) */}
+          {(isEditingRepo || !repoName) && (
+            <div className="p-4 rounded-xl bg-indigo-50/60 dark:bg-indigo-950/20 border border-indigo-200 dark:border-indigo-800/60 space-y-3 animate-in fade-in duration-150">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h4 className="text-xs font-bold text-zinc-900 dark:text-zinc-100 flex items-center gap-1.5">
+                    <FolderGit2 className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
+                    <span>{!repoName ? 'Hubungkan Task ke Project Git' : 'Ganti Project Git'}</span>
+                  </h4>
+                  <p className="text-[11px] text-zinc-500 dark:text-zinc-400">
+                    {!repoName
+                      ? 'Task ini belum terhubung ke project GitHub manapun. Pilih project atau daftarkan repositori baru untuk tim IT.'
+                      : 'Pilih repositori lain atau daftarkan project baru.'}
+                  </p>
+                </div>
+                {repoName && (
+                  <button
+                    type="button"
+                    onClick={() => setIsEditingRepo(false)}
+                    className="text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 p-1"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                )}
+              </div>
+
+              <GitProjectSelector
+                value={currentRepo}
+                onChange={(selectedRepo) => {
+                  handleSaveRepo(selectedRepo);
+                }}
+                label="Pilih / Tambah Project Git"
+                helperText="Memilih repositori akan otomatis menautkan task ini ke project GitHub yang dipilih."
+              />
+            </div>
+          )}
 
           {/* ═══════════════════════════════════════════════════════════════ */}
           {/* TAB 1: GITHUB PROJECT & ISSUE                                    */}
@@ -664,15 +762,23 @@ export const GitHubDevPanel: React.FC<GitHubDevPanelProps> = ({
                         <span>Buat Issue Otomatis di GitHub</span>
                       </div>
                       <p className="text-xs text-zinc-600 dark:text-zinc-400">
-                        Otomatis membuat Issue di repository <code className="font-mono font-bold text-indigo-600 dark:text-indigo-400">{repoName}</code> lengkap dengan detail deskripsi, PIC, due date, dan langsung menautkannya ke task ini.
-                        {projectData ? ' Issue juga akan otomatis dimasukkan ke dalam Project Board yang terhubung.' : ''}
+                        {repoName ? (
+                          <>
+                            Otomatis membuat Issue di repository <code className="font-mono font-bold text-indigo-600 dark:text-indigo-400">{repoName}</code> lengkap dengan detail deskripsi, PIC, due date, dan langsung menautkannya ke task ini.
+                            {projectData ? ' Issue juga akan otomatis dimasukkan ke dalam Project Board yang terhubung.' : ''}
+                          </>
+                        ) : (
+                          <span className="text-amber-600 dark:text-amber-400 font-medium">
+                            Task ini belum terhubung ke Project Git. Pilih atau tambahkan Project Git di bagian atas terlebih dahulu untuk membuat issue di GitHub.
+                          </span>
+                        )}
                       </p>
 
                       <button
                         type="button"
                         onClick={handleCreateIssue}
-                        disabled={isCreatingIssue}
-                        className="notion-btn notion-btn-primary text-xs w-full justify-center py-2.5 shadow-sm"
+                        disabled={isCreatingIssue || !repoName}
+                        className="notion-btn notion-btn-primary text-xs w-full justify-center py-2.5 shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
                       >
                         {isCreatingIssue ? (
                           <RefreshCw className="w-3.5 h-3.5 animate-spin" />

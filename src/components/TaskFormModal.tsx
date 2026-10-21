@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Task, TaskStatus, User as UserType, Division } from '../types';
 import { X, CheckSquare, Calendar } from 'lucide-react';
 import { MultiAssigneeSelector } from './MultiAssigneeSelector';
+import { GitProjectSelector } from './GitProjectSelector';
 import { api } from '../api/client';
 import { extractTaskDescription, extractTaskSubmissionFromDescription, embedTaskSubmissionIntoDescription } from '../utils/submissionUtils';
 
@@ -24,6 +25,7 @@ export const TaskFormModal: React.FC<TaskFormModalProps> = ({
   const [description, setDescription] = useState('');
   const [priority, setPriority] = useState<string>('Medium');
   const [assignees, setAssignees] = useState<string[]>([]);
+  const [githubRepo, setGithubRepo] = useState('');
   const [dueDate, setDueDate] = useState('');
   const [status, setStatus] = useState<TaskStatus>('To Do');
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -51,6 +53,7 @@ export const TaskFormModal: React.FC<TaskFormModalProps> = ({
         ? task.assignees
         : (task.assignee ? task.assignee.split(',').map((s) => s.trim()).filter(Boolean) : []);
       setAssignees(initial);
+      setGithubRepo(task.githubRepo || '');
       setDueDate(task.dueDate);
       setStatus(task.status);
     }
@@ -81,6 +84,7 @@ export const TaskFormModal: React.FC<TaskFormModalProps> = ({
         assignees,
         dueDate: dueDate.trim(),
         status,
+        githubRepo: githubRepo.trim() || undefined,
       });
       onClose();
     } catch (err: any) {
@@ -207,6 +211,16 @@ export const TaskFormModal: React.FC<TaskFormModalProps> = ({
                 <option value="Done">Done</option>
               </select>
             </div>
+          </div>
+
+          {/* Project Git (Khusus Tim IT) */}
+          <div className="bg-zinc-50 dark:bg-zinc-800/40 p-3.5 rounded-xl border border-zinc-200 dark:border-zinc-800">
+            <GitProjectSelector
+              value={githubRepo}
+              onChange={setGithubRepo}
+              label="Project Git (Khusus Tim IT)"
+              helperText="Pilih atau tambahkan repositori GitHub untuk task ini. Hanya diisi jika task terhubung ke project coding/Git."
+            />
           </div>
 
           {/* Action Buttons */}

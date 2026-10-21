@@ -423,6 +423,43 @@ export async function mysqlDeleteDivision(id: string): Promise<void> {
   await p.execute('DELETE FROM divisions WHERE id = ?', [id]);
 }
 
+export async function mysqlGetGitProjects(): Promise<any[]> {
+  const p = getMysqlPool();
+  if (!p) return [];
+  try {
+    const [rows]: any = await p.execute('SELECT id, name, repo, url, description, created_at FROM git_projects ORDER BY created_at DESC');
+    return rows.map((r: any) => ({
+      id: r.id,
+      name: r.name,
+      repo: r.repo,
+      url: r.url,
+      description: r.description,
+      createdAt: r.created_at ? new Date(r.created_at).toISOString() : new Date().toISOString(),
+    }));
+  } catch (err: any) {
+    console.warn('mysqlGetGitProjects error:', err.message);
+    return [];
+  }
+}
+
+export async function mysqlCreateGitProject(proj: { id: string; name: string; repo: string; url?: string; description?: string }): Promise<any> {
+  const p = getMysqlPool();
+  if (!p) return proj;
+  await p.execute(
+    `INSERT INTO git_projects (id, name, repo, url, description, created_at)
+     VALUES (?, ?, ?, ?, ?, NOW())
+     ON DUPLICATE KEY UPDATE name = VALUES(name), url = VALUES(url), description = VALUES(description)`,
+    [proj.id, proj.name, proj.repo, proj.url || null, proj.description || null]
+  );
+  return proj;
+}
+
+export async function mysqlDeleteGitProject(id: string): Promise<void> {
+  const p = getMysqlPool();
+  if (!p) return;
+  await p.execute('DELETE FROM git_projects WHERE id = ?', [id]);
+}
+
 let cachedUsersResponse: any[] | null = null;
 let lastUsersCacheTime = 0;
 const USERS_CACHE_TTL_MS = 10000;
@@ -683,6 +720,10 @@ let meetings: Meeting[] = [];
 let submissions: TaskSubmission[] = [];
 let divisions: Division[] = [];
 let users: User[] = [];
+let inMemoryGitProjects: any[] = [
+  { id: 'gp-task-mgmt', name: 'Task Management System', repo: 'syuhadahanif13/task-management', url: 'https://github.com/syuhadahanif13/task-management' },
+  { id: 'gp-raja-kerupuk', name: 'Raja Kerupuk', repo: 'muhalhanifiyyah-max/raja-kerupuk', url: 'https://github.com/muhalhanifiyyah-max/raja-kerupuk' }
+];
 
 function generateId(prefix: string) {
   return `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).substring(2, 6)}`;
@@ -1050,6 +1091,8 @@ router.post('/tasks', async (req, res) => {
     priority: (['Low', 'Medium', 'High'].includes(req.body.priority) ? req.body.priority : 'Medium') as any,
     description: req.body.description ? String(req.body.description).trim() : undefined,
     tags: Array.isArray(req.body.tags) ? req.body.tags : [],
+    githubRepo: req.body.githubRepo ? String(req.body.githubRepo).trim() : undefined,
+    githubProjectUrl: req.body.githubProjectUrl ? String(req.body.githubProjectUrl).trim() : undefined,
     createdAt: now,
     updatedAt: now,
   };
@@ -1100,6 +1143,8 @@ router.post('/meetings/:meetingId/tasks', async (req, res) => {
     priority: (['Low', 'Medium', 'High'].includes(req.body.priority) ? req.body.priority : 'Medium') as any,
     description: req.body.description ? String(req.body.description).trim() : undefined,
     tags: Array.isArray(req.body.tags) ? req.body.tags : [],
+    githubRepo: req.body.githubRepo ? String(req.body.githubRepo).trim() : undefined,
+    githubProjectUrl: req.body.githubProjectUrl ? String(req.body.githubProjectUrl).trim() : undefined,
     createdAt: now,
     updatedAt: now,
   };
@@ -1580,6 +1625,7 @@ router.put('/tasks/:id', async (req, res) => {
   if (req.body.githubRepo !== undefined) targetTask.githubRepo = req.body.githubRepo;
   if (req.body.githubBranch !== undefined) targetTask.githubBranch = req.body.githubBranch;
   if (req.body.githubPrUrl !== undefined) targetTask.githubPrUrl = req.body.githubPrUrl;
+  if (req.body.githubProjectUrl !== undefined) targetTask.githubProjectUrl = req.body.githubProjectUrl;
   if (req.body.githubMetadata !== undefined) targetTask.githubMetadata = req.body.githubMetadata;
   targetTask.updatedAt = now;
   if (targetMeeting) targetMeeting.updatedAt = now;
@@ -1929,10 +1975,78 @@ function slugifyText(text: string): string {
 // GITHUB INTEGRATION & JIRA-STYLE DEV TRACKING
 // ─────────────────────────────────────────────────────────────
 
+// 0. Git Projects Management (Multi-project support for IT Team)
+router.get('/git-projects', async (req, res) => {
+  if (isMysqlConfigured()) {
+    try {
+      const projects = await mysqlGetGitProjects();
+      if (projects.length > 0) return res.json(projects);
+    } catch (e: any) {
+      console.warn('Error fetching git projects from MySQL:', e.message);
+    }
+  }
+  res.json(inMemoryGitProjects);
+});
+
+router.post('/git-projects', async (req, res) => {
+  const { name, repo, url, description } = req.body;
+  if (!name || !repo) {
+    return res.status(400).json({ error: 'Nama project dan repositori GitHub wajib diisi.' });
+  }
+
+  let normalizedRepo = String(repo).trim();
+  const urlMatch = normalizedRepo.match(/github\.com\/([^\/]+)\/([^\/]+)/i);
+  if (urlMatch) {
+    normalizedRepo = `${urlMatch[1]}/${urlMatch[2].replace(/\.git$/i, '')}`;
+  } else {
+    normalizedRepo = normalizedRepo.replace(/^\/+|\/+$/g, '').replace(/\.git$/i, '');
+  }
+
+  const projId = `gp-${Date.now().toString(36)}-${Math.random().toString(36).substring(2, 6)}`;
+  const projectObj = {
+    id: projId,
+    name: String(name).trim(),
+    repo: normalizedRepo,
+    url: url ? String(url).trim() : `https://github.com/${normalizedRepo}`,
+    description: description ? String(description).trim() : '',
+    createdAt: new Date().toISOString(),
+  };
+
+  if (isMysqlConfigured()) {
+    try {
+      await mysqlCreateGitProject(projectObj);
+    } catch (e: any) {
+      console.warn('MySQL create git project warning:', e.message);
+    }
+  }
+
+  const idx = inMemoryGitProjects.findIndex(p => p.repo.toLowerCase() === normalizedRepo.toLowerCase());
+  if (idx >= 0) {
+    inMemoryGitProjects[idx] = projectObj;
+  } else {
+    inMemoryGitProjects.unshift(projectObj);
+  }
+
+  res.json({ message: 'Project Git berhasil ditambahkan', project: projectObj });
+});
+
+router.delete('/git-projects/:id', async (req, res) => {
+  const { id } = req.params;
+  if (isMysqlConfigured()) {
+    try {
+      await mysqlDeleteGitProject(id);
+    } catch (e: any) {
+      console.warn('MySQL delete git project warning:', e.message);
+    }
+  }
+  inMemoryGitProjects = inMemoryGitProjects.filter(p => p.id !== id);
+  res.json({ message: 'Project Git berhasil dihapus' });
+});
+
 // 1. Get GitHub OAuth and Repo Config
 router.get('/auth/github/config', (req, res) => {
   const clientId = process.env.GITHUB_CLIENT_ID || '';
-  const defaultRepo = process.env.GITHUB_DEFAULT_REPO || 'syuhadahanif13/task-management';
+  const defaultRepo = process.env.GITHUB_DEFAULT_REPO || null;
   res.json({
     configured: Boolean(clientId && clientId.trim().length > 0),
     clientId: clientId ? clientId.trim() : null,
@@ -2227,7 +2341,7 @@ router.get('/github/task-dev', async (req, res) => {
 
   const repo = (typeof requestedRepo === 'string' && requestedRepo.trim())
     ? requestedRepo.trim()
-    : (targetTask.githubRepo || process.env.GITHUB_DEFAULT_REPO || 'syuhadahanif13/task-management');
+    : (targetTask.githubRepo || '');
 
   // Resolve GitHub Token: check user token or server token
   let token = process.env.GITHUB_TOKEN || '';
@@ -2246,6 +2360,29 @@ router.get('/github/task-dev', async (req, res) => {
   const recommendedBranchName = `feature/${taskKey}-${taskSlug}`;
   const recommendedGitCommand = `git checkout -b ${recommendedBranchName}`;
   const recommendedCommitMsg = `feat(${taskKey}): ${targetTask.title.slice(0, 50)} #${taskKey}`;
+
+  if (!repo) {
+    return res.json({
+      taskKey,
+      taskId: targetTask.id,
+      taskTitle: targetTask.title,
+      repo: '',
+      hasRepo: false,
+      hasToken: Boolean(token),
+      recommendedBranchName,
+      recommendedGitCommand,
+      recommendedCommitMsg,
+      branches: [],
+      commits: [],
+      pullRequests: [],
+      issue: targetTask.githubMetadata?.issue || null,
+      project: targetTask.githubMetadata?.project || null,
+      githubIssueUrl: targetTask.githubIssueUrl || null,
+      githubProjectUrl: targetTask.githubProjectUrl || null,
+      counts: { branches: 0, commits: 0, pullRequests: 0 },
+      lastSyncedAt: targetTask.githubMetadata?.lastSyncedAt || null,
+    });
+  }
 
   // Start with existing saved metadata
   let existingMeta: any = targetTask.githubMetadata || {
@@ -2866,7 +3003,11 @@ router.post('/github/task-issue/create', async (req, res) => {
 
   const repo = (typeof requestedRepo === 'string' && requestedRepo.trim())
     ? requestedRepo.trim()
-    : (targetTask.githubRepo || process.env.GITHUB_DEFAULT_REPO || 'syuhadahanif13/task-management');
+    : targetTask.githubRepo;
+
+  if (!repo) {
+    return res.status(400).json({ error: 'Task ini belum memiliki Project Git / Repositori. Silakan pilih project Git terlebih dahulu.' });
+  }
 
   const repoParts = repo.split('/');
   if (repoParts.length !== 2) {

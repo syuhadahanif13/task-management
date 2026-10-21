@@ -7,6 +7,7 @@ import { TaskSubmissionModal } from './TaskSubmissionModal';
 import { TaskReviewModal } from './TaskReviewModal';
 import { TaskProofModal } from './TaskProofModal';
 import { MultiAssigneeSelector } from './MultiAssigneeSelector';
+import { GitProjectSelector } from './GitProjectSelector';
 import { isTaskAssignedToUser } from '../utils/taskAccess';
 import {
   ArrowLeft,
@@ -113,6 +114,7 @@ export const MeetingDetailView: React.FC<MeetingDetailViewProps> = ({
     new Date(Date.now() + 7 * 86400000).toISOString().split('T')[0]
   );
   const [taskStatus, setTaskStatus] = useState<TaskStatus>('To Do');
+  const [taskGithubRepo, setTaskGithubRepo] = useState('');
   const [isSubmittingTask, setIsSubmittingTask] = useState(false);
   const [scopeView, setScopeView] = useState<'my' | 'all'>(currentUserRole === 'user' ? 'my' : 'all');
 
@@ -222,9 +224,11 @@ export const MeetingDetailView: React.FC<MeetingDetailViewProps> = ({
         assignees: taskAssignees,
         dueDate: taskDueDate,
         status: taskStatus,
+        githubRepo: taskGithubRepo.trim() || undefined,
       });
       setTaskTitle('');
       setTaskAssignees([]);
+      setTaskGithubRepo('');
       setIsAddingTask(false);
     } finally {
       setIsSubmittingTask(false);
@@ -769,6 +773,16 @@ export const MeetingDetailView: React.FC<MeetingDetailViewProps> = ({
                       <option value="Done">Done</option>
                     </select>
                   </div>
+                </div>
+
+                {/* Git Project (Khusus Tim IT) */}
+                <div className="bg-zinc-50 dark:bg-zinc-800/40 p-3 rounded-xl border border-zinc-200 dark:border-zinc-700">
+                  <GitProjectSelector
+                    value={taskGithubRepo}
+                    onChange={setTaskGithubRepo}
+                    label="Project Git (Khusus Tim IT)"
+                    helperText="Pilih repositori GitHub jika task ini memerlukan tracking kode atau PR."
+                  />
                 </div>
 
                 <div className="flex items-center justify-end gap-2 pt-1">

@@ -142,6 +142,15 @@ export interface CreateMeetingInput {
   }>;
 }
 
+export interface GitProject {
+  id: string;
+  name: string;
+  repo: string;
+  url?: string;
+  description?: string;
+  createdAt?: string;
+}
+
 export interface CreateTaskInput {
   title: string;
   assignee: string;
@@ -152,6 +161,8 @@ export interface CreateTaskInput {
   priority?: TaskPriority;
   description?: string;
   tags?: string[];
+  githubRepo?: string;
+  githubProjectUrl?: string;
   meetingId?: string;
 }
 

@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Meeting, TaskStatus, TaskPriority, Division, User, CreateTaskInput } from '../types';
 import { api } from '../api/client';
 import { MultiAssigneeSelector } from './MultiAssigneeSelector';
+import { GitProjectSelector } from './GitProjectSelector';
 import {
   X,
   Check,
@@ -27,6 +28,7 @@ export const AddTaskModal: React.FC<AddTaskModalProps> = ({ isOpen, onClose, onA
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [assignees, setAssignees] = useState<string[]>([]);
+  const [githubRepo, setGithubRepo] = useState('');
   const [dueDate, setDueDate] = useState(
     new Date(Date.now() + 7 * 86400000).toISOString().split('T')[0]
   );
@@ -80,6 +82,7 @@ export const AddTaskModal: React.FC<AddTaskModalProps> = ({ isOpen, onClose, onA
         priority,
         description: description.trim(),
         tags,
+        githubRepo: githubRepo.trim() || undefined,
       });
       handleClose();
     } catch (err: any) {
@@ -93,6 +96,7 @@ export const AddTaskModal: React.FC<AddTaskModalProps> = ({ isOpen, onClose, onA
     setSelectedMeetingId('');
     setTitle('');
     setDescription('');
+    setGithubRepo('');
     setAssignees(
       currentUser?.role === 'user' && currentUser?.username
         ? [currentUser.username]
@@ -289,6 +293,16 @@ export const AddTaskModal: React.FC<AddTaskModalProps> = ({ isOpen, onClose, onA
               users={users}
               divisions={divisions}
               label="PIC / Assignees"
+            />
+          </div>
+
+          {/* ─── 6b. Project Git / Repositori (Khusus Tim IT) ─── */}
+          <div className="bg-gray-50/80 dark:bg-zinc-800/50 p-3.5 rounded-2xl border border-gray-200/60 dark:border-zinc-700/60">
+            <GitProjectSelector
+              value={githubRepo}
+              onChange={setGithubRepo}
+              label="Project Git (Khusus Tim IT)"
+              helperText="Pilih atau tambahkan repositori GitHub untuk task ini. Hanya diisi jika task terhubung ke project coding/Git."
             />
           </div>
 

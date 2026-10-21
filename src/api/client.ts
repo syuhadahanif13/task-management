@@ -1157,5 +1157,38 @@ export const api = {
     return res.json();
   },
 
+  async getGitProjects(): Promise<import('../types').GitProject[]> {
+    const res = await apiFetch('/api/git-projects');
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || 'Gagal mengambil daftar Git Project');
+    }
+    return res.json();
+  },
+
+  async createGitProject(input: { name: string; repo: string; url?: string; description?: string }): Promise<{ message: string; project: import('../types').GitProject }> {
+    const res = await apiFetch('/api/git-projects', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(input),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || 'Gagal menambahkan Git Project');
+    }
+    return res.json();
+  },
+
+  async deleteGitProject(id: string): Promise<{ message: string }> {
+    const res = await apiFetch(`/api/git-projects/${id}`, {
+      method: 'DELETE',
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || 'Gagal menghapus Git Project');
+    }
+    return res.json();
+  },
+
   syncAllCachedSubmissions,
 };

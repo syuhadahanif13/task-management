@@ -209,3 +209,22 @@ VALUES
   ('div-hrd', 'HRD & GA')
 ON DUPLICATE KEY UPDATE `name` = VALUES(`name`);
 
+-- 6. Tabel: git_projects (Project Git / Repositori GitHub untuk Tim IT)
+CREATE TABLE IF NOT EXISTS `git_projects` (
+  `id` VARCHAR(64) NOT NULL,
+  `name` VARCHAR(150) NOT NULL,
+  `repo` VARCHAR(255) NOT NULL,
+  `url` VARCHAR(500) DEFAULT NULL,
+  `description` TEXT DEFAULT NULL,
+  `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uq_git_project_repo` (`repo`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- D. Seed Git Projects Awal
+INSERT INTO `git_projects` (`id`, `name`, `repo`, `url`, `description`)
+VALUES
+  ('gp-task-mgmt', 'Task Management System', 'syuhadahanif13/task-management', 'https://github.com/syuhadahanif13/task-management', 'Sistem Manajemen Notula & Tugas'),
+  ('gp-raja-kerupuk', 'Raja Kerupuk', 'muhalhanifiyyah-max/raja-kerupuk', 'https://github.com/muhalhanifiyyah-max/raja-kerupuk', 'Aplikasi Penjualan Raja Kerupuk')
+ON DUPLICATE KEY UPDATE `name` = VALUES(`name`), `url` = VALUES(`url`);
+
