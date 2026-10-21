@@ -997,5 +997,89 @@ export const api = {
     return res.json();
   },
 
+  async getGitHubConfig(): Promise<{ configured: boolean; clientId: string | null; defaultRepo: string }> {
+    const res = await apiFetch('/api/auth/github/config');
+    if (!res.ok) return { configured: false, clientId: null, defaultRepo: 'syuhadahanif13/task-management' };
+    return res.json();
+  },
+
+  async loginWithGitHubToken(token: string, linkUserId?: string): Promise<{ user: Omit<User, 'password'>; token: string; github: any }> {
+    const res = await apiFetch('/api/auth/github/token-login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ token, linkUserId }),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || 'Autentikasi GitHub gagal');
+    }
+    return res.json();
+  },
+
+  async unlinkGitHub(userId: string): Promise<{ message: string; user: Omit<User, 'password'> }> {
+    const res = await apiFetch('/api/auth/github/unlink', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ userId }),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || 'Gagal memutuskan akun GitHub');
+    }
+    return res.json();
+  },
+
+  async getTaskGitHubDev(taskId: string, repo?: string, userId?: string): Promise<{
+    taskKey: string;
+    taskId: string;
+    taskTitle: string;
+    repo: string;
+    hasToken: boolean;
+    recommendedBranchName: string;
+    recommendedGitCommand: string;
+    recommendedCommitMsg: string;
+    branches: Array<{ name: string; url?: string; lastCommit?: string }>;
+    commits: Array<{ id: string; message: string; author: string; authorAvatar?: string; url: string; timestamp?: string }>;
+    pullRequests: Array<{ number: number; title: string; url: string; state: 'open' | 'closed' | 'merged'; author: string; authorAvatar?: string; branch?: string; mergedAt?: string }>;
+    counts: { branches: number; commits: number; pullRequests: number };
+    lastSyncedAt?: string;
+  }> {
+    const params = new URLSearchParams({ taskId });
+    if (repo) params.set('repo', repo);
+    if (userId) params.set('userId', userId);
+    const res = await apiFetch(`/api/github/task-dev?${params.toString()}`);
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || 'Gagal memuat informasi development GitHub');
+    }
+    return res.json();
+  },
+
+  async linkGitHubItem(params: { taskId: string; url?: string; branch?: string; repo?: string; userId?: string }): Promise<any> {
+    const res = await apiFetch('/api/github/link', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(params),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || 'Gagal menautkan item GitHub');
+    }
+    return res.json();
+  },
+
+  async unlinkGitHubItem(params: { taskId: string; itemType: 'pr' | 'commit' | 'branch'; itemId: string | number }): Promise<any> {
+    const res = await apiFetch('/api/github/unlink-item', {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(params),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || 'Gagal menghapus tautan GitHub');
+    }
+    return res.json();
+  },
+
   syncAllCachedSubmissions,
 };

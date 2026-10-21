@@ -31,6 +31,7 @@ import { LoginPage } from './components/LoginPage';
 import { PwaInstallBanner } from './components/PwaInstallBanner';
 import { PwaSettingsCard } from './components/PwaSettingsCard';
 import { ReportModal } from './components/ReportModal';
+import { GitHubDevPanel } from './components/GitHubDevPanel';
 
 import {
   Check,
@@ -111,13 +112,53 @@ export default function App() {
   const [newMeetingDefaultDate, setNewMeetingDefaultDate] = useState('');
   const [isReportModalOpen, setIsReportModalOpen] = useState(false);
   const [reportModalMeetingId, setReportModalMeetingId] = useState<string | null>(null);
+  const [gitHubDevTask, setGitHubDevTask] = useState<Task | null>(null);
 
   const handleOpenReport = (meetingId?: string) => {
     setReportModalMeetingId(meetingId || null);
     setIsReportModalOpen(true);
   };
 
+  const handleGitHubTaskUpdated = (updatedTask: Task) => {
+    setMeetings(prev => prev.map(m => ({
+      ...m,
+      tasks: (m.tasks || []).map(t => t.id === updatedTask.id ? { ...t, ...updatedTask } : t)
+    })));
+    if (gitHubDevTask && gitHubDevTask.id === updatedTask.id) {
+      setGitHubDevTask(updatedTask);
+    }
+  };
+
   // ─── Effects ───
+  // Handle GitHub OAuth callback redirects & parameters
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      const ghAuth = params.get('github_auth');
+      const ghToken = params.get('token');
+      const ghUser = params.get('user');
+      const ghError = params.get('github_error');
+
+      if (ghError) {
+        showToast(`GitHub Auth: ${decodeURIComponent(ghError)}`);
+        window.history.replaceState({}, document.title, window.location.pathname);
+      } else if (ghAuth === 'success' && ghUser) {
+        try {
+          const parsedUser = JSON.parse(decodeURIComponent(ghUser));
+          setIsAuthenticated(true);
+          setCurrentUser(parsedUser);
+          sessionStorage.setItem('isAuthenticated', 'true');
+          sessionStorage.setItem('currentUser', JSON.stringify(parsedUser));
+          if (ghToken) sessionStorage.setItem('authToken', ghToken);
+          showToast(`Berhasil masuk sebagai @${parsedUser.githubUsername || parsedUser.username} via GitHub!`);
+          window.history.replaceState({}, document.title, window.location.pathname);
+          loadMeetings();
+        } catch (e) {
+          console.error('Failed to parse GitHub auth user:', e);
+        }
+      }
+    }
+  }, []);
   useEffect(() => {
     if (isDarkMode) {
       document.documentElement.classList.add('dark');
@@ -690,6 +731,15 @@ export default function App() {
     return (
       <LoginPage
         onLogin={handleLogin}
+        onGitHubLoginSuccess={(user, token) => {
+          setIsAuthenticated(true);
+          setCurrentUser(user);
+          sessionStorage.setItem('isAuthenticated', 'true');
+          sessionStorage.setItem('currentUser', JSON.stringify(user));
+          if (token) sessionStorage.setItem('authToken', token);
+          showToast(`Berhasil masuk via GitHub sebagai @${user.githubUsername || user.username}`);
+          loadMeetings();
+        }}
         isDarkMode={isDarkMode}
         onToggleDarkMode={() => setIsDarkMode((p) => !p)}
       />
@@ -1078,6 +1128,7 @@ export default function App() {
                   onOpenReport={() => handleOpenReport(selectedMeeting.id)}
                   currentUserRole={currentUser?.role || 'admin'}
                   currentUser={currentUser}
+                  onOpenGitHubDev={(task) => setGitHubDevTask(task)}
                 />
               )}
 
@@ -1099,6 +1150,7 @@ export default function App() {
                   onOpenSubmit={handleOpenSubmit}
                   onOpenReview={handleOpenReview}
                   onViewProof={(task) => setViewingProofTask(task)}
+                  onOpenGitHubDev={(task) => setGitHubDevTask(task)}
                 />
               )}
 
@@ -1354,6 +1406,15 @@ export default function App() {
         meetings={meetings}
         initialMeetingId={reportModalMeetingId}
         onToast={showToast}
+      />
+
+      {/* Jira-Style GitHub Development Panel */}
+      <GitHubDevPanel
+        isOpen={!!gitHubDevTask}
+        onClose={() => setGitHubDevTask(null)}
+        task={gitHubDevTask}
+        currentUser={currentUser}
+        onTaskUpdated={handleGitHubTaskUpdated}
       />
 
       {/* Progressive Web App (PWA) Install Prompt */}

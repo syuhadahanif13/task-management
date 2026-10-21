@@ -86,6 +86,13 @@ export async function mysqlGetMeetings(): Promise<any[]> {
       } catch {}
     }
 
+    let githubMetadata = undefined;
+    if (t.github_metadata) {
+      try {
+        githubMetadata = typeof t.github_metadata === 'string' ? JSON.parse(t.github_metadata) : t.github_metadata;
+      } catch {}
+    }
+
     const dueDateStr = t.due_date instanceof Date
       ? t.due_date.toISOString().split('T')[0]
       : String(t.due_date || '').split('T')[0];
@@ -102,6 +109,10 @@ export async function mysqlGetMeetings(): Promise<any[]> {
       priority: t.priority || 'Medium',
       description: t.description || '',
       tags: Array.isArray(tags) ? tags : [],
+      githubRepo: t.github_repo || undefined,
+      githubBranch: t.github_branch || undefined,
+      githubPrUrl: t.github_pr_url || undefined,
+      githubMetadata,
       createdAt: t.created_at ? new Date(t.created_at).toISOString() : new Date().toISOString(),
       updatedAt: t.updated_at ? new Date(t.updated_at).toISOString() : new Date().toISOString(),
     });
@@ -217,9 +228,13 @@ export async function mysqlUpsertTask(meetingId: string, task: any): Promise<voi
   const tagsJson = JSON.stringify(Array.isArray(task.tags) ? task.tags : []);
   const dueDate = String(task.dueDate || task.due_date || new Date().toISOString().split('T')[0]).split('T')[0];
 
+  const githubMetadataJson = task.githubMetadata
+    ? JSON.stringify(task.githubMetadata)
+    : (task.github_metadata ? (typeof task.github_metadata === 'string' ? task.github_metadata : JSON.stringify(task.github_metadata)) : null);
+
   await p.execute(
-    `INSERT INTO tasks (id, meeting_id, title, assignee, assignees, due_date, due_time, status, priority, description, tags, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())
+    `INSERT INTO tasks (id, meeting_id, title, assignee, assignees, due_date, due_time, status, priority, description, tags, github_repo, github_branch, github_pr_url, github_metadata, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())
      ON DUPLICATE KEY UPDATE
        meeting_id = VALUES(meeting_id),
        title = VALUES(title),
@@ -231,6 +246,10 @@ export async function mysqlUpsertTask(meetingId: string, task: any): Promise<voi
        priority = VALUES(priority),
        description = VALUES(description),
        tags = VALUES(tags),
+       github_repo = VALUES(github_repo),
+       github_branch = VALUES(github_branch),
+       github_pr_url = VALUES(github_pr_url),
+       github_metadata = VALUES(github_metadata),
        updated_at = NOW()`,
     [
       task.id,
@@ -244,6 +263,10 @@ export async function mysqlUpsertTask(meetingId: string, task: any): Promise<voi
       task.priority || 'Medium',
       task.description || '',
       tagsJson,
+      task.githubRepo || task.github_repo || null,
+      task.githubBranch || task.github_branch || null,
+      task.githubPrUrl || task.github_pr_url || null,
+      githubMetadataJson,
     ]
   );
 }
@@ -296,6 +319,13 @@ export async function mysqlGetTasks(filters: { meetingId?: string; status?: stri
       } catch {}
     }
 
+    let githubMetadata = undefined;
+    if (t.github_metadata) {
+      try {
+        githubMetadata = typeof t.github_metadata === 'string' ? JSON.parse(t.github_metadata) : t.github_metadata;
+      } catch {}
+    }
+
     const dueDateStr = t.due_date instanceof Date
       ? t.due_date.toISOString().split('T')[0]
       : String(t.due_date || '').split('T')[0];
@@ -316,6 +346,10 @@ export async function mysqlGetTasks(filters: { meetingId?: string; status?: stri
       priority: t.priority || 'Medium',
       description: t.description || '',
       tags: Array.isArray(tags) ? tags : [],
+      githubRepo: t.github_repo || undefined,
+      githubBranch: t.github_branch || undefined,
+      githubPrUrl: t.github_pr_url || undefined,
+      githubMetadata,
       createdAt: t.created_at ? new Date(t.created_at).toISOString() : new Date().toISOString(),
       updatedAt: t.updated_at ? new Date(t.updated_at).toISOString() : new Date().toISOString(),
       meetingTitle: t.meeting_title || 'Tugas Mandiri',
@@ -397,13 +431,16 @@ export async function mysqlGetUsers(): Promise<any[]> {
   }
   const p = getMysqlPool();
   if (!p) return cachedUsersResponse || [];
-  const [rows]: any = await p.query('SELECT id, username, password, division_id, role, created_at, updated_at FROM users ORDER BY username ASC');
+  const [rows]: any = await p.query('SELECT id, username, password, division_id, role, github_id, github_username, github_avatar_url, created_at, updated_at FROM users ORDER BY username ASC');
   const res = rows.map((u: any) => ({
     id: u.id,
     username: u.username,
     password: u.password,
     divisionId: u.division_id,
     role: u.role || 'user',
+    githubId: u.github_id || null,
+    githubUsername: u.github_username || null,
+    githubAvatarUrl: u.github_avatar_url || null,
     createdAt: u.created_at ? new Date(u.created_at).toISOString() : new Date().toISOString(),
     updatedAt: u.updated_at ? new Date(u.updated_at).toISOString() : new Date().toISOString(),
   }));
@@ -417,8 +454,18 @@ export async function mysqlCreateUser(user: any): Promise<any> {
   const p = getMysqlPool();
   if (!p) return user;
   await p.execute(
-    'INSERT INTO users (id, username, password, division_id, role, created_at, updated_at) VALUES (?, ?, ?, ?, ?, NOW(), NOW())',
-    [user.id, user.username, user.password, user.divisionId || null, user.role || 'user']
+    'INSERT INTO users (id, username, password, division_id, role, github_id, github_username, github_avatar_url, github_access_token, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())',
+    [
+      user.id,
+      user.username,
+      user.password || '',
+      user.divisionId || null,
+      user.role || 'user',
+      user.githubId || null,
+      user.githubUsername || null,
+      user.githubAvatarUrl || null,
+      user.githubAccessToken || null,
+    ]
   );
   return user;
 }
@@ -444,6 +491,22 @@ export async function mysqlUpdateUser(id: string, updates: any): Promise<void> {
   if (updates.role !== undefined) {
     fields.push('role = ?');
     values.push(updates.role);
+  }
+  if (updates.githubId !== undefined) {
+    fields.push('github_id = ?');
+    values.push(updates.githubId || null);
+  }
+  if (updates.githubUsername !== undefined) {
+    fields.push('github_username = ?');
+    values.push(updates.githubUsername || null);
+  }
+  if (updates.githubAvatarUrl !== undefined) {
+    fields.push('github_avatar_url = ?');
+    values.push(updates.githubAvatarUrl || null);
+  }
+  if (updates.githubAccessToken !== undefined) {
+    fields.push('github_access_token = ?');
+    values.push(updates.githubAccessToken || null);
   }
   if (fields.length === 0) return;
   fields.push('updated_at = NOW()');
@@ -522,6 +585,10 @@ export interface Task {
   priority?: string;
   description?: string;
   tags?: string[];
+  githubRepo?: string;
+  githubBranch?: string;
+  githubPrUrl?: string;
+  githubMetadata?: any;
   createdAt?: string;
   updatedAt?: string;
 }
@@ -574,9 +641,13 @@ export interface Division {
 export interface User {
   id: string;
   username: string;
-  password: string;
+  password?: string;
   divisionId: string;
   role: 'admin' | 'user';
+  githubId?: string | null;
+  githubUsername?: string | null;
+  githubAvatarUrl?: string | null;
+  githubAccessToken?: string | null;
   createdAt?: string;
   updatedAt?: string;
 }
@@ -1496,6 +1567,10 @@ router.put('/tasks/:id', async (req, res) => {
   if (priority !== undefined) targetTask.priority = priority;
   if (description !== undefined) targetTask.description = description;
   if (Array.isArray(tags)) targetTask.tags = tags;
+  if (req.body.githubRepo !== undefined) targetTask.githubRepo = req.body.githubRepo;
+  if (req.body.githubBranch !== undefined) targetTask.githubBranch = req.body.githubBranch;
+  if (req.body.githubPrUrl !== undefined) targetTask.githubPrUrl = req.body.githubPrUrl;
+  if (req.body.githubMetadata !== undefined) targetTask.githubMetadata = req.body.githubMetadata;
   targetTask.updatedAt = now;
   if (targetMeeting) targetMeeting.updatedAt = now;
 
@@ -1775,6 +1850,10 @@ router.put('/users/:id', async (req, res) => {
     if (trimmedPassword.length > 0) users[idx].password = trimmedPassword;
     if (divisionId !== undefined) users[idx].divisionId = String(divisionId);
     if (role !== undefined && ['admin', 'user'].includes(role)) users[idx].role = role;
+    if (req.body.githubId !== undefined) users[idx].githubId = req.body.githubId;
+    if (req.body.githubUsername !== undefined) users[idx].githubUsername = req.body.githubUsername;
+    if (req.body.githubAvatarUrl !== undefined) users[idx].githubAvatarUrl = req.body.githubAvatarUrl;
+    if (req.body.githubAccessToken !== undefined) users[idx].githubAccessToken = req.body.githubAccessToken;
     users[idx].updatedAt = now;
   }
 
@@ -1785,6 +1864,10 @@ router.put('/users/:id', async (req, res) => {
       if (trimmedPassword.length > 0) updates.password = trimmedPassword;
       if (divisionId !== undefined) updates.divisionId = divisionId;
       if (role !== undefined) updates.role = role;
+      if (req.body.githubId !== undefined) updates.githubId = req.body.githubId;
+      if (req.body.githubUsername !== undefined) updates.githubUsername = req.body.githubUsername;
+      if (req.body.githubAvatarUrl !== undefined) updates.githubAvatarUrl = req.body.githubAvatarUrl;
+      if (req.body.githubAccessToken !== undefined) updates.githubAccessToken = req.body.githubAccessToken;
       await mysqlUpdateUser(req.params.id, updates);
     } catch (err: any) {
       console.warn('MySQL update user warning:', err?.message);
@@ -1819,6 +1902,821 @@ router.post('/auth/login', async (req, res) => {
   if (!user) return res.status(401).json({ error: 'Invalid username or password' });
   const { password: _pwd, ...safeUser } = user;
   res.json({ user: safeUser, token: generateId('token') });
+});
+
+// Helper: Slugify text for Jira-style branch names
+function slugifyText(text: string): string {
+  return String(text || '')
+    .toLowerCase()
+    .trim()
+    .replace(/[^\w\s-]/g, '')
+    .replace(/[\s_-]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .substring(0, 45);
+}
+
+// ─────────────────────────────────────────────────────────────
+// GITHUB INTEGRATION & JIRA-STYLE DEV TRACKING
+// ─────────────────────────────────────────────────────────────
+
+// 1. Get GitHub OAuth and Repo Config
+router.get('/auth/github/config', (req, res) => {
+  const clientId = process.env.GITHUB_CLIENT_ID || '';
+  const defaultRepo = process.env.GITHUB_DEFAULT_REPO || 'syuhadahanif13/task-management';
+  res.json({
+    configured: Boolean(clientId && clientId.trim().length > 0),
+    clientId: clientId ? clientId.trim() : null,
+    defaultRepo,
+  });
+});
+
+// 2. Initiate GitHub OAuth Redirect
+router.get('/auth/github', (req, res) => {
+  const clientId = process.env.GITHUB_CLIENT_ID || '';
+  if (!clientId || !clientId.trim()) {
+    return res.status(400).json({
+      error: 'GITHUB_CLIENT_ID belum dikonfigurasi di file .env server.',
+    });
+  }
+
+  const host = req.get('host') || 'localhost:3000';
+  const protocol = req.protocol === 'https' || req.get('x-forwarded-proto') === 'https' ? 'https' : 'http';
+  const redirectUri = process.env.GITHUB_REDIRECT_URI || `${protocol}://${host}/api/auth/github/callback`;
+  const state = req.query.state ? String(req.query.state) : generateId('gh_state');
+
+  const githubAuthUrl = `https://github.com/login/oauth/authorize?client_id=${encodeURIComponent(clientId.trim())}&redirect_uri=${encodeURIComponent(redirectUri)}&scope=read:user,repo&state=${encodeURIComponent(state)}`;
+  res.redirect(githubAuthUrl);
+});
+
+// 3. GitHub OAuth Callback Handler
+router.get('/auth/github/callback', async (req, res) => {
+  const { code, state } = req.query;
+  const clientId = process.env.GITHUB_CLIENT_ID || '';
+  const clientSecret = process.env.GITHUB_CLIENT_SECRET || '';
+
+  if (!code) {
+    return res.redirect('/?github_error=' + encodeURIComponent('Kode otorisasi dari GitHub tidak ditemukan'));
+  }
+
+  try {
+    const tokenRes = await fetch('https://github.com/login/oauth/access_token', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Accept: 'application/json',
+      },
+      body: JSON.stringify({
+        client_id: clientId.trim(),
+        client_secret: clientSecret.trim(),
+        code,
+      }),
+    });
+
+    const tokenData: any = await tokenRes.json();
+    const accessToken = tokenData.access_token;
+    if (!accessToken) {
+      const errMsg = tokenData.error_description || tokenData.error || 'Gagal memperoleh access token dari GitHub';
+      return res.redirect('/?github_error=' + encodeURIComponent(errMsg));
+    }
+
+    const userRes = await fetch('https://api.github.com/user', {
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        'User-Agent': 'TaskManagementSystem-App',
+        Accept: 'application/vnd.github.v3+json',
+      },
+    });
+
+    const ghUser: any = await userRes.json();
+    if (!ghUser || !ghUser.login) {
+      return res.redirect('/?github_error=' + encodeURIComponent('Gagal memuat profil pengguna dari GitHub'));
+    }
+
+    await syncUsersFromDatabase();
+
+    let targetUser: any = null;
+    if (state && String(state).startsWith('link_user_')) {
+      const linkUserId = String(state).replace('link_user_', '');
+      targetUser = users.find(u => u.id === linkUserId);
+    }
+
+    if (!targetUser) {
+      targetUser = users.find(u =>
+        (u.githubId && String(u.githubId) === String(ghUser.id)) ||
+        u.username.toLowerCase() === ghUser.login.toLowerCase()
+      );
+    }
+
+    const now = new Date().toISOString();
+
+    if (targetUser) {
+      targetUser.githubId = String(ghUser.id);
+      targetUser.githubUsername = ghUser.login;
+      targetUser.githubAvatarUrl = ghUser.avatar_url;
+      targetUser.githubAccessToken = accessToken;
+      targetUser.updatedAt = now;
+
+      if (isMysqlConfigured()) {
+        await mysqlUpdateUser(targetUser.id, {
+          githubId: String(ghUser.id),
+          githubUsername: ghUser.login,
+          githubAvatarUrl: ghUser.avatar_url,
+          githubAccessToken: accessToken,
+        });
+      }
+    } else {
+      const newUserId = generateId('user');
+      const newUser = {
+        id: newUserId,
+        username: ghUser.login,
+        password: '',
+        divisionId: 'div-it',
+        role: 'user' as const,
+        githubId: String(ghUser.id),
+        githubUsername: ghUser.login,
+        githubAvatarUrl: ghUser.avatar_url,
+        githubAccessToken: accessToken,
+        createdAt: now,
+        updatedAt: now,
+      };
+      users.push(newUser);
+      targetUser = newUser;
+
+      if (isMysqlConfigured()) {
+        await mysqlCreateUser(newUser);
+      }
+    }
+
+    const { password: _p, githubAccessToken: _tok, ...safeUser } = targetUser;
+    const sessionToken = generateId('token');
+
+    const redirectUrl = `/?github_auth=success&token=${encodeURIComponent(sessionToken)}&user=${encodeURIComponent(JSON.stringify(safeUser))}`;
+    return res.redirect(redirectUrl);
+  } catch (err: any) {
+    console.error('GitHub OAuth callback error:', err);
+    return res.redirect('/?github_error=' + encodeURIComponent(err.message || 'Terjadi kesalahan otentikasi GitHub'));
+  }
+});
+
+// 4. Login or Link Account using GitHub Personal Access Token (PAT)
+router.post('/auth/github/token-login', async (req, res) => {
+  const { token, linkUserId } = req.body;
+  if (!token || typeof token !== 'string' || !token.trim()) {
+    return res.status(400).json({ error: 'Token GitHub (PAT) wajib diisi.' });
+  }
+
+  try {
+    const userRes = await fetch('https://api.github.com/user', {
+      headers: {
+        Authorization: `Bearer ${token.trim()}`,
+        'User-Agent': 'TaskManagementSystem-App',
+        Accept: 'application/vnd.github.v3+json',
+      },
+    });
+
+    if (!userRes.ok) {
+      return res.status(401).json({ error: 'Token GitHub tidak valid atau tidak memiliki izin akses.' });
+    }
+
+    const ghUser: any = await userRes.json();
+    await syncUsersFromDatabase();
+
+    let targetUser: any = null;
+    if (linkUserId) {
+      targetUser = users.find(u => u.id === linkUserId);
+    }
+    if (!targetUser) {
+      targetUser = users.find(u =>
+        (u.githubId && String(u.githubId) === String(ghUser.id)) ||
+        u.username.toLowerCase() === ghUser.login.toLowerCase()
+      );
+    }
+
+    const now = new Date().toISOString();
+
+    if (targetUser) {
+      targetUser.githubId = String(ghUser.id);
+      targetUser.githubUsername = ghUser.login;
+      targetUser.githubAvatarUrl = ghUser.avatar_url;
+      targetUser.githubAccessToken = token.trim();
+      targetUser.updatedAt = now;
+
+      if (isMysqlConfigured()) {
+        await mysqlUpdateUser(targetUser.id, {
+          githubId: String(ghUser.id),
+          githubUsername: ghUser.login,
+          githubAvatarUrl: ghUser.avatar_url,
+          githubAccessToken: token.trim(),
+        });
+      }
+    } else {
+      const newUserId = generateId('user');
+      const newUser = {
+        id: newUserId,
+        username: ghUser.login,
+        password: '',
+        divisionId: 'div-it',
+        role: 'user' as const,
+        githubId: String(ghUser.id),
+        githubUsername: ghUser.login,
+        githubAvatarUrl: ghUser.avatar_url,
+        githubAccessToken: token.trim(),
+        createdAt: now,
+        updatedAt: now,
+      };
+      users.push(newUser);
+      targetUser = newUser;
+
+      if (isMysqlConfigured()) {
+        await mysqlCreateUser(newUser);
+      }
+    }
+
+    const { password: _p, githubAccessToken: _tok, ...safeUser } = targetUser;
+    return res.json({
+      user: safeUser,
+      token: generateId('token'),
+      github: {
+        id: ghUser.id,
+        username: ghUser.login,
+        name: ghUser.name,
+        avatarUrl: ghUser.avatar_url,
+      },
+    });
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message || 'Gagal memverifikasi token GitHub' });
+  }
+});
+
+// 5. Unlink GitHub Account
+router.post('/auth/github/unlink', async (req, res) => {
+  const { userId } = req.body;
+  if (!userId) return res.status(400).json({ error: 'userId is required' });
+
+  await syncUsersFromDatabase();
+  const user = users.find(u => u.id === userId);
+  if (!user) return res.status(404).json({ error: 'User tidak ditemukan' });
+
+  user.githubId = null;
+  user.githubUsername = null;
+  user.githubAvatarUrl = null;
+  user.githubAccessToken = null;
+  user.updatedAt = new Date().toISOString();
+
+  if (isMysqlConfigured()) {
+    try {
+      await mysqlUpdateUser(userId, {
+        githubId: null,
+        githubUsername: null,
+        githubAvatarUrl: null,
+        githubAccessToken: null,
+      });
+    } catch (e: any) {
+      console.warn('MySQL unlink warning:', e.message);
+    }
+  }
+
+  const { password: _p, githubAccessToken: _t, ...safeUser } = user;
+  res.json({ message: 'Akun GitHub berhasil diputuskan', user: safeUser });
+});
+
+// 6. Jira-style GitHub Development Info for a Task
+router.get('/github/task-dev', async (req, res) => {
+  const { taskId, repo: requestedRepo, userId } = req.query;
+  if (!taskId || typeof taskId !== 'string') {
+    return res.status(400).json({ error: 'taskId is required' });
+  }
+
+  // Resolve target task
+  let targetTask: Task | undefined;
+  let targetMeetingId = 'general-tasks';
+  for (const m of meetings) {
+    const f = (m.tasks || []).find(t => t.id === taskId);
+    if (f) {
+      targetTask = f;
+      targetMeetingId = m.id;
+      break;
+    }
+  }
+
+  if (!targetTask && isMysqlConfigured()) {
+    await syncMeetingsFromDatabase();
+    for (const m of meetings) {
+      const f = (m.tasks || []).find(t => t.id === taskId);
+      if (f) {
+        targetTask = f;
+        targetMeetingId = m.id;
+        break;
+      }
+    }
+  }
+
+  if (!targetTask) {
+    return res.status(404).json({ error: 'Task tidak ditemukan' });
+  }
+
+  const repo = (typeof requestedRepo === 'string' && requestedRepo.trim())
+    ? requestedRepo.trim()
+    : (targetTask.githubRepo || process.env.GITHUB_DEFAULT_REPO || 'syuhadahanif13/task-management');
+
+  // Resolve GitHub Token: check user token or server token
+  let token = process.env.GITHUB_TOKEN || '';
+  if (userId) {
+    const u = users.find(usr => usr.id === userId);
+    if (u?.githubAccessToken) {
+      token = u.githubAccessToken;
+    }
+  }
+
+  // Clean Task Key & slug (like Jira's PROJ-123)
+  const taskNumberMatch = taskId.match(/task-(\d+)/i) || taskId.match(/(\d+)/);
+  const taskNum = taskNumberMatch ? taskNumberMatch[1] : '';
+  const taskKey = taskNum ? `REI-${taskNum}` : `REI-${taskId.slice(-6)}`;
+  const taskSlug = slugifyText(targetTask.title);
+  const recommendedBranchName = `feature/${taskKey}-${taskSlug}`;
+  const recommendedGitCommand = `git checkout -b ${recommendedBranchName}`;
+  const recommendedCommitMsg = `feat(${taskKey}): ${targetTask.title.slice(0, 50)} #${taskKey}`;
+
+  // Start with existing saved metadata
+  let existingMeta: any = targetTask.githubMetadata || {
+    repo,
+    branches: [],
+    commits: [],
+    pullRequests: [],
+  };
+
+  const branches: any[] = [...(existingMeta.branches || [])];
+  const commits: any[] = [...(existingMeta.commits || [])];
+  const pullRequests: any[] = [...(existingMeta.pullRequests || [])];
+
+  // If token is available and repo format is valid (owner/repo), fetch live GitHub activity
+  const repoParts = repo.split('/');
+  if (token && repoParts.length === 2) {
+    const [owner, repoName] = repoParts;
+    const headers = {
+      Authorization: `Bearer ${token}`,
+      'User-Agent': 'TaskManagementSystem-App',
+      Accept: 'application/vnd.github.v3+json',
+    };
+
+    try {
+      // 1. Fetch Pull Requests
+      const prRes = await fetch(`https://api.github.com/repos/${owner}/${repoName}/pulls?state=all&per_page=30`, { headers });
+      if (prRes.ok) {
+        const prList: any[] = await prRes.json();
+        const searchTerms = [taskId.toLowerCase(), taskKey.toLowerCase()];
+        if (taskNum) searchTerms.push(`#${taskNum}`);
+
+        for (const pr of prList) {
+          const titleLower = (pr.title || '').toLowerCase();
+          const bodyLower = (pr.body || '').toLowerCase();
+          const branchLower = (pr.head?.ref || '').toLowerCase();
+
+          const isMatch = searchTerms.some(term =>
+            titleLower.includes(term) || bodyLower.includes(term) || branchLower.includes(term)
+          );
+
+          if (isMatch) {
+            const prObj = {
+              number: pr.number,
+              title: pr.title,
+              url: pr.html_url,
+              state: pr.merged_at ? 'merged' : pr.state,
+              author: pr.user?.login || 'Unknown',
+              authorAvatar: pr.user?.avatar_url,
+              branch: pr.head?.ref,
+              mergedAt: pr.merged_at,
+              updatedAt: pr.updated_at,
+            };
+            const idx = pullRequests.findIndex(p => p.number === pr.number);
+            if (idx >= 0) pullRequests[idx] = prObj;
+            else pullRequests.unshift(prObj);
+          }
+        }
+      }
+
+      // 2. Fetch Commits
+      const commitRes = await fetch(`https://api.github.com/repos/${owner}/${repoName}/commits?per_page=40`, { headers });
+      if (commitRes.ok) {
+        const commitList: any[] = await commitRes.json();
+        const searchTerms = [taskId.toLowerCase(), taskKey.toLowerCase()];
+        if (taskNum) searchTerms.push(`#${taskNum}`);
+
+        for (const c of commitList) {
+          const msg = c.commit?.message || '';
+          const msgLower = msg.toLowerCase();
+          const isMatch = searchTerms.some(term => msgLower.includes(term));
+
+          if (isMatch) {
+            const commitObj = {
+              id: c.sha.substring(0, 7),
+              fullSha: c.sha,
+              message: msg.split('\n')[0],
+              author: c.commit?.author?.name || c.author?.login || 'Unknown',
+              authorAvatar: c.author?.avatar_url,
+              url: c.html_url,
+              timestamp: c.commit?.author?.date,
+            };
+            const idx = commits.findIndex(cm => cm.id === commitObj.id);
+            if (idx >= 0) commits[idx] = commitObj;
+            else commits.unshift(commitObj);
+          }
+        }
+      }
+
+      // 3. Fetch Branches
+      const branchRes = await fetch(`https://api.github.com/repos/${owner}/${repoName}/branches?per_page=30`, { headers });
+      if (branchRes.ok) {
+        const branchList: any[] = await branchRes.json();
+        const searchTerms = [taskId.toLowerCase(), taskKey.toLowerCase(), taskSlug.slice(0, 15)];
+        for (const b of branchList) {
+          const bLower = (b.name || '').toLowerCase();
+          const isMatch = searchTerms.some(term => term && bLower.includes(term));
+          if (isMatch) {
+            const branchObj = {
+              name: b.name,
+              url: `https://github.com/${owner}/${repoName}/tree/${encodeURIComponent(b.name)}`,
+              lastCommit: b.commit?.sha?.substring(0, 7),
+            };
+            const idx = branches.findIndex(br => br.name === b.name);
+            if (idx >= 0) branches[idx] = branchObj;
+            else branches.push(branchObj);
+          }
+        }
+      }
+    } catch (err: any) {
+      console.warn('GitHub live fetch warning:', err.message);
+    }
+  }
+
+  // Update targetTask with new metadata
+  targetTask.githubRepo = repo;
+  if (branches.length > 0 && !targetTask.githubBranch) {
+    targetTask.githubBranch = branches[0].name;
+  }
+  if (pullRequests.length > 0 && !targetTask.githubPrUrl) {
+    targetTask.githubPrUrl = pullRequests[0].url;
+  }
+  targetTask.githubMetadata = {
+    repo,
+    branches,
+    commits,
+    pullRequests,
+    lastSyncedAt: new Date().toISOString(),
+  };
+
+  if (isMysqlConfigured()) {
+    try {
+      await mysqlUpsertTask(targetMeetingId, targetTask);
+    } catch (e: any) {
+      console.warn('MySQL save task dev metadata warning:', e.message);
+    }
+  }
+
+  res.json({
+    taskKey,
+    taskId: targetTask.id,
+    taskTitle: targetTask.title,
+    repo,
+    hasToken: Boolean(token),
+    recommendedBranchName,
+    recommendedGitCommand,
+    recommendedCommitMsg,
+    branches,
+    commits,
+    pullRequests,
+    counts: {
+      branches: branches.length,
+      commits: commits.length,
+      pullRequests: pullRequests.length,
+    },
+    lastSyncedAt: targetTask.githubMetadata.lastSyncedAt,
+  });
+});
+
+// 7. Manually link a PR, Commit, or Branch to a Task
+router.post('/github/link', async (req, res) => {
+  const { taskId, url, branch, repo: userRepo, userId } = req.body;
+  if (!taskId) return res.status(400).json({ error: 'taskId is required' });
+
+  let targetTask: Task | undefined;
+  let targetMeetingId = 'general-tasks';
+  for (const m of meetings) {
+    const f = (m.tasks || []).find(t => t.id === taskId);
+    if (f) {
+      targetTask = f;
+      targetMeetingId = m.id;
+      break;
+    }
+  }
+
+  if (!targetTask && isMysqlConfigured()) {
+    await syncMeetingsFromDatabase();
+    for (const m of meetings) {
+      const f = (m.tasks || []).find(t => t.id === taskId);
+      if (f) {
+        targetTask = f;
+        targetMeetingId = m.id;
+        break;
+      }
+    }
+  }
+
+  if (!targetTask) return res.status(404).json({ error: 'Task tidak ditemukan' });
+
+  const metadata = targetTask.githubMetadata || {
+    repo: userRepo || process.env.GITHUB_DEFAULT_REPO || 'syuhadahanif13/task-management',
+    branches: [],
+    commits: [],
+    pullRequests: [],
+  };
+
+  // If a URL was provided, detect type (PR or Commit)
+  if (url && typeof url === 'string') {
+    const trimmedUrl = url.trim();
+    const prMatch = trimmedUrl.match(/github\.com\/([^\/]+)\/([^\/]+)\/pull\/(\d+)/i);
+    const commitMatch = trimmedUrl.match(/github\.com\/([^\/]+)\/([^\/]+)\/commit\/([a-f0-9]+)/i);
+
+    if (prMatch) {
+      const [, owner, repoName, prNumStr] = prMatch;
+      const prNumber = parseInt(prNumStr, 10);
+      const prObj = {
+        number: prNumber,
+        title: `PR #${prNumber}`,
+        url: trimmedUrl,
+        state: 'open' as const,
+        author: 'GitHub User',
+        updatedAt: new Date().toISOString(),
+      };
+
+      // Try fetching richer PR details from GitHub API if token is available
+      let token = process.env.GITHUB_TOKEN || '';
+      if (userId) {
+        const u = users.find(usr => usr.id === userId);
+        if (u?.githubAccessToken) token = u.githubAccessToken;
+      }
+
+      if (token) {
+        try {
+          const apiPrRes = await fetch(`https://api.github.com/repos/${owner}/${repoName}/pulls/${prNumber}`, {
+            headers: {
+              Authorization: `Bearer ${token}`,
+              'User-Agent': 'TaskManagementSystem-App',
+              Accept: 'application/vnd.github.v3+json',
+            },
+          });
+          if (apiPrRes.ok) {
+            const apiPr: any = await apiPrRes.json();
+            prObj.title = apiPr.title || prObj.title;
+            prObj.state = apiPr.merged_at ? 'merged' : apiPr.state;
+            prObj.author = apiPr.user?.login || prObj.author;
+            (prObj as any).authorAvatar = apiPr.user?.avatar_url;
+            (prObj as any).branch = apiPr.head?.ref;
+            (prObj as any).mergedAt = apiPr.merged_at;
+          }
+        } catch {}
+      }
+
+      const existingIdx = (metadata.pullRequests || []).findIndex(p => p.number === prNumber);
+      if (existingIdx >= 0) {
+        metadata.pullRequests![existingIdx] = prObj;
+      } else {
+        metadata.pullRequests = metadata.pullRequests || [];
+        metadata.pullRequests.unshift(prObj);
+      }
+
+      targetTask.githubPrUrl = trimmedUrl;
+      targetTask.githubRepo = `${owner}/${repoName}`;
+    } else if (commitMatch) {
+      const [, owner, repoName, sha] = commitMatch;
+      const shortSha = sha.substring(0, 7);
+      const commitObj = {
+        id: shortSha,
+        fullSha: sha,
+        message: `Commit ${shortSha}`,
+        author: 'GitHub Committer',
+        url: trimmedUrl,
+        timestamp: new Date().toISOString(),
+      };
+
+      const existingIdx = (metadata.commits || []).findIndex(c => c.id === shortSha);
+      if (existingIdx >= 0) {
+        metadata.commits![existingIdx] = commitObj;
+      } else {
+        metadata.commits = metadata.commits || [];
+        metadata.commits.unshift(commitObj);
+      }
+
+      targetTask.githubRepo = `${owner}/${repoName}`;
+    }
+  }
+
+  if (branch && typeof branch === 'string') {
+    const trimmedBranch = branch.trim();
+    targetTask.githubBranch = trimmedBranch;
+    const existingIdx = (metadata.branches || []).findIndex(b => b.name === trimmedBranch);
+    if (existingIdx < 0) {
+      metadata.branches = metadata.branches || [];
+      metadata.branches.push({
+        name: trimmedBranch,
+        url: `https://github.com/${metadata.repo || 'syuhadahanif13/task-management'}/tree/${encodeURIComponent(trimmedBranch)}`,
+      });
+    }
+  }
+
+  metadata.lastSyncedAt = new Date().toISOString();
+  targetTask.githubMetadata = metadata;
+  targetTask.updatedAt = new Date().toISOString();
+
+  if (isMysqlConfigured()) {
+    await mysqlUpsertTask(targetMeetingId, targetTask);
+  }
+
+  res.json({
+    message: 'Item GitHub berhasil ditautkan ke tugas',
+    task: targetTask,
+    metadata,
+  });
+});
+
+// 8. Unlink PR, Commit, or Branch from Task
+router.delete('/github/unlink-item', async (req, res) => {
+  const { taskId, itemType, itemId } = req.body;
+  if (!taskId || !itemType || itemId === undefined) {
+    return res.status(400).json({ error: 'taskId, itemType, and itemId are required' });
+  }
+
+  let targetTask: Task | undefined;
+  let targetMeetingId = 'general-tasks';
+  for (const m of meetings) {
+    const f = (m.tasks || []).find(t => t.id === taskId);
+    if (f) {
+      targetTask = f;
+      targetMeetingId = m.id;
+      break;
+    }
+  }
+
+  if (!targetTask && isMysqlConfigured()) {
+    await syncMeetingsFromDatabase();
+    for (const m of meetings) {
+      const f = (m.tasks || []).find(t => t.id === taskId);
+      if (f) {
+        targetTask = f;
+        targetMeetingId = m.id;
+        break;
+      }
+    }
+  }
+
+  if (!targetTask) return res.status(404).json({ error: 'Task tidak ditemukan' });
+
+  const metadata = targetTask.githubMetadata || { repo: '', branches: [], commits: [], pullRequests: [] };
+
+  if (itemType === 'pr') {
+    metadata.pullRequests = (metadata.pullRequests || []).filter(p => String(p.number) !== String(itemId));
+    if (metadata.pullRequests.length === 0) targetTask.githubPrUrl = undefined;
+  } else if (itemType === 'commit') {
+    metadata.commits = (metadata.commits || []).filter(c => c.id !== itemId && (c as any).fullSha !== itemId);
+  } else if (itemType === 'branch') {
+    metadata.branches = (metadata.branches || []).filter(b => b.name !== itemId);
+    if (metadata.branches.length === 0) targetTask.githubBranch = undefined;
+  }
+
+  metadata.lastSyncedAt = new Date().toISOString();
+  targetTask.githubMetadata = metadata;
+  targetTask.updatedAt = new Date().toISOString();
+
+  if (isMysqlConfigured()) {
+    await mysqlUpsertTask(targetMeetingId, targetTask);
+  }
+
+  res.json({ message: 'Item berhasil dihapus', metadata });
+});
+
+// 9. Webhook Receiver for GitHub (push, pull_request)
+router.post('/github/webhook', async (req, res) => {
+  const event = req.headers['x-github-event'];
+  const payload = req.body;
+
+  if (!payload) return res.status(400).send('No payload');
+
+  try {
+    await syncMeetingsFromDatabase();
+
+    // Event 1: Pull Request
+    if (event === 'pull_request') {
+      const pr = payload.pull_request;
+      const action = payload.action;
+      const repoFullName = payload.repository?.full_name || '';
+
+      if (pr) {
+        const prTitle = (pr.title || '').toLowerCase();
+        const prBody = (pr.body || '').toLowerCase();
+        const prBranch = (pr.head?.ref || '').toLowerCase();
+
+        for (const m of meetings) {
+          for (const t of m.tasks || []) {
+            const taskMatch = t.id.toLowerCase();
+            const numMatch = (t.id.match(/task-(\d+)/i) || [])[1];
+            const isMatch = prTitle.includes(taskMatch) ||
+              prBody.includes(taskMatch) ||
+              prBranch.includes(taskMatch) ||
+              (numMatch && (prTitle.includes(`#${numMatch}`) || prBranch.includes(`task-${numMatch}`)));
+
+            if (isMatch) {
+              const meta = t.githubMetadata || { repo: repoFullName, branches: [], commits: [], pullRequests: [] };
+              meta.repo = repoFullName;
+              meta.pullRequests = meta.pullRequests || [];
+
+              const prObj = {
+                number: pr.number,
+                title: pr.title,
+                url: pr.html_url,
+                state: pr.merged_at ? 'merged' : pr.state,
+                author: pr.user?.login || 'Unknown',
+                authorAvatar: pr.user?.avatar_url,
+                branch: pr.head?.ref,
+                mergedAt: pr.merged_at,
+                updatedAt: pr.updated_at,
+              };
+
+              const idx = meta.pullRequests.findIndex(p => p.number === pr.number);
+              if (idx >= 0) meta.pullRequests[idx] = prObj;
+              else meta.pullRequests.unshift(prObj);
+
+              t.githubMetadata = meta;
+              t.githubPrUrl = pr.html_url;
+
+              // Jira-like automation: If PR is merged, transition status to Done or Pending Approval
+              if (pr.merged_at) {
+                t.status = 'Done';
+              } else if (action === 'opened' && t.status === 'To Do') {
+                t.status = 'In Progress';
+              }
+
+              t.updatedAt = new Date().toISOString();
+              if (isMysqlConfigured()) {
+                await mysqlUpsertTask(m.id, t);
+              }
+            }
+          }
+        }
+      }
+    }
+
+    // Event 2: Push
+    if (event === 'push') {
+      const commitsList = payload.commits || [];
+      const repoFullName = payload.repository?.full_name || '';
+
+      for (const c of commitsList) {
+        const msg = (c.message || '').toLowerCase();
+        for (const m of meetings) {
+          for (const t of m.tasks || []) {
+            const taskMatch = t.id.toLowerCase();
+            const numMatch = (t.id.match(/task-(\d+)/i) || [])[1];
+            const isMatch = msg.includes(taskMatch) || (numMatch && msg.includes(`#${numMatch}`));
+
+            if (isMatch) {
+              const meta = t.githubMetadata || { repo: repoFullName, branches: [], commits: [], pullRequests: [] };
+              meta.repo = repoFullName;
+              meta.commits = meta.commits || [];
+
+              const shortSha = c.id.substring(0, 7);
+              const commitObj = {
+                id: shortSha,
+                fullSha: c.id,
+                message: c.message.split('\n')[0],
+                author: c.author?.name || c.author?.username || 'Unknown',
+                url: c.url,
+                timestamp: c.timestamp,
+              };
+
+              const idx = meta.commits.findIndex(cm => cm.id === shortSha);
+              if (idx >= 0) meta.commits[idx] = commitObj;
+              else meta.commits.unshift(commitObj);
+
+              t.githubMetadata = meta;
+              if (t.status === 'To Do') {
+                t.status = 'In Progress';
+              }
+              t.updatedAt = new Date().toISOString();
+
+              if (isMysqlConfigured()) {
+                await mysqlUpsertTask(m.id, t);
+              }
+            }
+          }
+        }
+      }
+    }
+
+    res.status(200).json({ received: true });
+  } catch (err: any) {
+    console.error('GitHub webhook error:', err);
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // Support both /api/... and root-relative routes (e.g. if Vercel strips /api during rewrites)

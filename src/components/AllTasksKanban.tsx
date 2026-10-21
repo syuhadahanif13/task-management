@@ -27,6 +27,7 @@ interface AllTasksKanbanProps {
   onOpenMeetings?: () => void;
   currentUserRole?: 'admin' | 'user';
   currentUser?: { username: string; role?: string; divisionId?: string } | null;
+  onOpenGitHubDev?: (task: Task) => void;
 }
 
 export const AllTasksKanban: React.FC<AllTasksKanbanProps> = ({
@@ -42,6 +43,7 @@ export const AllTasksKanban: React.FC<AllTasksKanbanProps> = ({
   onOpenMeetings,
   currentUserRole = 'admin',
   currentUser,
+  onOpenGitHubDev,
 }) => {
   const [viewMode, setViewMode] = useState<'kanban' | 'list'>('kanban');
   const [filterAssignee, setFilterAssignee] = useState<string>('all');
@@ -309,6 +311,7 @@ export const AllTasksKanban: React.FC<AllTasksKanbanProps> = ({
                         meetingTitle={task.meetingTitle}
                         meetingDate={task.meetingDate}
                         onSelectMeeting={onSelectMeeting}
+                        onOpenGitHubDev={onOpenGitHubDev}
                       />
                     ))
                   )}
@@ -343,6 +346,7 @@ export const AllTasksKanban: React.FC<AllTasksKanbanProps> = ({
                 meetingTitle={task.meetingTitle}
                 meetingDate={task.meetingDate}
                 onSelectMeeting={onSelectMeeting}
+                onOpenGitHubDev={onOpenGitHubDev}
               />
             ))
           )}

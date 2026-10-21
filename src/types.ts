@@ -11,6 +11,41 @@
 export type TaskStatus = 'To Do' | 'In Progress' | 'Done' | 'Pending Approval';
 export type TaskPriority = 'Low' | 'Medium' | 'High';
 
+export interface GitHubCommit {
+  id: string;
+  message: string;
+  author: string;
+  authorAvatar?: string;
+  url: string;
+  timestamp?: string;
+}
+
+export interface GitHubPullRequest {
+  number: number;
+  title: string;
+  url: string;
+  state: 'open' | 'closed' | 'merged';
+  author: string;
+  authorAvatar?: string;
+  branch?: string;
+  mergedAt?: string;
+  updatedAt?: string;
+}
+
+export interface GitHubBranch {
+  name: string;
+  url?: string;
+  lastCommit?: string;
+}
+
+export interface GitHubTaskMetadata {
+  repo?: string;
+  branches?: GitHubBranch[];
+  commits?: GitHubCommit[];
+  pullRequests?: GitHubPullRequest[];
+  lastSyncedAt?: string;
+}
+
 export interface Task {
   id: string;
   meetingId?: string;
@@ -23,6 +58,10 @@ export interface Task {
   priority?: TaskPriority;
   description?: string;
   tags?: string[];
+  githubRepo?: string;
+  githubBranch?: string;
+  githubPrUrl?: string;
+  githubMetadata?: GitHubTaskMetadata;
   createdAt?: string;
   updatedAt?: string;
 }
@@ -120,9 +159,13 @@ export interface Division {
 export interface User {
   id: string;
   username: string;
-  password: string;
+  password?: string;
   divisionId: string;
   role: 'admin' | 'user';
+  githubId?: string | null;
+  githubUsername?: string | null;
+  githubAvatarUrl?: string | null;
+  githubAccessToken?: string | null;
   createdAt?: string;
   updatedAt?: string;
 }

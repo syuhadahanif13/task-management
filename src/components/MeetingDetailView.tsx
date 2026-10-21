@@ -45,6 +45,7 @@ interface MeetingDetailViewProps {
   onOpenReport?: () => void;
   currentUserRole?: 'admin' | 'user';
   currentUser?: { username: string; role?: string; divisionId?: string } | null;
+  onOpenGitHubDev?: (task: Task) => void;
 }
 
 export const MeetingDetailView: React.FC<MeetingDetailViewProps> = ({
@@ -64,6 +65,7 @@ export const MeetingDetailView: React.FC<MeetingDetailViewProps> = ({
   onOpenReport,
   currentUserRole = 'admin',
   currentUser,
+  onOpenGitHubDev,
 }) => {
   const [filterStatus, setFilterStatus] = useState<string>('all');
   const [isEditingMeeting, setIsEditingMeeting] = useState<boolean>(false);
@@ -818,6 +820,7 @@ export const MeetingDetailView: React.FC<MeetingDetailViewProps> = ({
                       onOpenSubmit={currentUserRole === 'user' && isMine ? handleOpenSubmit : undefined}
                       onOpenReview={currentUserRole === 'admin' ? handleOpenReview : undefined}
                       onViewProof={onViewProof || ((t) => setViewingProofTask(t))}
+                      onOpenGitHubDev={onOpenGitHubDev}
                     />
                   );
                 })

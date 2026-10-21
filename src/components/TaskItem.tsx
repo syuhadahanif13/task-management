@@ -15,6 +15,7 @@ interface TaskItemProps {
   meetingTitle?: string;
   meetingDate?: string;
   onSelectMeeting?: (meetingId: string) => void;
+  onOpenGitHubDev?: (task: Task) => void;
 }
 
 export const TaskItem: React.FC<TaskItemProps> = ({
@@ -29,6 +30,7 @@ export const TaskItem: React.FC<TaskItemProps> = ({
   meetingTitle,
   meetingDate,
   onSelectMeeting,
+  onOpenGitHubDev,
 }) => {
   const isDone = task.status === 'Done';
   const isInProgress = task.status === 'In Progress';
@@ -134,10 +136,48 @@ export const TaskItem: React.FC<TaskItemProps> = ({
               {tag}
             </span>
           ))}
+
+          {/* Jira-style GitHub Dev Badge */}
+          {onOpenGitHubDev && (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                onOpenGitHubDev(task);
+              }}
+              className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-gray-900 text-white dark:bg-white dark:text-black hover:opacity-90 inline-flex items-center gap-1 shrink-0 transition shadow-2xs cursor-pointer active:scale-95"
+              title="Buka GitHub Development Tracking (Jira)"
+            >
+              <svg className="w-2.5 h-2.5 fill-current shrink-0" viewBox="0 0 24 24">
+                <path fillRule="evenodd" clipRule="evenodd" d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.53 1.032 1.53 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0112 6.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.019 10.019 0 0022 12.017C22 6.484 17.522 2 12 2z" />
+              </svg>
+              {task.githubMetadata?.pullRequests && task.githubMetadata.pullRequests.length > 0 ? (
+                <span>{task.githubMetadata.pullRequests.length} PR</span>
+              ) : task.githubMetadata?.commits && task.githubMetadata.commits.length > 0 ? (
+                <span>{task.githubMetadata.commits.length} Commit</span>
+              ) : task.githubBranch ? (
+                <span className="truncate max-w-[80px]">{task.githubBranch}</span>
+              ) : (
+                <span>Git</span>
+              )}
+            </button>
+          )}
         </div>
 
         {/* Action Buttons */}
         <div className="flex items-center gap-1 shrink-0">
+          {onOpenGitHubDev && (
+            <button
+              type="button"
+              onClick={() => onOpenGitHubDev(task)}
+              className="w-7 h-7 rounded-lg flex items-center justify-center text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-zinc-700/60 transition-colors"
+              title="GitHub Dev Tracking (Jira)"
+            >
+              <svg className="w-3.5 h-3.5 fill-current" viewBox="0 0 24 24">
+                <path fillRule="evenodd" clipRule="evenodd" d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.53 1.032 1.53 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0112 6.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.019 10.019 0 0022 12.017C22 6.484 17.522 2 12 2z" />
+              </svg>
+            </button>
+          )}
           {onViewProof && (isPendingApproval || isDone) && (
             <button
               type="button"

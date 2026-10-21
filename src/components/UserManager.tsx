@@ -31,6 +31,11 @@ export const UserManager: React.FC<UserManagerProps> = ({
   const [errorMsg, setErrorMsg] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
 
+  // GitHub connection modal states
+  const [connectGhUserId, setConnectGhUserId] = useState<string | null>(null);
+  const [ghPatInput, setGhPatInput] = useState('');
+  const [isGhConnecting, setIsGhConnecting] = useState(false);
+
   const isAdmin = currentUser?.role === 'admin';
 
   const loadData = async () => {
@@ -171,6 +176,56 @@ export const UserManager: React.FC<UserManagerProps> = ({
     } catch (err: any) {
       setErrorMsg(err.message || 'Gagal menghapus user.');
       await loadData();
+    }
+  };
+
+  const handleConnectGitHub = async (userId: string) => {
+    try {
+      const cfg = await api.getGitHubConfig();
+      if (cfg.configured) {
+        window.location.href = `/api/auth/github?state=link_user_${encodeURIComponent(userId)}`;
+      } else {
+        setConnectGhUserId(userId);
+        setGhPatInput('');
+      }
+    } catch {
+      setConnectGhUserId(userId);
+      setGhPatInput('');
+    }
+  };
+
+  const handlePatConnectSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!connectGhUserId || !ghPatInput.trim()) return;
+
+    setIsGhConnecting(true);
+    setErrorMsg('');
+    try {
+      const res = await api.loginWithGitHubToken(ghPatInput.trim(), connectGhUserId);
+      setSuccessMsg(`Akun GitHub @${res.github.username} berhasil dihubungkan!`);
+      setTimeout(() => setSuccessMsg(''), 3500);
+      setConnectGhUserId(null);
+      setGhPatInput('');
+      if (onUserUpdated) onUserUpdated(res.user);
+      await loadData();
+    } catch (err: any) {
+      setErrorMsg(err.message || 'Gagal menghubungkan akun GitHub.');
+    } finally {
+      setIsGhConnecting(false);
+    }
+  };
+
+  const handleUnlinkGitHub = async (userId: string) => {
+    if (!confirm('Putuskan koneksi akun GitHub dari profil ini?')) return;
+    setErrorMsg('');
+    try {
+      const res = await api.unlinkGitHub(userId);
+      setSuccessMsg('Koneksi akun GitHub berhasil diputuskan.');
+      setTimeout(() => setSuccessMsg(''), 3000);
+      if (onUserUpdated) onUserUpdated(res.user);
+      await loadData();
+    } catch (err: any) {
+      setErrorMsg(err.message || 'Gagal memutuskan akun GitHub.');
     }
   };
 
@@ -546,6 +601,41 @@ export const UserManager: React.FC<UserManagerProps> = ({
                           <p className="text-xs text-zinc-500 dark:text-zinc-400 truncate mt-0.5">
                             Divisi: <span className="font-semibold text-zinc-700 dark:text-zinc-300">{getDivisionName(user.divisionId)}</span>
                           </p>
+
+                          {/* GitHub Linked Badge / Connect Button */}
+                          {user.githubUsername ? (
+                            <div className="flex items-center gap-2 mt-1.5 flex-wrap">
+                              <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-semibold bg-gray-900 text-white dark:bg-white dark:text-black shadow-2xs">
+                                <svg className="w-2.5 h-2.5 fill-current" viewBox="0 0 24 24">
+                                  <path fillRule="evenodd" clipRule="evenodd" d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.53 1.032 1.53 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0112 6.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.019 10.019 0 0022 12.017C22 6.484 17.522 2 12 2z" />
+                                </svg>
+                                <span>@{user.githubUsername}</span>
+                              </span>
+                              {(user.id === currentUser?.id || isAdmin) && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleUnlinkGitHub(user.id)}
+                                  className="text-[10px] text-zinc-400 hover:text-rose-600 transition underline underline-offset-2"
+                                  title="Putuskan akun GitHub"
+                                >
+                                  Putuskan
+                                </button>
+                              )}
+                            </div>
+                          ) : (
+                            (user.id === currentUser?.id || isAdmin) && (
+                              <button
+                                type="button"
+                                onClick={() => handleConnectGitHub(user.id)}
+                                className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-indigo-600 dark:text-indigo-400 hover:underline mt-1.5"
+                              >
+                                <svg className="w-3 h-3 fill-current" viewBox="0 0 24 24">
+                                  <path fillRule="evenodd" clipRule="evenodd" d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.53 1.032 1.53 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0112 6.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.019 10.019 0 0022 12.017C22 6.484 17.522 2 12 2z" />
+                                </svg>
+                                <span>+ Hubungkan Akun GitHub</span>
+                              </button>
+                            )
+                          )}
                         </div>
                       </div>
 
@@ -600,6 +690,72 @@ export const UserManager: React.FC<UserManagerProps> = ({
           </div>
         </div>
       </div>
+
+      {/* GitHub PAT Modal */}
+      {connectGhUserId && (
+        <div className="fixed inset-0 z-60 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4">
+          <div className="bg-white dark:bg-zinc-900 w-full max-w-md p-6 rounded-2xl shadow-2xl border border-zinc-200 dark:border-zinc-800 space-y-4 animate-in fade-in zoom-in-95 duration-150">
+            <div className="flex items-center justify-between pb-2 border-b border-zinc-200 dark:border-zinc-800">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-lg bg-gray-900 text-white dark:bg-white dark:text-black flex items-center justify-center">
+                  <KeyRound className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-zinc-900 dark:text-zinc-100">
+                    Hubungkan Akun GitHub
+                  </h3>
+                  <p className="text-[11px] text-zinc-500">
+                    Masukkan Personal Access Token (PAT) Anda
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setConnectGhUserId(null)}
+                className="p-1 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 rounded-lg"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handlePatConnectSubmit} className="space-y-3.5">
+              <div className="space-y-1.5">
+                <label className="text-xs font-semibold text-zinc-800 dark:text-zinc-200">
+                  GitHub Personal Access Token (PAT)
+                </label>
+                <input
+                  type="password"
+                  value={ghPatInput}
+                  onChange={(e) => setGhPatInput(e.target.value)}
+                  placeholder="ghp_xxxx atau github_pat_xxxx"
+                  className="notion-input font-mono text-xs"
+                  autoFocus
+                />
+                <p className="text-[10px] text-zinc-500 leading-relaxed">
+                  Buat token dengan izin <code className="font-mono bg-zinc-100 dark:bg-zinc-800 px-1 py-0.5 rounded">repo</code> & <code className="font-mono bg-zinc-100 dark:bg-zinc-800 px-1 py-0.5 rounded">read:user</code> di settings GitHub.
+                </p>
+              </div>
+
+              <div className="flex items-center gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setConnectGhUserId(null)}
+                  className="notion-btn flex-1 justify-center text-xs"
+                >
+                  Batal
+                </button>
+                <button
+                  type="submit"
+                  disabled={isGhConnecting || !ghPatInput.trim()}
+                  className="notion-btn notion-btn-primary flex-1 justify-center text-xs"
+                >
+                  {isGhConnecting ? 'Menghubungkan...' : 'Hubungkan Akun'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
