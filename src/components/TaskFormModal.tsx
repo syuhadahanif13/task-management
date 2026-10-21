@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Task, TaskStatus, User as UserType, Division } from '../types';
+import { Task, TaskStatus, User as UserType, Division, isUserLoggedInWithGitHub } from '../types';
 import { X, CheckSquare, Calendar } from 'lucide-react';
 import { MultiAssigneeSelector } from './MultiAssigneeSelector';
 import { GitProjectSelector } from './GitProjectSelector';
@@ -12,6 +12,7 @@ interface TaskFormModalProps {
   task: Task | null;
   onSave: (taskId: string, updates: Partial<Task>) => Promise<void>;
   participants?: string[];
+  currentUser?: { username: string; role?: string; divisionId?: string; githubUsername?: string | null; githubId?: string | null } | null;
 }
 
 export const TaskFormModal: React.FC<TaskFormModalProps> = ({
@@ -20,6 +21,7 @@ export const TaskFormModal: React.FC<TaskFormModalProps> = ({
   task,
   onSave,
   participants = [],
+  currentUser,
 }) => {
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
@@ -213,15 +215,18 @@ export const TaskFormModal: React.FC<TaskFormModalProps> = ({
             </div>
           </div>
 
-          {/* Project Git (Khusus Tim IT) */}
-          <div className="bg-zinc-50 dark:bg-zinc-800/40 p-3.5 rounded-xl border border-zinc-200 dark:border-zinc-800">
-            <GitProjectSelector
-              value={githubRepo}
-              onChange={setGithubRepo}
-              label="Project Git (Khusus Tim IT)"
-              helperText="Pilih atau tambahkan repositori GitHub untuk task ini. Hanya diisi jika task terhubung ke project coding/Git."
-            />
-          </div>
+          {/* Project Git (Khusus Akun Login GitHub) */}
+          {isUserLoggedInWithGitHub(currentUser) && (
+            <div className="bg-zinc-50 dark:bg-zinc-800/40 p-3.5 rounded-xl border border-zinc-200 dark:border-zinc-800">
+              <GitProjectSelector
+                value={githubRepo}
+                onChange={setGithubRepo}
+                currentUser={currentUser}
+                label="Project Git (Khusus Tim IT)"
+                helperText="Pilih atau tambahkan repositori GitHub untuk task ini. Hanya diisi jika task terhubung ke project coding/Git."
+              />
+            </div>
+          )}
 
           {/* Action Buttons */}
           <div className="pt-3 border-t border-zinc-200 dark:border-zinc-800 flex items-center justify-end gap-2">

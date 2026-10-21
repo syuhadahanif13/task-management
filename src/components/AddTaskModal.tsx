@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Meeting, TaskStatus, TaskPriority, Division, User, CreateTaskInput } from '../types';
+import { Meeting, TaskStatus, TaskPriority, Division, User, CreateTaskInput, isUserLoggedInWithGitHub } from '../types';
 import { api } from '../api/client';
 import { MultiAssigneeSelector } from './MultiAssigneeSelector';
 import { GitProjectSelector } from './GitProjectSelector';
@@ -17,7 +17,7 @@ interface AddTaskModalProps {
   isOpen: boolean;
   onClose: () => void;
   onAddTask: (meetingId: string | undefined, taskInput: CreateTaskInput) => Promise<any>;
-  currentUser?: { username: string; role?: string; divisionId?: string } | null;
+  currentUser?: { username: string; role?: string; divisionId?: string; githubUsername?: string | null; githubId?: string | null } | null;
 }
 
 export const AddTaskModal: React.FC<AddTaskModalProps> = ({ isOpen, onClose, onAddTask, currentUser }) => {
@@ -296,16 +296,18 @@ export const AddTaskModal: React.FC<AddTaskModalProps> = ({ isOpen, onClose, onA
             />
           </div>
 
-          {/* ─── 6b. Project Git / Repositori (Khusus Tim IT) ─── */}
-          <div className="bg-gray-50/80 dark:bg-zinc-800/50 p-3.5 rounded-2xl border border-gray-200/60 dark:border-zinc-700/60">
-            <GitProjectSelector
-              value={githubRepo}
-              onChange={setGithubRepo}
-              currentUser={currentUser}
-              label="Project Git (Khusus Tim IT)"
-              helperText="Pilih atau tambahkan repositori GitHub untuk task ini. Hanya diisi jika task terhubung ke project coding/Git."
-            />
-          </div>
+          {/* ─── 6b. Project Git / Repositori (Khusus Akun Login GitHub) ─── */}
+          {isUserLoggedInWithGitHub(currentUser) && (
+            <div className="bg-gray-50/80 dark:bg-zinc-800/50 p-3.5 rounded-2xl border border-gray-200/60 dark:border-zinc-700/60">
+              <GitProjectSelector
+                value={githubRepo}
+                onChange={setGithubRepo}
+                currentUser={currentUser}
+                label="Project Git (Khusus Tim IT)"
+                helperText="Pilih atau tambahkan repositori GitHub untuk task ini. Hanya diisi jika task terhubung ke project coding/Git."
+              />
+            </div>
+          )}
 
           {/* ─── 7. Tags (Pill Badges) ─── */}
           <div>

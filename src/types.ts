@@ -254,3 +254,20 @@ export interface GitHubConnectedRepo {
   owner: string;
   updatedAt?: string;
 }
+
+export function isUserLoggedInWithGitHub(user?: { githubUsername?: string | null; githubId?: string | null; [key: string]: any } | null): boolean {
+  if (user && (user.githubUsername || user.githubId)) {
+    return true;
+  }
+  try {
+    if (typeof sessionStorage !== 'undefined') {
+      const raw = sessionStorage.getItem('currentUser');
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        return Boolean(parsed?.githubUsername || parsed?.githubId);
+      }
+    }
+  } catch {}
+  return false;
+}
+

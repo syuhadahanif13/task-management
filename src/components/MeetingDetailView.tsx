@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Meeting, Task, TaskStatus, CreateTaskInput, TaskSubmission, Division, User } from '../types';
+import { Meeting, Task, TaskStatus, CreateTaskInput, TaskSubmission, Division, User, isUserLoggedInWithGitHub } from '../types';
 import { api } from '../api/client';
 import { extractTaskSubmissionFromDescription } from '../utils/submissionUtils';
 import { TaskItem } from './TaskItem';
@@ -45,7 +45,7 @@ interface MeetingDetailViewProps {
   onViewProof?: (task: Task) => void;
   onOpenReport?: () => void;
   currentUserRole?: 'admin' | 'user';
-  currentUser?: { username: string; role?: string; divisionId?: string } | null;
+  currentUser?: { username: string; role?: string; divisionId?: string; githubUsername?: string | null; githubId?: string | null } | null;
   onOpenGitHubDev?: (task: Task) => void;
 }
 
@@ -775,15 +775,18 @@ export const MeetingDetailView: React.FC<MeetingDetailViewProps> = ({
                   </div>
                 </div>
 
-                {/* Git Project (Khusus Tim IT) */}
-                <div className="bg-zinc-50 dark:bg-zinc-800/40 p-3 rounded-xl border border-zinc-200 dark:border-zinc-700">
-                  <GitProjectSelector
-                    value={taskGithubRepo}
-                    onChange={setTaskGithubRepo}
-                    label="Project Git (Khusus Tim IT)"
-                    helperText="Pilih repositori GitHub jika task ini memerlukan tracking kode atau PR."
-                  />
-                </div>
+                {/* Git Project (Khusus Akun Login GitHub) */}
+                {isUserLoggedInWithGitHub(currentUser) && (
+                  <div className="bg-zinc-50 dark:bg-zinc-800/40 p-3 rounded-xl border border-zinc-200 dark:border-zinc-700">
+                    <GitProjectSelector
+                      value={taskGithubRepo}
+                      onChange={setTaskGithubRepo}
+                      currentUser={currentUser}
+                      label="Project Git (Khusus Tim IT)"
+                      helperText="Pilih repositori GitHub jika task ini memerlukan tracking kode atau PR."
+                    />
+                  </div>
+                )}
 
                 <div className="flex items-center justify-end gap-2 pt-1">
                   <button

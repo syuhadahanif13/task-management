@@ -1333,6 +1333,7 @@ export default function App() {
         onClose={() => setEditingTask(null)}
         task={editingTask}
         onSave={handleSaveTaskEdits}
+        currentUser={currentUser}
         participants={
           editingTask
             ? meetings.find((m) => m.id === editingTask.meetingId)?.participants || []

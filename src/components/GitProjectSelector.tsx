@@ -1,12 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { GitProject, GitHubConnectedRepo } from '../types';
+import { GitProject, GitHubConnectedRepo, isUserLoggedInWithGitHub } from '../types';
 import { api } from '../api/client';
 import { FolderGit2, Plus, Check, X, AlertCircle, ExternalLink, RefreshCw, Github, CheckCircle2 } from 'lucide-react';
 
 interface GitProjectSelectorProps {
   value?: string; // repo string e.g. "syuhadahanif13/task-management"
   onChange: (repo: string) => void;
-  currentUser?: { id?: string; username: string; role?: string } | null;
+  currentUser?: { id?: string; username: string; role?: string; githubUsername?: string | null; githubId?: string | null } | null;
   label?: string;
   helperText?: string;
   className?: string;
@@ -20,6 +20,9 @@ export const GitProjectSelector: React.FC<GitProjectSelectorProps> = ({
   helperText = 'Pilih dari repositori akun GitHub yang terhubung atau tambahkan project Git.',
   className = '',
 }) => {
+  // Hanya berlaku untuk akun yang login dengan GitHub
+  const isGitHubUser = isUserLoggedInWithGitHub(currentUser);
+
   const [savedProjects, setSavedProjects] = useState<GitProject[]>([]);
   const [githubRepos, setGithubRepos] = useState<GitHubConnectedRepo[]>([]);
   const [isGitHubConnected, setIsGitHubConnected] = useState(false);
@@ -43,6 +46,10 @@ export const GitProjectSelector: React.FC<GitProjectSelectorProps> = ({
     } catch {}
     return undefined;
   })();
+
+  if (!isGitHubUser) {
+    return null;
+  }
 
   const loadData = async (silent = false) => {
     if (!silent) setIsLoading(true);

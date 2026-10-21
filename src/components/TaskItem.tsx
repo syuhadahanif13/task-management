@@ -39,6 +39,20 @@ export const TaskItem: React.FC<TaskItemProps> = ({
   const today = new Date().toISOString().split('T')[0];
   const isOverdue = !isDone && !isPendingApproval && task.dueDate && task.dueDate < today;
 
+  const isConnectedToGitHub = Boolean(
+    task.githubRepo ||
+    task.githubIssueUrl ||
+    task.githubProjectUrl ||
+    task.githubBranch ||
+    task.githubPrUrl ||
+    task.githubMetadata?.repo ||
+    task.githubMetadata?.issue ||
+    task.githubMetadata?.project ||
+    (task.githubMetadata?.pullRequests && task.githubMetadata.pullRequests.length > 0) ||
+    (task.githubMetadata?.commits && task.githubMetadata.commits.length > 0) ||
+    (task.githubMetadata?.branches && task.githubMetadata.branches.length > 0)
+  );
+
   const statusColors: Record<TaskStatus, { bg: string; text: string }> = {
     'To Do': {
       bg: 'bg-zinc-100 dark:bg-zinc-700/60',
@@ -172,8 +186,8 @@ export const TaskItem: React.FC<TaskItemProps> = ({
             </button>
           )}
 
-          {/* Jira-style GitHub Dev Tracking Badge */}
-          {onOpenGitHubDev && (
+          {/* Jira-style GitHub Dev Tracking Badge - Only shown when connected to GitHub */}
+          {onOpenGitHubDev && isConnectedToGitHub && (
             <button
               type="button"
               onClick={(e) => {
@@ -193,7 +207,7 @@ export const TaskItem: React.FC<TaskItemProps> = ({
               ) : task.githubBranch ? (
                 <span className="truncate max-w-[80px]">{task.githubBranch}</span>
               ) : (
-                <span>GitHub</span>
+                <span className="truncate max-w-[90px]">{task.githubRepo ? task.githubRepo.split('/')[1] || task.githubRepo : 'GitHub'}</span>
               )}
             </button>
           )}
@@ -201,7 +215,7 @@ export const TaskItem: React.FC<TaskItemProps> = ({
 
         {/* Action Buttons */}
         <div className="flex items-center gap-1 shrink-0">
-          {onOpenGitHubDev && (
+          {onOpenGitHubDev && isConnectedToGitHub && (
             <button
               type="button"
               onClick={() => onOpenGitHubDev(task)}
