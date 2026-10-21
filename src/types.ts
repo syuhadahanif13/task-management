@@ -38,11 +38,34 @@ export interface GitHubBranch {
   lastCommit?: string;
 }
 
+export interface GitHubIssue {
+  id?: number;
+  number: number;
+  title: string;
+  url: string;
+  state: 'open' | 'closed';
+  assignee?: string;
+  labels?: string[];
+  commentsCount?: number;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface GitHubProjectRef {
+  id?: string | number;
+  title: string;
+  url: string;
+  number?: number;
+  columnOrStatus?: string;
+}
+
 export interface GitHubTaskMetadata {
   repo?: string;
   branches?: GitHubBranch[];
   commits?: GitHubCommit[];
   pullRequests?: GitHubPullRequest[];
+  issue?: GitHubIssue;
+  project?: GitHubProjectRef;
   lastSyncedAt?: string;
 }
 
@@ -61,6 +84,8 @@ export interface Task {
   githubRepo?: string;
   githubBranch?: string;
   githubPrUrl?: string;
+  githubIssueUrl?: string;
+  githubProjectUrl?: string;
   githubMetadata?: GitHubTaskMetadata;
   createdAt?: string;
   updatedAt?: string;

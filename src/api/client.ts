@@ -1041,6 +1041,10 @@ export const api = {
     branches: Array<{ name: string; url?: string; lastCommit?: string }>;
     commits: Array<{ id: string; message: string; author: string; authorAvatar?: string; url: string; timestamp?: string }>;
     pullRequests: Array<{ number: number; title: string; url: string; state: 'open' | 'closed' | 'merged'; author: string; authorAvatar?: string; branch?: string; mergedAt?: string }>;
+    issue?: import('../types').GitHubIssue | null;
+    project?: import('../types').GitHubProjectRef | null;
+    githubIssueUrl?: string | null;
+    githubProjectUrl?: string | null;
     counts: { branches: number; commits: number; pullRequests: number };
     lastSyncedAt?: string;
   }> {
@@ -1051,6 +1055,78 @@ export const api = {
     if (!res.ok) {
       const err = await res.json().catch(() => ({}));
       throw new Error(err.error || 'Gagal memuat informasi development GitHub');
+    }
+    return res.json();
+  },
+
+  async getGitHubProjects(repo?: string, userId?: string): Promise<{
+    projects: Array<{ id: string; number: number; title: string; url: string; owner: string; description?: string }>;
+    hasToken: boolean;
+    defaultRepo: string;
+  }> {
+    const params = new URLSearchParams();
+    if (repo) params.set('repo', repo);
+    if (userId) params.set('userId', userId);
+    const res = await apiFetch(`/api/github/projects?${params.toString()}`);
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || 'Gagal mengambil daftar GitHub Projects');
+    }
+    return res.json();
+  },
+
+  async createGitHubIssue(params: {
+    taskId: string;
+    repo?: string;
+    projectId?: string;
+    projectTitle?: string;
+    projectUrl?: string;
+    userId?: string;
+  }): Promise<{ message: string; issue: import('../types').GitHubIssue; project?: import('../types').GitHubProjectRef; task: any }> {
+    const res = await apiFetch('/api/github/task-issue/create', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(params),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || 'Gagal membuat issue di GitHub');
+    }
+    return res.json();
+  },
+
+  async updateGitHubIssueStatus(params: {
+    taskId: string;
+    state: 'open' | 'closed' | 'sync';
+    syncTaskDone?: boolean;
+    userId?: string;
+  }): Promise<{ message: string; issue: import('../types').GitHubIssue; task: any }> {
+    const res = await apiFetch('/api/github/task-issue/update-status', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(params),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || 'Gagal mengubah status issue di GitHub');
+    }
+    return res.json();
+  },
+
+  async linkGitHubProject(params: {
+    taskId: string;
+    projectUrl: string;
+    projectTitle?: string;
+    projectId?: string;
+  }): Promise<{ message: string; project: import('../types').GitHubProjectRef; task: any }> {
+    const res = await apiFetch('/api/github/task-project/link', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(params),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || 'Gagal menautkan GitHub Project');
     }
     return res.json();
   },
@@ -1068,7 +1144,7 @@ export const api = {
     return res.json();
   },
 
-  async unlinkGitHubItem(params: { taskId: string; itemType: 'pr' | 'commit' | 'branch'; itemId: string | number }): Promise<any> {
+  async unlinkGitHubItem(params: { taskId: string; itemType: 'pr' | 'commit' | 'branch' | 'issue' | 'project'; itemId?: string | number }): Promise<any> {
     const res = await apiFetch('/api/github/unlink-item', {
       method: 'DELETE',
       headers: { 'Content-Type': 'application/json' },

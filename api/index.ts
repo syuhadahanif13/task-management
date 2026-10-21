@@ -112,6 +112,8 @@ export async function mysqlGetMeetings(): Promise<any[]> {
       githubRepo: t.github_repo || undefined,
       githubBranch: t.github_branch || undefined,
       githubPrUrl: t.github_pr_url || undefined,
+      githubIssueUrl: t.github_issue_url || undefined,
+      githubProjectUrl: t.github_project_url || undefined,
       githubMetadata,
       createdAt: t.created_at ? new Date(t.created_at).toISOString() : new Date().toISOString(),
       updatedAt: t.updated_at ? new Date(t.updated_at).toISOString() : new Date().toISOString(),
@@ -233,8 +235,8 @@ export async function mysqlUpsertTask(meetingId: string, task: any): Promise<voi
     : (task.github_metadata ? (typeof task.github_metadata === 'string' ? task.github_metadata : JSON.stringify(task.github_metadata)) : null);
 
   await p.execute(
-    `INSERT INTO tasks (id, meeting_id, title, assignee, assignees, due_date, due_time, status, priority, description, tags, github_repo, github_branch, github_pr_url, github_metadata, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())
+    `INSERT INTO tasks (id, meeting_id, title, assignee, assignees, due_date, due_time, status, priority, description, tags, github_repo, github_branch, github_pr_url, github_issue_url, github_project_url, github_metadata, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())
      ON DUPLICATE KEY UPDATE
        meeting_id = VALUES(meeting_id),
        title = VALUES(title),
@@ -249,6 +251,8 @@ export async function mysqlUpsertTask(meetingId: string, task: any): Promise<voi
        github_repo = VALUES(github_repo),
        github_branch = VALUES(github_branch),
        github_pr_url = VALUES(github_pr_url),
+       github_issue_url = VALUES(github_issue_url),
+       github_project_url = VALUES(github_project_url),
        github_metadata = VALUES(github_metadata),
        updated_at = NOW()`,
     [
@@ -266,6 +270,8 @@ export async function mysqlUpsertTask(meetingId: string, task: any): Promise<voi
       task.githubRepo || task.github_repo || null,
       task.githubBranch || task.github_branch || null,
       task.githubPrUrl || task.github_pr_url || null,
+      task.githubIssueUrl || task.github_issue_url || null,
+      task.githubProjectUrl || task.github_project_url || null,
       githubMetadataJson,
     ]
   );
@@ -349,6 +355,8 @@ export async function mysqlGetTasks(filters: { meetingId?: string; status?: stri
       githubRepo: t.github_repo || undefined,
       githubBranch: t.github_branch || undefined,
       githubPrUrl: t.github_pr_url || undefined,
+      githubIssueUrl: t.github_issue_url || undefined,
+      githubProjectUrl: t.github_project_url || undefined,
       githubMetadata,
       createdAt: t.created_at ? new Date(t.created_at).toISOString() : new Date().toISOString(),
       updatedAt: t.updated_at ? new Date(t.updated_at).toISOString() : new Date().toISOString(),
@@ -588,6 +596,8 @@ export interface Task {
   githubRepo?: string;
   githubBranch?: string;
   githubPrUrl?: string;
+  githubIssueUrl?: string;
+  githubProjectUrl?: string;
   githubMetadata?: any;
   createdAt?: string;
   updatedAt?: string;
@@ -2349,6 +2359,30 @@ router.get('/github/task-dev', async (req, res) => {
     }
   }
 
+  // Live sync GitHub Issue status if linked
+  const issue = existingMeta.issue || null;
+  const project = existingMeta.project || null;
+  if (issue && issue.number && repoParts.length === 2 && token) {
+    const [owner, repoName] = repoParts;
+    try {
+      const headers = {
+        Authorization: `Bearer ${token}`,
+        'User-Agent': 'TaskManagementSystem-App',
+        Accept: 'application/vnd.github.v3+json',
+      };
+      const issueRes = await fetch(`https://api.github.com/repos/${owner}/${repoName}/issues/${issue.number}`, { headers });
+      if (issueRes.ok) {
+        const apiIssue: any = await issueRes.json();
+        issue.title = apiIssue.title || issue.title;
+        issue.state = apiIssue.state || issue.state;
+        issue.assignee = apiIssue.assignee?.login;
+        issue.labels = (apiIssue.labels || []).map((l: any) => typeof l === 'string' ? l : l.name);
+        issue.commentsCount = apiIssue.comments;
+        issue.updatedAt = apiIssue.updated_at;
+      }
+    } catch {}
+  }
+
   // Update targetTask with new metadata
   targetTask.githubRepo = repo;
   if (branches.length > 0 && !targetTask.githubBranch) {
@@ -2357,11 +2391,20 @@ router.get('/github/task-dev', async (req, res) => {
   if (pullRequests.length > 0 && !targetTask.githubPrUrl) {
     targetTask.githubPrUrl = pullRequests[0].url;
   }
+  if (issue?.url && !targetTask.githubIssueUrl) {
+    targetTask.githubIssueUrl = issue.url;
+  }
+  if (project?.url && !targetTask.githubProjectUrl) {
+    targetTask.githubProjectUrl = project.url;
+  }
+
   targetTask.githubMetadata = {
     repo,
     branches,
     commits,
     pullRequests,
+    issue,
+    project,
     lastSyncedAt: new Date().toISOString(),
   };
 
@@ -2385,6 +2428,10 @@ router.get('/github/task-dev', async (req, res) => {
     branches,
     commits,
     pullRequests,
+    issue,
+    project,
+    githubIssueUrl: targetTask.githubIssueUrl || issue?.url || null,
+    githubProjectUrl: targetTask.githubProjectUrl || project?.url || null,
     counts: {
       branches: branches.length,
       commits: commits.length,
@@ -2508,6 +2555,73 @@ router.post('/github/link', async (req, res) => {
       }
 
       targetTask.githubRepo = `${owner}/${repoName}`;
+    } else {
+      // 3. Issue URL or Issue Number Match
+      const issueMatch = trimmedUrl.match(/github\.com\/([^\/]+)\/([^\/]+)\/issues\/(\d+)/i);
+      const issueNumOnly = trimmedUrl.match(/^#?(\d+)$/);
+
+      if (issueMatch || issueNumOnly) {
+        const owner = issueMatch ? issueMatch[1] : (userRepo ? userRepo.split('/')[0] : 'syuhadahanif13');
+        const repoName = issueMatch ? issueMatch[2] : (userRepo ? userRepo.split('/')[1] : 'task-management');
+        const issueNumber = parseInt(issueMatch ? issueMatch[3] : issueNumOnly![1], 10);
+
+        const issueObj: any = {
+          number: issueNumber,
+          title: `Issue #${issueNumber}`,
+          url: issueMatch ? trimmedUrl : `https://github.com/${owner}/${repoName}/issues/${issueNumber}`,
+          state: 'open',
+          updatedAt: new Date().toISOString(),
+        };
+
+        let token = process.env.GITHUB_TOKEN || '';
+        if (userId) {
+          const u = users.find(usr => usr.id === userId);
+          if (u?.githubAccessToken) token = u.githubAccessToken;
+        }
+
+        if (token) {
+          try {
+            const apiIssueRes = await fetch(`https://api.github.com/repos/${owner}/${repoName}/issues/${issueNumber}`, {
+              headers: {
+                Authorization: `Bearer ${token}`,
+                'User-Agent': 'TaskManagementSystem-App',
+                Accept: 'application/vnd.github.v3+json',
+              },
+            });
+            if (apiIssueRes.ok) {
+              const apiIssue: any = await apiIssueRes.json();
+              issueObj.id = apiIssue.id;
+              issueObj.title = apiIssue.title || issueObj.title;
+              issueObj.state = apiIssue.state || issueObj.state;
+              issueObj.url = apiIssue.html_url || issueObj.url;
+              issueObj.assignee = apiIssue.assignee?.login;
+              issueObj.labels = (apiIssue.labels || []).map((l: any) => typeof l === 'string' ? l : l.name);
+              issueObj.commentsCount = apiIssue.comments;
+              issueObj.createdAt = apiIssue.created_at;
+              issueObj.updatedAt = apiIssue.updated_at;
+            }
+          } catch {}
+        }
+
+        metadata.issue = issueObj;
+        targetTask.githubIssueUrl = issueObj.url;
+        targetTask.githubRepo = `${owner}/${repoName}`;
+      } else {
+        // 4. Project URL Match (Users, Orgs, or Repo Projects)
+        const projectMatch = trimmedUrl.match(/github\.com\/(users|orgs)?\/?([^\/]+)\/projects\/(\d+)/i) ||
+                             trimmedUrl.match(/github\.com\/([^\/]+)\/([^\/]+)\/projects\/(\d+)/i);
+
+        if (projectMatch) {
+          const projectOwner = projectMatch[2] || projectMatch[1] || 'GitHub';
+          const projectNum = parseInt(projectMatch[3], 10);
+          metadata.project = {
+            number: projectNum,
+            title: `Project #${projectNum} (${projectOwner})`,
+            url: trimmedUrl,
+          };
+          targetTask.githubProjectUrl = trimmedUrl;
+        }
+      }
     }
   }
 
@@ -2539,11 +2653,11 @@ router.post('/github/link', async (req, res) => {
   });
 });
 
-// 8. Unlink PR, Commit, or Branch from Task
+// 8. Unlink PR, Commit, Branch, Issue, or Project from Task
 router.delete('/github/unlink-item', async (req, res) => {
   const { taskId, itemType, itemId } = req.body;
-  if (!taskId || !itemType || itemId === undefined) {
-    return res.status(400).json({ error: 'taskId, itemType, and itemId are required' });
+  if (!taskId || !itemType) {
+    return res.status(400).json({ error: 'taskId and itemType are required' });
   }
 
   let targetTask: Task | undefined;
@@ -2581,6 +2695,12 @@ router.delete('/github/unlink-item', async (req, res) => {
   } else if (itemType === 'branch') {
     metadata.branches = (metadata.branches || []).filter(b => b.name !== itemId);
     if (metadata.branches.length === 0) targetTask.githubBranch = undefined;
+  } else if (itemType === 'issue') {
+    delete metadata.issue;
+    targetTask.githubIssueUrl = undefined;
+  } else if (itemType === 'project') {
+    delete metadata.project;
+    targetTask.githubProjectUrl = undefined;
   }
 
   metadata.lastSyncedAt = new Date().toISOString();
@@ -2591,7 +2711,456 @@ router.delete('/github/unlink-item', async (req, res) => {
     await mysqlUpsertTask(targetMeetingId, targetTask);
   }
 
-  res.json({ message: 'Item berhasil dihapus', metadata });
+  res.json({ message: 'Item berhasil dihapus', metadata, task: targetTask });
+});
+
+// 8b. Get List of GitHub Projects (Projects v2)
+router.get('/github/projects', async (req, res) => {
+  const { repo: requestedRepo, userId } = req.query;
+  let token = process.env.GITHUB_TOKEN || '';
+  if (userId) {
+    const u = users.find(usr => usr.id === String(userId));
+    if (u?.githubAccessToken) token = u.githubAccessToken;
+  }
+
+  const defaultRepo = (typeof requestedRepo === 'string' && requestedRepo.trim())
+    ? requestedRepo.trim()
+    : (process.env.GITHUB_DEFAULT_REPO || 'syuhadahanif13/task-management');
+
+  if (!token) {
+    return res.json({ projects: [], hasToken: false, defaultRepo });
+  }
+
+  const [owner, repoName] = defaultRepo.split('/');
+
+  try {
+    const graphqlQuery = {
+      query: `
+        query($owner: String!, $repoName: String!) {
+          viewer {
+            login
+            projectsV2(first: 20) {
+              nodes {
+                id
+                number
+                title
+                url
+                closed
+                shortDescription
+              }
+            }
+          }
+          user(login: $owner) {
+            projectsV2(first: 20) {
+              nodes {
+                id
+                number
+                title
+                url
+                closed
+                shortDescription
+              }
+            }
+          }
+          repository(owner: $owner, name: $repoName) {
+            projectsV2(first: 20) {
+              nodes {
+                id
+                number
+                title
+                url
+                closed
+                shortDescription
+              }
+            }
+          }
+        }
+      `,
+      variables: { owner: owner || 'syuhadahanif13', repoName: repoName || 'task-management' },
+    };
+
+    const gqlRes = await fetch('https://api.github.com/graphql', {
+      method: 'POST',
+      headers: {
+        Authorization: `bearer ${token}`,
+        'User-Agent': 'TaskManagementSystem-App',
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(graphqlQuery),
+    });
+
+    const projectList: Array<{ id: string; number: number; title: string; url: string; owner: string; description?: string }> = [];
+    const seenUrls = new Set<string>();
+
+    if (gqlRes.ok) {
+      const gqlData: any = await gqlRes.json();
+      const viewerProjects = gqlData.data?.viewer?.projectsV2?.nodes || [];
+      const userProjects = gqlData.data?.user?.projectsV2?.nodes || [];
+      const repoProjects = gqlData.data?.repository?.projectsV2?.nodes || [];
+
+      for (const p of [...viewerProjects, ...userProjects, ...repoProjects]) {
+        if (p && !p.closed && !seenUrls.has(p.url)) {
+          seenUrls.add(p.url);
+          projectList.push({
+            id: p.id,
+            number: p.number,
+            title: p.title,
+            url: p.url,
+            owner: p.url.includes('/users/') ? p.url.split('/users/')[1].split('/')[0] : (owner || 'GitHub'),
+            description: p.shortDescription || undefined,
+          });
+        }
+      }
+    }
+
+    res.json({
+      projects: projectList,
+      hasToken: true,
+      defaultRepo,
+    });
+  } catch (err: any) {
+    console.warn('Failed to query GitHub projects:', err.message);
+    res.json({ projects: [], hasToken: true, defaultRepo, error: err.message });
+  }
+});
+
+// 8c. Create GitHub Issue from Task and optionally add to GitHub Project
+router.post('/github/task-issue/create', async (req, res) => {
+  const { taskId, repo: requestedRepo, projectId, projectTitle, projectUrl, userId } = req.body;
+  if (!taskId) return res.status(400).json({ error: 'taskId is required' });
+
+  let targetTask: Task | undefined;
+  let targetMeetingId = 'general-tasks';
+  for (const m of meetings) {
+    const f = (m.tasks || []).find(t => t.id === taskId);
+    if (f) {
+      targetTask = f;
+      targetMeetingId = m.id;
+      break;
+    }
+  }
+
+  if (!targetTask && isMysqlConfigured()) {
+    await syncMeetingsFromDatabase();
+    for (const m of meetings) {
+      const f = (m.tasks || []).find(t => t.id === taskId);
+      if (f) {
+        targetTask = f;
+        targetMeetingId = m.id;
+        break;
+      }
+    }
+  }
+
+  if (!targetTask) return res.status(404).json({ error: 'Task tidak ditemukan' });
+
+  let token = process.env.GITHUB_TOKEN || '';
+  if (userId) {
+    const u = users.find(usr => usr.id === userId);
+    if (u?.githubAccessToken) token = u.githubAccessToken;
+  }
+
+  if (!token) {
+    return res.status(400).json({ error: 'GitHub Token belum dikonfigurasi di server atau akun Anda.' });
+  }
+
+  const repo = (typeof requestedRepo === 'string' && requestedRepo.trim())
+    ? requestedRepo.trim()
+    : (targetTask.githubRepo || process.env.GITHUB_DEFAULT_REPO || 'syuhadahanif13/task-management');
+
+  const repoParts = repo.split('/');
+  if (repoParts.length !== 2) {
+    return res.status(400).json({ error: `Format repo tidak valid: '${repo}'. Harus berupa 'owner/repo'.` });
+  }
+  const [owner, repoName] = repoParts;
+
+  // Generate Task Key
+  const taskNumberMatch = taskId.match(/task-(\d+)/i) || taskId.match(/(\d+)/);
+  const taskNum = taskNumberMatch ? taskNumberMatch[1] : '';
+  const taskKey = taskNum ? `REI-${taskNum}` : `REI-${taskId.slice(-6)}`;
+
+  // Construct GitHub Issue Payload
+  const issueTitle = `[${taskKey}] ${targetTask.title}`;
+  const issueBody = `### 📋 Task Action Item
+- **Task Key**: \`${taskKey}\`
+- **Task ID**: \`${targetTask.id}\`
+- **Assignee**: **${targetTask.assignee || 'Unassigned'}**
+- **Due Date**: ${targetTask.dueDate || 'N/A'} ${targetTask.dueTime ? `(${targetTask.dueTime})` : ''}
+- **Status**: \`${targetTask.status}\`
+- **Priority**: \`${targetTask.priority || 'Medium'}\`
+
+### 📝 Deskripsi
+${targetTask.description || '*Tidak ada deskripsi tambahan.*'}
+
+${targetTask.tags && targetTask.tags.length > 0 ? `\n### 🏷️ Tags\n${targetTask.tags.map((t: string) => `\`${t}\``).join(' ')}` : ''}
+
+---
+*Dibuat otomatis dari Task Management System REI*`;
+
+  try {
+    const createIssueRes = await fetch(`https://api.github.com/repos/${owner}/${repoName}/issues`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'User-Agent': 'TaskManagementSystem-App',
+        'Content-Type': 'application/json',
+        Accept: 'application/vnd.github.v3+json',
+      },
+      body: JSON.stringify({
+        title: issueTitle,
+        body: issueBody,
+        labels: ['task', (targetTask.priority || 'Medium').toLowerCase()],
+      }),
+    });
+
+    if (!createIssueRes.ok) {
+      const err = await createIssueRes.json().catch(() => ({}));
+      return res.status(createIssueRes.status).json({
+        error: err.message || 'Gagal membuat issue di GitHub',
+      });
+    }
+
+    const apiIssue: any = await createIssueRes.json();
+
+    // If projectId is specified, add the created issue to GitHub Project v2 via GraphQL
+    if (projectId) {
+      try {
+        const addCardQuery = {
+          query: `
+            mutation($projectId: ID!, $contentId: ID!) {
+              addProjectV2ItemById(input: { projectId: $projectId, contentId: $contentId }) {
+                item {
+                  id
+                }
+              }
+            }
+          `,
+          variables: { projectId, contentId: apiIssue.node_id },
+        };
+
+        await fetch('https://api.github.com/graphql', {
+          method: 'POST',
+          headers: {
+            Authorization: `bearer ${token}`,
+            'User-Agent': 'TaskManagementSystem-App',
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(addCardQuery),
+        });
+      } catch (e: any) {
+        console.warn('Gagal menambahkan issue ke Project v2:', e.message);
+      }
+    }
+
+    const metadata = targetTask.githubMetadata || { repo, branches: [], commits: [], pullRequests: [] };
+    metadata.repo = repo;
+    metadata.issue = {
+      id: apiIssue.id,
+      number: apiIssue.number,
+      title: apiIssue.title,
+      url: apiIssue.html_url,
+      state: apiIssue.state,
+      assignee: apiIssue.assignee?.login,
+      labels: (apiIssue.labels || []).map((l: any) => typeof l === 'string' ? l : l.name),
+      commentsCount: apiIssue.comments || 0,
+      createdAt: apiIssue.created_at,
+      updatedAt: apiIssue.updated_at,
+    };
+
+    if (projectUrl) {
+      metadata.project = {
+        id: projectId,
+        title: projectTitle || `Project GitHub`,
+        url: projectUrl,
+      };
+      targetTask.githubProjectUrl = projectUrl;
+    }
+
+    targetTask.githubIssueUrl = apiIssue.html_url;
+    targetTask.githubRepo = repo;
+    targetTask.githubMetadata = metadata;
+    targetTask.updatedAt = new Date().toISOString();
+
+    if (isMysqlConfigured()) {
+      await mysqlUpsertTask(targetMeetingId, targetTask);
+    }
+
+    res.json({
+      message: `Issue #${apiIssue.number} berhasil dibuat dan ditautkan ke GitHub`,
+      issue: metadata.issue,
+      project: metadata.project,
+      task: targetTask,
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || 'Terjadi kesalahan saat membuat issue GitHub' });
+  }
+});
+
+// 8d. Update GitHub Issue Status (Open / Close / Sync)
+router.post('/github/task-issue/update-status', async (req, res) => {
+  const { taskId, state, syncTaskDone, userId } = req.body;
+  if (!taskId || !state) {
+    return res.status(400).json({ error: 'taskId and state (open/closed/sync) are required' });
+  }
+
+  let targetTask: Task | undefined;
+  let targetMeetingId = 'general-tasks';
+  for (const m of meetings) {
+    const f = (m.tasks || []).find(t => t.id === taskId);
+    if (f) {
+      targetTask = f;
+      targetMeetingId = m.id;
+      break;
+    }
+  }
+
+  if (!targetTask && isMysqlConfigured()) {
+    await syncMeetingsFromDatabase();
+    for (const m of meetings) {
+      const f = (m.tasks || []).find(t => t.id === taskId);
+      if (f) {
+        targetTask = f;
+        targetMeetingId = m.id;
+        break;
+      }
+    }
+  }
+
+  if (!targetTask) return res.status(404).json({ error: 'Task tidak ditemukan' });
+
+  const metadata = targetTask.githubMetadata;
+  if (!metadata?.issue?.number) {
+    return res.status(400).json({ error: 'Task belum memiliki GitHub Issue yang terhubung' });
+  }
+
+  const repo = metadata.repo || targetTask.githubRepo || process.env.GITHUB_DEFAULT_REPO || 'syuhadahanif13/task-management';
+  const [owner, repoName] = repo.split('/');
+
+  let token = process.env.GITHUB_TOKEN || '';
+  if (userId) {
+    const u = users.find(usr => usr.id === userId);
+    if (u?.githubAccessToken) token = u.githubAccessToken;
+  }
+
+  if (!token) {
+    return res.status(400).json({ error: 'GitHub Token belum tersedia' });
+  }
+
+  try {
+    let apiIssue: any;
+    if (state === 'closed' || state === 'open') {
+      const patchRes = await fetch(`https://api.github.com/repos/${owner}/${repoName}/issues/${metadata.issue.number}`, {
+        method: 'PATCH',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'User-Agent': 'TaskManagementSystem-App',
+          'Content-Type': 'application/json',
+          Accept: 'application/vnd.github.v3+json',
+        },
+        body: JSON.stringify({ state }),
+      });
+      if (!patchRes.ok) {
+        const err = await patchRes.json().catch(() => ({}));
+        return res.status(patchRes.status).json({ error: err.message || 'Gagal mengubah status issue di GitHub' });
+      }
+      apiIssue = await patchRes.json();
+    } else {
+      // Sync only
+      const getRes = await fetch(`https://api.github.com/repos/${owner}/${repoName}/issues/${metadata.issue.number}`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'User-Agent': 'TaskManagementSystem-App',
+          Accept: 'application/vnd.github.v3+json',
+        },
+      });
+      if (!getRes.ok) {
+        const err = await getRes.json().catch(() => ({}));
+        return res.status(getRes.status).json({ error: err.message || 'Gagal mengambil status issue dari GitHub' });
+      }
+      apiIssue = await getRes.json();
+    }
+
+    metadata.issue.state = apiIssue.state;
+    metadata.issue.title = apiIssue.title;
+    metadata.issue.commentsCount = apiIssue.comments || 0;
+    metadata.issue.updatedAt = apiIssue.updated_at;
+
+    if (syncTaskDone) {
+      if (apiIssue.state === 'closed') {
+        targetTask.status = 'Done';
+      } else if (apiIssue.state === 'open' && targetTask.status === 'Done') {
+        targetTask.status = 'In Progress';
+      }
+    }
+
+    targetTask.githubMetadata = metadata;
+    targetTask.updatedAt = new Date().toISOString();
+
+    if (isMysqlConfigured()) {
+      await mysqlUpsertTask(targetMeetingId, targetTask);
+    }
+
+    res.json({
+      message: `Status GitHub Issue #${apiIssue.number} berhasil diperbarui menjadi ${apiIssue.state}`,
+      issue: metadata.issue,
+      task: targetTask,
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || 'Gagal mengupdate status GitHub Issue' });
+  }
+});
+
+// 8e. Link Task to GitHub Project
+router.post('/github/task-project/link', async (req, res) => {
+  const { taskId, projectUrl, projectTitle, projectId } = req.body;
+  if (!taskId || !projectUrl) {
+    return res.status(400).json({ error: 'taskId and projectUrl are required' });
+  }
+
+  let targetTask: Task | undefined;
+  let targetMeetingId = 'general-tasks';
+  for (const m of meetings) {
+    const f = (m.tasks || []).find(t => t.id === taskId);
+    if (f) {
+      targetTask = f;
+      targetMeetingId = m.id;
+      break;
+    }
+  }
+
+  if (!targetTask && isMysqlConfigured()) {
+    await syncMeetingsFromDatabase();
+    for (const m of meetings) {
+      const f = (m.tasks || []).find(t => t.id === taskId);
+      if (f) {
+        targetTask = f;
+        targetMeetingId = m.id;
+        break;
+      }
+    }
+  }
+
+  if (!targetTask) return res.status(404).json({ error: 'Task tidak ditemukan' });
+
+  const metadata = targetTask.githubMetadata || { repo: '', branches: [], commits: [], pullRequests: [] };
+  metadata.project = {
+    id: projectId,
+    title: projectTitle || 'GitHub Project',
+    url: projectUrl,
+  };
+  targetTask.githubProjectUrl = projectUrl;
+  targetTask.githubMetadata = metadata;
+  targetTask.updatedAt = new Date().toISOString();
+
+  if (isMysqlConfigured()) {
+    await mysqlUpsertTask(targetMeetingId, targetTask);
+  }
+
+  res.json({
+    message: 'Task berhasil dihubungkan ke GitHub Project',
+    project: metadata.project,
+    task: targetTask,
+  });
 });
 
 // 9. Webhook Receiver for GitHub (push, pull_request)
